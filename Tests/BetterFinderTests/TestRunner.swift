@@ -48,6 +48,8 @@ func expect(_ condition: @autoclosure () -> Bool, file: StaticString = #filePath
             try tests.testViewModeSwitchRemovesInvisibleOutlineSelection()
             try tests.testVisibleExpandedAndAncestorColumnChangesInvalidate()
             try tests.testAnalysisSelectionIsBoundedToModeAndRoot()
+            try tests.testTypeSelectAndBoundaryKeys()
+            print("PASS type-to-select and Home/End selection")
             try await ThumbnailLifecycleRegressionTests().runAll()
             try await tests.testThumbnailInvalidationRejectsLateGeneration()
             try await tests.testFolderSizesExposePartialAndCountDeepFiles()

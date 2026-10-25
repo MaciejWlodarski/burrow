@@ -336,6 +336,12 @@ public final class PaneTabState: ObservableObject, Identifiable {
         "\(navigationRevision)\u{0}\(directoryLoadGeneration)\u{0}\(currentURL.path)\u{0}\(searchQuery)\u{0}\(searchScope.rawValue)\u{0}\(showHiddenFiles)\u{0}\(viewMode.rawValue)"
     }
 
+    /// System error descriptions often lack final punctuation; diagnostics append further sentences.
+    private static func sentence(_ text: String) -> String {
+        guard let last = text.last, !".!?…".contains(last) else { return text }
+        return text + "."
+    }
+
     private func clearNavigationFailure() {
         failedNavigation = nil
         navigationFailureID = nil
@@ -403,7 +409,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
             if navigationFailureIsPermissionDenied {
                 navigationDiagnostic = "macOS odmówił dostępu do folderu „\(standardized.path)”. Bieżąca lokalizacja i jej zawartość zostały zachowane. Wybierz inną lokalizację lub sprawdź uprawnienia do tego folderu."
             } else {
-                navigationDiagnostic = "Nie otwarto folderu „\(standardized.path)”: \(error.localizedDescription) Bieżąca lokalizacja i jej zawartość zostały zachowane."
+                navigationDiagnostic = "Nie otwarto folderu „\(standardized.path)”: \(Self.sentence(error.localizedDescription)) Bieżąca lokalizacja i jej zawartość zostały zachowane."
             }
             return false
         }
@@ -628,8 +634,20 @@ public final class PaneTabState: ObservableObject, Identifiable {
             return
         }
         cancelPendingSavedSearches()
-        let entries = BulkCrawler.readDirectoryFast(at: currentURL.path, includeHidden: showHiddenFiles)
-        installDirectoryEntries(entries, invalidateCaches: invalidateCaches)
+        let result = BulkCrawler.readDirectoryResult(at: currentURL.path, includeHidden: showHiddenFiles)
+        guard result.isComplete, result.errorCode == nil else {
+            // A failed refresh (deleted folder, dropped share) must not look like
+            // a genuinely empty folder: clear the stale items and explain why.
+            let error = NSError(domain: NSPOSIXErrorDomain, code: Int(result.errorCode ?? EIO))
+            installDirectoryEntries([], invalidateCaches: invalidateCaches)
+            failedNavigation = (currentURL, .direct(false, false), navigationRetryContext)
+            navigationFailureID = UUID()
+            navigationFailureIsPermissionDenied = DirectoryNavigationFailure.isPermissionDenied(error)
+            navigationDiagnostic = "Nie odświeżono folderu „\(currentURL.path)”: \(Self.sentence(error.localizedDescription)) Wybierz inną lokalizację lub ponów próbę."
+            return
+        }
+        if failedNavigation?.0 == currentURL { clearNavigationFailure() }
+        installDirectoryEntries(result.entries, invalidateCaches: invalidateCaches)
     }
 
     private func installDirectoryEntries(_ entries: [IndexedFileEntry], invalidateCaches: Bool = false) {
@@ -887,6 +905,34 @@ public final class PaneTabState: ObservableObject, Identifiable {
         let next = current.map { max(0, min(items.count - 1, $0 + delta)) }
             ?? (delta > 0 ? 0 : items.count - 1)
         select(items[next], extending: extending)
+    }
+
+    /// Finder-style type-to-select: keystrokes within a short pause extend the
+    /// typed prefix; the first visible item whose name starts with it is selected.
+    private var typeSelectBuffer = ""
+    private var typeSelectLastInput = Date.distantPast
+
+    @discardableResult
+    public func typeSelect(_ characters: String, now: Date = Date()) -> Bool {
+        if now.timeIntervalSince(typeSelectLastInput) > 1.0 { typeSelectBuffer = "" }
+        typeSelectLastInput = now
+        typeSelectBuffer += characters
+        let prefix = typeSelectBuffer
+        let items = selectableItems
+        guard let match = items.first(where: {
+            $0.name.range(of: prefix, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil
+        }) ?? items.first(where: {
+            // No exact prefix: fall back to the first name sorting after the prefix, like Finder.
+            $0.name.localizedStandardCompare(prefix) == .orderedDescending
+        }) else { return false }
+        select(match)
+        return true
+    }
+
+    public func selectBoundary(last: Bool, extending: Bool = false) {
+        let items = selectableItems
+        guard let target = last ? items.last : items.first else { return }
+        select(target, extending: extending)
     }
 
     public func selectAll() {

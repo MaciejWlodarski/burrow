@@ -477,7 +477,25 @@ public final class FileOperationsManager: ObservableObject {
 
     @Published public private(set) var clipboardURLs: [URL] = []
     @Published public private(set) var clipboardMode: ClipboardMode = .copy
-    @Published public var lastStatusMessage: String?
+    @Published public var lastStatusMessage: String? {
+        didSet { scheduleStatusMessageExpiry() }
+    }
+    private var statusMessageGeneration: UInt64 = 0
+
+    /// Transient confirmations ("Skopiowano…") should not linger in the status bar
+    /// forever; a newer message restarts the timer and is never cleared early.
+    private func scheduleStatusMessageExpiry() {
+        statusMessageGeneration &+= 1
+        #if !BETTERFINDER_TESTING
+        guard lastStatusMessage != nil else { return }
+        let generation = statusMessageGeneration
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            guard let self, self.statusMessageGeneration == generation else { return }
+            self.lastStatusMessage = nil
+        }
+        #endif
+    }
 
     // Undo / Redo Stacks
     @Published public private(set) var undoStack: [UndoableFileOperation] = []
@@ -545,7 +563,7 @@ public final class FileOperationsManager: ObservableObject {
         return clipboardURLs.contains { $0.path == path }
     }
 
-    // MARK: - Undo / Redo Engine (Cmd+Z / Cmd+Shift+Z)
+    // MARK: - Undo / Redo Engine (⌘Z / ⌘Shift+Z)
 
     private func pushUndo(_ op: UndoableFileOperation) {
         undoStack.append(op)
@@ -657,7 +675,7 @@ public final class FileOperationsManager: ObservableObject {
     public func cutItems(_ items: [FileItem]) {
         guard !items.isEmpty else { return }
         writeClipboard(items.map(\.url), mode: .cut)
-        lastStatusMessage = "Wycięto \(items.count) elem. (Cmd+V aby przenieść)"
+        lastStatusMessage = "Wycięto \(items.count) elem. (⌘V aby przenieść)"
     }
 
     private func writeClipboard(_ urls: [URL], mode: ClipboardMode) {
@@ -671,7 +689,8 @@ public final class FileOperationsManager: ObservableObject {
 
     /// Pastes files from the clipboard. Uses the internal cut/copy state only if nobody else
     /// has written to the system pasteboard since; otherwise falls back to file URLs on the pasteboard.
-    public func paste(into destinationDirectory: URL, explicitPolicy: FileConflictPolicy? = nil) {
+    /// `forceMove` (⌘⌥V) moves copied items instead of duplicating them, like Finder.
+    public func paste(into destinationDirectory: URL, explicitPolicy: FileConflictPolicy? = nil, forceMove: Bool = false) {
         let pb = NSPasteboard.general
         var sourceURLs: [URL] = []
         var isMove = false
@@ -694,7 +713,7 @@ public final class FileOperationsManager: ObservableObject {
         performTransfer(
             sourceURLs: sourceURLs,
             into: destinationDirectory,
-            isMove: isMove,
+            isMove: isMove || forceMove,
             explicitPolicy: explicitPolicy
         )
     }
@@ -1239,7 +1258,7 @@ public final class FileOperationsManager: ObservableObject {
         } else if failures > 0 {
             lastStatusMessage = "Nie udało się przenieść do Kosza \(failures) elem. (brak uprawnień?)"
         } else {
-            lastStatusMessage = "Przeniesiono do Kosza: \(trashedPairs.count) elem. (Cmd+Z aby przywrócić)"
+            lastStatusMessage = "Przeniesiono do Kosza: \(trashedPairs.count) elem. (⌘Z aby przywrócić)"
         }
     }
 

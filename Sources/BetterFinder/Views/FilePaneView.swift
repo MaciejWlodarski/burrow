@@ -508,9 +508,9 @@ public struct FilePaneView: View {
         }
         .onDrop(of: [.fileURL], isTargeted: Binding(
             get: { dropTargetFolderPath == item.path },
-            set: { targeted in dropTargetFolderPath = (targeted && item.isDirectory) ? item.path : nil }
+            set: { targeted in dropTargetFolderPath = (targeted && item.isDropFolderTarget) ? item.path : nil }
         )) { providers in
-            let targetDir = item.isDirectory ? item.url : pane.currentURL
+            let targetDir = item.isDropFolderTarget ? item.url : pane.currentURL
             return handleDropProviders(providers: providers, into: targetDir)
         }
         .simultaneousGesture(
@@ -623,9 +623,9 @@ public struct FilePaneView: View {
                         .contentShape(Rectangle())
                         .onDrop(of: [.fileURL], isTargeted: Binding(
                             get: { dropTargetFolderPath == item.path },
-                            set: { targeted in dropTargetFolderPath = (targeted && item.isDirectory) ? item.path : nil }
+                            set: { targeted in dropTargetFolderPath = (targeted && item.isDropFolderTarget) ? item.path : nil }
                         )) { providers in
-                            let targetDir = item.isDirectory ? item.url : pane.currentURL
+                            let targetDir = item.isDropFolderTarget ? item.url : pane.currentURL
                             return handleDropProviders(providers: providers, into: targetDir)
                         }
                         .simultaneousGesture(
@@ -730,6 +730,15 @@ public struct FilePaneView: View {
                 }
             }
             .fixedSize()
+        } else {
+            // Denied folders (Desktop, Documents, external disks) are granted in Privacy & Security.
+            Button("Otwórz ustawienia prywatności…") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .fixedSize()
+            .help("Nadaj aplikacji BetterFinder dostęp w Ustawieniach systemowych › Prywatność i ochrona")
         }
         Button("Zamknij komunikat") {
             FinderPaneActionRouting.performIfCurrent(appState: appState, pane: pane, paneSide: paneSide) {
@@ -956,20 +965,20 @@ public struct FilePaneView: View {
         Button {
             fileOps.cutItems(targetItems())
         } label: {
-            Label("Wytnij (Cmd+X)", systemImage: "scissors")
+            Label("Wytnij (⌘X)", systemImage: "scissors")
         }
 
         Button {
             fileOps.copyItems(targetItems())
         } label: {
-            Label("Kopiuj (Cmd+C)", systemImage: "doc.on.doc")
+            Label("Kopiuj (⌘C)", systemImage: "doc.on.doc")
         }
 
         Button {
             fileOps.paste(into: pane.currentURL)
             pane.reloadDirectory()
         } label: {
-            Label("Wklej tutaj (Cmd+V)", systemImage: "doc.on.clipboard")
+            Label("Wklej tutaj (⌘V)", systemImage: "doc.on.clipboard")
         }
 
         Divider()
@@ -980,14 +989,14 @@ public struct FilePaneView: View {
             guard !pane.actionItems(for: item).isEmpty else { return }
             pane.renamingItemPath = item.path
         } label: {
-            Label("Zmień nazwę...", systemImage: "pencil")
+            Label("Zmień nazwę…", systemImage: "pencil")
         }
 
         Button {
             fileOps.duplicateItems(targetItems())
             pane.reloadDirectory()
         } label: {
-            Label("Duplikuj (Cmd+D)", systemImage: "plus.square.on.square")
+            Label("Duplikuj (⌘D)", systemImage: "plus.square.on.square")
         }
 
         Button {
@@ -1001,7 +1010,11 @@ public struct FilePaneView: View {
                 guard !pane.actionItems(for: item).isEmpty else { return }
                 fileOps.extractArchive(item)
             } label: {
-                Label("Rozpakuj archiwum tutaj", systemImage: "archivebox.fill")
+                if item.fileExtension.lowercased() == "dmg" {
+                    Label("Zamontuj obraz dysku", systemImage: "externaldrive.fill")
+                } else {
+                    Label("Rozpakuj archiwum tutaj", systemImage: "archivebox.fill")
+                }
             }
         }
 
@@ -1010,7 +1023,7 @@ public struct FilePaneView: View {
         Button {
             fileOps.copyPaths(targetItems())
         } label: {
-            Label("Kopiuj pełną ścieżkę (Cmd+Opt+C)", systemImage: "link")
+            Label("Kopiuj pełną ścieżkę (⌥⌘C)", systemImage: "link")
         }
 
         Button {
@@ -1058,14 +1071,14 @@ public struct FilePaneView: View {
             activatePane()
             appState.showNewFolderSheet = true
         } label: {
-            Label("Nowy folder (Cmd+Shift+N)...", systemImage: "folder.badge.plus")
+            Label("Nowy folder (⇧⌘N)…", systemImage: "folder.badge.plus")
         }
 
         Button {
             activatePane()
             appState.showNewFileSheet = true
         } label: {
-            Label("Nowy plik (Cmd+Opt+N)...", systemImage: "doc.badge.plus")
+            Label("Nowy plik (⌥⌘N)…", systemImage: "doc.badge.plus")
         }
 
         Divider()
@@ -1074,14 +1087,14 @@ public struct FilePaneView: View {
             fileOps.paste(into: pane.currentURL)
             pane.reloadDirectory()
         } label: {
-            Label("Wklej tutaj (Cmd+V)", systemImage: "doc.on.clipboard")
+            Label("Wklej tutaj (⌘V)", systemImage: "doc.on.clipboard")
         }
 
         if fileOps.canUndo {
             Button {
                 fileOps.undoLastOperation()
             } label: {
-                Label("\(fileOps.undoLabel) (Cmd+Z)", systemImage: "arrow.uturn.backward")
+                Label("\(fileOps.undoLabel) (⌘Z)", systemImage: "arrow.uturn.backward")
             }
         }
 

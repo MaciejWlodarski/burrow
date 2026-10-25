@@ -83,6 +83,26 @@ extension NavigationTests {
         try expect(pane.isAffectedByDirectoryChanges([root.path]))
         pane.refresh()
         try expect(pane.displayedItems.isEmpty)
+        // A vanished folder is reported, not presented as a genuinely empty one.
+        try expect(pane.navigationDiagnostic != nil && pane.navigationFailureID != nil)
+    }
+
+    @MainActor func testTypeSelectAndBoundaryKeys() throws {
+        let root = try cacheFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        for name in ["alfa.txt", "Beta.txt", "bezik.txt", "żółw.txt"] {
+            try Data("x".utf8).write(to: root.appendingPathComponent(name))
+        }
+        let pane = PaneTabState(initialURL: root)
+        let start = Date()
+        try expect(pane.typeSelect("b", now: start) && pane.primarySelectedItem?.name == "Beta.txt")
+        try expect(pane.typeSelect("ez", now: start.addingTimeInterval(0.3)) && pane.primarySelectedItem?.name == "bezik.txt")
+        // After a pause the prefix restarts; diacritics are ignored like Finder.
+        try expect(pane.typeSelect("z", now: start.addingTimeInterval(2)) && pane.primarySelectedItem?.name == "żółw.txt")
+        pane.selectBoundary(last: false)
+        try expect(pane.primarySelectedItem?.name == "alfa.txt")
+        pane.selectBoundary(last: true)
+        try expect(pane.primarySelectedItem?.name == "żółw.txt")
     }
 
     @MainActor func testAnalysisSelectionIsBoundedToModeAndRoot() throws {

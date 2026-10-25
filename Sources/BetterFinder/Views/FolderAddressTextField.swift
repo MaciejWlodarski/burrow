@@ -18,7 +18,11 @@ struct FolderAddressTextField: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField(string: text)
+        let field = AddressField(string: text)
+        field.onFocus = { [weak coordinator = context.coordinator, weak field] in
+            guard let coordinator, let field else { return }
+            coordinator.fieldDidFocus(field)
+        }
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
@@ -86,8 +90,20 @@ struct FolderAddressTextField: NSViewRepresentable {
         }
 
         func controlTextDidBeginEditing(_ notification: Notification) {
-            guard alive, let field = notification.object as? NSTextField else { return }
+            // AppKit posts this on the first typed character, not on focus.
+            // Selecting here would make the next keystroke replace the first one.
+            guard alive else { return }
             parent.beginEditing()
+        }
+
+        func fieldDidFocus(_ field: NSTextField) {
+            guard alive else { return }
+            if !parent.isEditing {
+                // Only a user click or Tab enters editing; AppKit's automatic
+                // initial first responder on window open must not.
+                guard let type = NSApp.currentEvent?.type, type == .leftMouseDown || type == .keyDown else { return }
+                parent.beginEditing()
+            }
             // Selecting on first click mirrors an address bar. Subsequent clicks
             // in the already-focused editor place the caret normally.
             delivery &+= 1
@@ -123,5 +139,17 @@ struct FolderAddressTextField: NSViewRepresentable {
             }
             return false
         }
+    }
+}
+
+/// Reports gaining focus (click or Tab) so the whole path can be selected
+/// before the user types, like an address bar.
+final class AddressField: NSTextField {
+    var onFocus: (() -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { onFocus?() }
+        return accepted
     }
 }

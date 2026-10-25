@@ -7,7 +7,7 @@ import Foundation
     struct Entry: Codable, Equatable {
         let path: String
         var title: String
-        let iconName: String
+        var iconName: String
     }
     private struct Archive: Codable { let version: Int; let items: [Entry] }
     private(set) var items: [Entry] = []
@@ -103,6 +103,12 @@ import Foundation
     @discardableResult func rename(_ path: String, title: String) -> Bool {
         guard notice == nil, let index = items.firstIndex(where: { $0.path == path }) else { return false }
         var next = items; next[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return save(next)
+    }
+    @discardableResult func setIcon(_ path: String, iconName: String) -> Bool {
+        guard notice == nil, let index = items.firstIndex(where: { $0.path == path }) else { return false }
+        guard items[index].iconName != iconName else { return true }
+        var next = items; next[index].iconName = iconName
         return save(next)
     }
     @discardableResult func move(_ path: String, by offset: Int) -> Bool {

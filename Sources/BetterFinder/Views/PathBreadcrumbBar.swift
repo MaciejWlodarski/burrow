@@ -313,7 +313,10 @@ public struct PathBreadcrumbBar: View {
             // Do not preflight fileExists here. Navigation validates and commits
             // once; failure must retain the draft as well as the pane snapshot.
             guard pane.navigate(to: target, clearSearch: true) else {
-                pathValidationMessage = pane.navigationDiagnostic ?? "Nie udało się otworzyć folderu."
+                // The pane banner carries the full diagnostic; don't repeat it here.
+                pathValidationMessage = pane.navigationDiagnostic == nil
+                    ? "Nie udało się otworzyć folderu."
+                    : "Nie udało się otworzyć tej ścieżki. Szczegóły są w komunikacie poniżej."
                 return
             }
             cancelEditing()

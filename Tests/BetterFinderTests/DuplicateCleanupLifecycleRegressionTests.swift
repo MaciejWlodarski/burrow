@@ -352,8 +352,8 @@ struct DuplicateCleanupLifecycleRegressionTests {
         try expect(result.confirmedMoved == 2 && result.movedWithoutURL == 1 && result.unconfirmed == 1)
         try expect(result.recoveryIdentityMissing == 1 && result.verifiedRecoveryCount == 0)
         try expect(result.undoActions.count == 1 && result.undoActions[0].identity == nil && manager.undoStack.count == 1)
-        try expect(result.summary.contains("Cmd+Z ich nie przywróci") && result.summary.contains("oczekujące"))
-        try expect(!result.summary.contains("Cmd+Z: zapisano") && result.errors.count == 1)
+        try expect(result.summary.contains("⌘Z ich nie przywróci") && result.summary.contains("oczekujące"))
+        try expect(!result.summary.contains("⌘Z: zapisano") && result.errors.count == 1)
         try expect(attempts.calls == ["no-url", "error", "unknown-id"])
         try expect(!f.exists(f.url("error")) && f.exists(f.trash.appendingPathComponent("error")))
         try expect(!f.exists(f.url("no-url")) && !f.exists(f.url("unknown-id")))
@@ -542,7 +542,7 @@ struct DuplicateCleanupLifecycleRegressionTests {
         try expect(result.confirmedMoved == 2 && result.recoveryIdentityMissing == 1 && result.verifiedRecoveryCount == 1)
         try expect(result.undoActions.count == 2 && result.undoActions[0].identity != nil && result.undoActions[1].identity == nil)
         try expect(result.undoActions.map { $0.sourceURL.lastPathComponent } == ["known", "unknown"])
-        try expect(result.summary.contains("Cmd+Z: zapisano 1") && result.summary.contains("oczekujące"))
+        try expect(result.summary.contains("⌘Z: zapisano 1") && result.summary.contains("oczekujące"))
         let transaction = manager.undoStack.last?.transactionID
         _ = readable.record("identity available now")
         manager.undoLastOperation(); try await idle(manager)
@@ -594,7 +594,7 @@ struct DuplicateCleanupLifecycleRegressionTests {
         try expect(result.attempted == 1 && result.confirmedMoved == 0 && result.unconfirmed == 1)
         try expect(attempts.calls.count == 1 && reloads == 1 && refreshes.calls == [f.root.path])
         try expect(result.touchedDirectories == Set([f.root.path]) && manager.undoStack.isEmpty)
-        try expect(!result.summary.contains("Cmd+Z: zapisano") && !f.exists(f.url("uncertain")))
+        try expect(!result.summary.contains("⌘Z: zapisano") && !f.exists(f.url("uncertain")))
     }
 
 }

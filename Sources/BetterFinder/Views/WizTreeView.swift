@@ -1371,6 +1371,8 @@ public struct WizTreeAnalyzerView: View {
         guard context.matches(appState: appState, mode: subMode), rootURL.path == context.rootPath else {
             scanTask?.cancel()
             verificationTask?.cancel()
+            // The cancelled request's callbacks are filtered by context, so nothing else clears the spinner.
+            isScanning = false
             return
         }
         let token = AnalysisRequestToken(rootPath: rootURL.path, context: context)

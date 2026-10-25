@@ -245,9 +245,13 @@ enum SavedSearchPreparation {
             return PreparedSavedSearch(root: nil, entries: [])
         }
         if isCancelled() { throw CancellationError() }
-        let entries = BulkCrawler.readDirectoryResult(at: root.path, includeHidden: item.includeHidden,
-                                                     isCancelled: isCancelled).entries
-        return PreparedSavedSearch(root: root, entries: entries)
+        let result = BulkCrawler.readDirectoryResult(at: root.path, includeHidden: item.includeHidden,
+                                                     isCancelled: isCancelled)
+        if isCancelled() { throw CancellationError() }
+        // Like session restore, an unreadable or truncated root is a failure, not an empty folder.
+        if result.errorCode == EACCES || result.errorCode == EPERM { throw FinderSessionReadError.permissionDenied }
+        guard result.isComplete else { throw FinderSessionReadError.incomplete }
+        return PreparedSavedSearch(root: root, entries: result.entries)
     }
 
     static func run<T: Sendable>(_ work: @escaping @Sendable () throws -> T,

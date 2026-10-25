@@ -975,9 +975,7 @@ public struct ConflictResolutionSheetView: View {
 
             HStack(spacing: 10) {
                 Button("Anuluj") {
-                    if fileOps.pendingConflict?.id == conflict.id {
-                        fileOps.pendingConflict = nil
-                    }
+                    fileOps.cancelPendingTransferRequest(conflict.id)
                 }
                 .keyboardShortcut(.cancelAction)
 
@@ -1040,6 +1038,7 @@ public struct FSearchSettingsSheetView: View {
     @ViewState private var newRootPath: String = ""
     @ViewState private var rootPathError: String?
     @ViewState private var repairIndexSettings = false
+    @ViewState private var confirmingSessionClear = false
     @ViewState private var indexSettingsError: String?
 
     public init(appState: AppState) {
@@ -1075,8 +1074,14 @@ public struct FSearchSettingsSheetView: View {
                     Text(notice).font(FinderUI.captionFont).foregroundStyle(.orange)
                 }
                 Button("Wyczyść zapis sesji i wyłącz przywracanie", role: .destructive) {
-                    appState.clearSavedSession()
+                    confirmingSessionClear = true
                 }.buttonStyle(.bordered)
+                .confirmationDialog("Usunąć zapis sesji?", isPresented: $confirmingSessionClear) {
+                    Button("Wyczyść i wyłącz przywracanie", role: .destructive) { appState.clearSavedSession() }
+                    Button("Anuluj", role: .cancel) {}
+                } message: {
+                    Text("Zapisanej sesji nie będzie można odzyskać. Otwarte karty pozostaną bez zmian.")
+                }
             }
             Divider()
 

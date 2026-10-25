@@ -63,8 +63,15 @@ struct RenameItemSheet: View {
     }
 
     private func rename() {
-        guard draft != item.name else { dismiss(); return }
-        if let url = FileOperationsManager.shared.renameItem(item, to: draft) {
+        // Return bypasses the disabled button, so validate the same trimmed value here.
+        let name = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            errorMessage = "Nazwa nie może być pusta."
+            isNameFocused = true
+            return
+        }
+        guard name != item.name else { dismiss(); return }
+        if let url = FileOperationsManager.shared.renameItem(item, to: name) {
             pane.renamingItemPath = nil
             pane.refresh()
             pane.selectedPaths = [url.path]

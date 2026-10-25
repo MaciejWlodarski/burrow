@@ -96,6 +96,12 @@ struct BetterFinderApp: App {
                 }
                 .keyboardShortcut("v", modifiers: [.command])
 
+                Button("Przenieś tutaj") {
+                    if canUseFileCommands { fileOps.paste(into: appState.activeTab.currentURL, forceMove: true) }
+                }
+                .keyboardShortcut("v", modifiers: [.command, .option])
+                .disabled(!canUseFileCommands)
+
                 Button("Zaznacz wszystko") {
                     if !routeTextAction(#selector(NSText.selectAll(_:))), canUseFileCommands { appState.activeTab.selectAll() }
                 }
@@ -116,8 +122,9 @@ struct BetterFinderApp: App {
 
                 Button("Duplikuj zaznaczone") {
                     guard canUseFileCommands else { return }
-                    fileOps.duplicateItems(appState.activeTab.selectedItems)
-                    appState.activeTab.reloadDirectory()
+                    // Duplication runs detached; reload the originating pane once copies exist.
+                    let pane = appState.activeTab
+                    fileOps.duplicateItems(pane.selectedItems) { [weak pane] _ in pane?.reloadDirectory() }
                 }
                 .keyboardShortcut("d", modifiers: [.command])
                 .disabled(!canUseFileCommands || appState.activeTab.selectedItems.isEmpty || fileOps.isBusy)
@@ -130,6 +137,14 @@ struct BetterFinderApp: App {
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(!isEditingText && (!canUseFileCommands || appState.activeTab.selectedItems.isEmpty || fileOps.isBusy))
+
+                // emptySystemTrash asks for confirmation before deleting anything.
+                Button("Opróżnij Kosz…") {
+                    guard canUseFileCommands else { return }
+                    fileOps.emptySystemTrash { appState.activeTab.reloadDirectory() }
+                }
+                .keyboardShortcut(.delete, modifiers: [.command, .shift])
+                .disabled(!canUseFileCommands || fileOps.isBusy)
             }
 
             // fsearch & Navigation Menu
@@ -321,7 +336,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
             }
 
-            if event.keyCode == 36 && event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+            // Home (115) / End (119) -> first / last item; Page Up (116) / Page Down (121) -> jump a page.
+            if [115, 119, 116, 121].contains(event.keyCode) &&
+               event.modifierFlags.intersection([.command, .option, .control]).isEmpty {
+                let extending = event.modifierFlags.contains(.shift)
+                switch event.keyCode {
+                case 115: tab.selectBoundary(last: false, extending: extending)
+                case 119: tab.selectBoundary(last: true, extending: extending)
+                default: tab.moveSelection(by: event.keyCode == 121 ? 15 : -15, extending: extending)
+                }
+                return nil
+            }
+
+            // Return (36) or keypad Enter (76) -> rename
+            if (event.keyCode == 36 || event.keyCode == 76) && event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
                let item = tab.primarySelectedItem {
                 tab.renamingItemPath = item.path
                 return nil
@@ -332,6 +360,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             if event.keyCode == 48 && event.modifierFlags.contains(.control) {
                 appState.selectAdjacentTab(offset: event.modifierFlags.contains(.shift) ? -1 : 1)
+                return nil
+            }
+            // Type-to-select: printable characters without command modifiers.
+            if event.modifierFlags.intersection([.command, .option, .control, .function]).isEmpty,
+               let characters = event.characters, !characters.isEmpty,
+               characters.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.union(.punctuationCharacters).union(.symbols).contains($0) }),
+               tab.typeSelect(characters) {
                 return nil
             }
             return event

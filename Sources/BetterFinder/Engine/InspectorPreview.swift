@@ -192,7 +192,9 @@ final class InspectorPreviewService: @unchecked Sendable {
             result = .unavailable("Podgląd treści binarnej jest niedostępny. Użyj Quick Look.")
         } else {
             let lines = String(decoding: data, as: UTF8.self).components(separatedBy: .newlines)
-            let start = min(lines.count, max(0, max(1, input.targetLine) - 15))
+            // A target beyond the bounded prefix falls back to the file head instead of an empty preview.
+            let anchor = max(1, input.targetLine) <= lines.count ? max(1, input.targetLine) : 1
+            let start = max(0, anchor - 15)
             let end = min(lines.count, start + 90)
             result = .text((start..<end).map { ($0 + 1, lines[$0]) })
         }

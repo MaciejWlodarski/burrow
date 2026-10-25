@@ -326,7 +326,7 @@ public struct InspectorPreviewView: View {
                                 .frame(width: 42, height: 42)
                                 .accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(activeTab.currentURL.lastPathComponent.isEmpty ? "Macintosh HD" : activeTab.currentURL.lastPathComponent)
+                                Text(activeTab.currentURL.path == "/" || activeTab.currentURL.lastPathComponent.isEmpty ? "Macintosh HD" : activeTab.currentURL.lastPathComponent)
                                     .font(FinderUI.titleFont)
                                 Text("\(activeTab.displayedItems.count) elementów w widoku")
                                     .font(FinderUI.detailFont)

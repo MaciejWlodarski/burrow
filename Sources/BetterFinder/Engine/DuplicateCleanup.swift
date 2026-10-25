@@ -66,9 +66,9 @@ struct DuplicateCleanupResult: @unchecked Sendable {
         case .invalidated(let reason): parts.append("Przerwano: \(reason). Niewykonane: \(unattempted).")
         }
         if unconfirmed > 0 { parts.append("Niepotwierdzony wynik operacji: \(unconfirmed). Sprawdź folder i Kosz; nie ponowiono automatycznie.") }
-        if movedWithoutURL > 0 { parts.append("Brak ścieżki przywracania dla \(movedWithoutURL) przeniesionych plików; Cmd+Z ich nie przywróci.") }
+        if movedWithoutURL > 0 { parts.append("Brak ścieżki przywracania dla \(movedWithoutURL) przeniesionych plików; ⌘Z ich nie przywróci.") }
         if recoveryIdentityMissing > 0 { parts.append("Niepotwierdzona tożsamość \(recoveryIdentityMissing) rekordów przywracania; zapisano je jako oczekujące, ale nie można ich teraz wykonać.") }
-        if verifiedRecoveryCount > 0 { parts.append("Cmd+Z: zapisano \(verifiedRecoveryCount) sprawdzonych rekordów przywracania w jednej operacji.") }
+        if verifiedRecoveryCount > 0 { parts.append("⌘Z: zapisano \(verifiedRecoveryCount) sprawdzonych rekordów przywracania w jednej operacji.") }
         if !errors.isEmpty { parts.append(errors.joined(separator: "; ")) }
         return parts.joined(separator: " ")
     }

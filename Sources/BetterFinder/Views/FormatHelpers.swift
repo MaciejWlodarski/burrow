@@ -30,6 +30,11 @@ public enum FormatHelpers {
             value /= 1024
             unitIndex += 1
         }
+        // Rounding to the displayed precision can reach 1024 (e.g. 1023.7 KB -> "1024 KB").
+        if unitIndex > 0 && unitIndex < units.count - 1 && value.rounded() >= 1024 {
+            value /= 1024
+            unitIndex += 1
+        }
         if unitIndex == 0 {
             return "\(bytes) B"
         } else if value >= 100 {

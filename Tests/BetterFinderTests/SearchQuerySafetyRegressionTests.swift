@@ -129,6 +129,9 @@ struct SearchQuerySafetyRegressionTests {
         }
         try expect(ParsedFSearchQuery.parse("!draft -private").terms == [.excluded("draft"), .excluded("private")])
         try expect(ParsedFSearchQuery.parse(#""!type:image" "ext:pdf" "file:colon""#).terms == [.exact("!type:image"), .exact("ext:pdf"), .exact("file:colon")])
+        try expect(ParsedFSearchQuery.parse(#"-"old draft" ^"my file""#).terms == [.excluded("old draft"), .prefix("my file")])
+        try expect(ParsedFSearchQuery.parse(#"!"a b" "c d"$"#).terms == [.excluded("a b"), .suffix("c d")])
+        try expect(FormatHelpers.formatBytes(1_048_500) == "1.00 MB" && FormatHelpers.formatBytes(1023) == "1023 B")
         try expect(ParsedFSearchQuery.parse("type:swift").typeFilters == ["swift"])
         try expect(ParsedFSearchQuery.parse("unknown:value ext:").validationError == nil)
         for (value, bytes) in [("9007199254740993.0b", Int64(9007199254740993)), ("9223372036854775807.0b", Int64.max), ("1.5kb", 1536), (".5b", 0), ("0.999999999999999999999999b", 0), ("1.b", 1)] {

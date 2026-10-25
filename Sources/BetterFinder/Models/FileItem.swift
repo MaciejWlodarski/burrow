@@ -251,6 +251,11 @@ public struct FileItem: Identifiable, Hashable, Sendable {
         self.searchScore = searchScore
     }
 
+    /// Application bundles are directories on disk but must never receive drops as folders.
+    public var isDropFolderTarget: Bool {
+        isDirectory && fileExtension.lowercased() != "app"
+    }
+
     public var isExtractableArchive: Bool {
         guard !isDirectory else { return false }
         let ext = fileExtension.lowercased()

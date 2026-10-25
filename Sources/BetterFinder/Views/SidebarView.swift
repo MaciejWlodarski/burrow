@@ -18,7 +18,9 @@ public struct SidebarView: View {
     @ViewState private var renamingFavorite: SidebarLocationItem? = nil
     @ViewState private var favoriteTitle = ""
     @ViewState private var favoriteOpenNotice: String?
-    private let favoriteDragType = UTType(importedAs: "com.betterfinder.favorite-order")
+    // An undeclared custom UTType is rejected at drop time; plain text plus the
+    // per-drag nonce check below keeps foreign text drags from reordering.
+    private let favoriteDragType = UTType.utf8PlainText
 
     #if BETTERFINDER_TESTING
     @Environment(\.sidebarPreviewExpandedServerIDs) private var previewExpandedServerIDs
@@ -293,12 +295,13 @@ public struct SidebarView: View {
 
     private func favoriteAccessibleButton(_ item: SidebarLocationItem, isTrash: Bool,
                                           isSelected: Bool, isDropTarget: Bool) -> some View {
-        Button {
-            openFavorite(item.url)
-        } label: {
-            favoriteRowLabel(item, isSelected: isSelected, isDropTarget: isDropTarget)
-        }
-        .buttonStyle(.plain)
+        // A Button tracks the mouse itself, so .onDrag never starts and favorites
+        // could not be reordered by dragging. A tap gesture keeps both working.
+        favoriteRowLabel(item, isSelected: isSelected, isDropTarget: isDropTarget)
+        .onTapGesture { openFavorite(item.url) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { openFavorite(item.url) }
         .help(isTrash ? "Otwórz Kosz w Finderze" : item.url.path)
         .accessibilityLabel(item.title)
         .accessibilityValue(isSelected ? "Bieżący folder: \(item.url.path)" : item.url.path)
@@ -365,6 +368,18 @@ public struct SidebarView: View {
         Button("Zmień nazwę w ulubionych…", systemImage: "pencil") {
             favoriteTitle = item.title
             renamingFavorite = item
+        }
+        .disabled(appState.pinnedFolderNotice != nil)
+        Menu {
+            ForEach(Self.favoriteIconChoices, id: \.symbol) { choice in
+                Button {
+                    appState.setFavoriteIcon(item, iconName: choice.symbol)
+                } label: {
+                    Label(choice.title, systemImage: choice.symbol)
+                }
+            }
+        } label: {
+            Label("Zmień ikonę", systemImage: "paintbrush")
         }
         .disabled(appState.pinnedFolderNotice != nil)
         Button("Przesuń wyżej", systemImage: "arrow.up") {
@@ -480,6 +495,7 @@ public struct SidebarView: View {
                     sidebarActionButton(icon: "eject", label: "Wysuń wolumin \(volume.name)") {
                         appState.ejectVolume(volume)
                     }
+                    .disabled(appState.ejectingVolumePaths.contains(volume.url.path))
                     .foregroundStyle(isSelected ? selectedTextColor : Color.secondary)
                 }
             }
@@ -488,20 +504,31 @@ public struct SidebarView: View {
 
             if !volume.isNetwork, let totalBytes = volume.totalBytes, let freeBytes = volume.freeBytes,
                let usedFraction = volume.usedFraction {
-                VStack(alignment: .leading, spacing: 5) {
+                // Compact capacity line: a thin bar with the free space beside it, aligned to the name.
+                HStack(spacing: 8) {
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.secondary.opacity(0.2))
+                            Capsule()
+                                .fill(usedFraction > 0.9 ? Color.orange : Color.accentColor.opacity(0.85))
+                                .frame(width: max(3, geometry.size.width * min(1, max(0, usedFraction))))
+                        }
+                    }
+                    .frame(height: 4)
+                    .accessibilityElement()
+                    .accessibilityLabel("Zajęte miejsce na \(volume.name)")
+                    .accessibilityValue("\(Int(usedFraction * 100)) procent")
                     Text("\(FormatHelpers.formatBytes(freeBytes)) wolne")
-                        .font(FinderUI.detailFont)
+                        .font(FinderUI.captionFont)
+                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    ProgressView(value: usedFraction)
-                        .progressViewStyle(.linear)
-                        .tint(usedFraction > 0.85 ? Color.orange : Color.accentColor)
-                        .accessibilityLabel("Zajęte miejsce na \(volume.name)")
-                        .accessibilityValue("\(Int(usedFraction * 100)) procent")
+                        .fixedSize()
                 }
                 .padding(.leading, FinderUI.sidebarRowInset + FinderUI.sidebarIconWidth + FinderUI.rowSpacing)
-                .padding(.trailing, 8)
-                .padding(.bottom, 6)
+                .padding(.trailing, FinderUI.sidebarRowInset)
+                .padding(.top, -2)
+                .padding(.bottom, 4)
                 .help("\(FormatHelpers.formatBytes(freeBytes)) wolne z \(FormatHelpers.formatBytes(totalBytes))")
             }
         }
@@ -541,6 +568,17 @@ public struct SidebarView: View {
                     .strokeBorder(isDropTarget ? Color.accentColor : Color.clear, lineWidth: 2)
             }
     }
+
+    /// Icons a user can pick for any favorite; none of them is reserved for a specific folder.
+    static let favoriteIconChoices: [(title: String, symbol: String)] = [
+        ("Folder", "folder"), ("Dom", "house"), ("Biurko", "desktopcomputer"),
+        ("Dokumenty", "doc"), ("Pobrane", "arrow.down.circle"), ("Chmura", "icloud"),
+        ("Projekty", "hammer"), ("Kod", "chevron.left.forwardslash.chevron.right"), ("Terminal", "terminal"),
+        ("Obrazy", "photo"), ("Muzyka", "music.note"), ("Filmy", "film"),
+        ("Archiwum", "archivebox"), ("Praca", "briefcase"), ("Książki", "book"),
+        ("Gwiazdka", "star"), ("Serce", "heart"), ("Flaga", "flag"),
+        ("Dysk", "externaldrive"), ("Sieć", "network"), ("Aplikacje", "app"), ("Kosz", "trash")
+    ]
 
     private func locationIcon(for item: SidebarLocationItem) -> String {
         switch item.iconName {

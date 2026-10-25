@@ -330,7 +330,7 @@ public struct ParsedFSearchQuery: Sendable {
             }
 
             if (token.hasPrefix("!") || token.hasPrefix("-")) && token.count > 1 {
-                let term = Self.normalizedNameSearchText(String(token.dropFirst()))
+                let term = Self.normalizedNameSearchText(unquotedTerm(String(token.dropFirst())))
                 result.terms.append(.excluded(term))
                 result.pills.append(ActiveFilterPill(
                     id: "\(idx)-\(token)",
@@ -341,10 +341,10 @@ public struct ParsedFSearchQuery: Sendable {
                     icon: "minus.circle"
                 ))
             } else if token.hasPrefix("^") && token.count > 1 {
-                let term = Self.normalizedNameSearchText(String(token.dropFirst()))
+                let term = Self.normalizedNameSearchText(unquotedTerm(String(token.dropFirst())))
                 result.terms.append(.prefix(term))
             } else if token.hasSuffix("$") && token.count > 1 {
-                let term = Self.normalizedNameSearchText(String(token.dropLast()))
+                let term = Self.normalizedNameSearchText(unquotedTerm(String(token.dropLast())))
                 result.terms.append(.suffix(term))
             } else if (token.hasPrefix("\"") && token.hasSuffix("\"") && token.count > 2) ||
                       (token.hasPrefix("'") && token.hasSuffix("'") && token.count > 2) {
@@ -431,8 +431,10 @@ public struct ParsedFSearchQuery: Sendable {
                 escaped = true
             } else if let quote = inQuote {
                 if ch == quote { inQuote = nil }
-            } else if (ch == "\"" || ch == "'"),
-                      start == index || (index > input.startIndex && input[input.index(before: index)] == ":") {
+            } else if (ch == "\"" || ch == "'"), let lower = start,
+                      lower == index || input[input.index(before: index)] == ":" ||
+                      // A single leading sigil (-"a b", !"a b", ^"a b") quotes the whole phrase.
+                      (input.index(before: index) == lower && "-!^".contains(input[lower])) {
                 inQuote = ch
             } else if ch.isWhitespace, let lower = start {
                 tokens.append(TokenSpan(raw: String(input[lower..<index]), range: lower..<index))
@@ -481,6 +483,13 @@ public struct ParsedFSearchQuery: Sendable {
             return output
         }
         return input + (input.isEmpty || input.last?.isWhitespace == true ? "" : " ") + token
+    }
+
+    /// Sigil terms keep unquoted text verbatim and decode only a fully quoted phrase.
+    private static func unquotedTerm(_ raw: String) -> String {
+        let quoted = raw.count > 2 && ((raw.first == "\"" && raw.last == "\"") ||
+            (raw.first == "'" && raw.last == "'"))
+        return quoted ? decodeQuotedValue(raw) : raw
     }
 
     private static func decodeQuotedValue(_ raw: String) -> String {

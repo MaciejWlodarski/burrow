@@ -52,7 +52,7 @@ public final class AppState: ObservableObject {
     let terminalWorkspace = TerminalWorkspace()
 
     @Published public var tabs: [PaneTabState] = [] {
-        didSet { observeSessionPanes(); synchronizeQuickLookOwnership() }
+        didSet { observeSessionPanes(); observeVisibleDirectories(); synchronizeQuickLookOwnership() }
     }
     @Published public var activeTabId: UUID {
         didSet {
@@ -70,7 +70,7 @@ public final class AppState: ObservableObject {
         }
     }
     @Published public var rightPane: PaneTabState {
-        didSet { observeSessionPanes(); synchronizeQuickLookOwnership() }
+        didSet { observeSessionPanes(); observeVisibleDirectories(); synchronizeQuickLookOwnership() }
     }
     @Published public var activePaneSide: PaneSide = .left {
         didSet {
@@ -84,6 +84,11 @@ public final class AppState: ObservableObject {
     @Published public private(set) var sessionPersistenceNotice: String?
     private let sessionStore: FinderSessionStore
     private var sessionObservers: [AnyCancellable] = []
+    private var visibleDirectoryWatcher: VisibleDirectoryWatcher?
+    private var visibleDirectoryObservers: [AnyCancellable] = []
+    private var visibleDirectorySyncScheduled = false
+    private var pendingDirectoryChanges = Set<String>()
+    private var directoryReloadScheduled = false
     private var appSessionObserver: AnyCancellable?
     private var sessionSaveTask: Task<Void, Never>?
     private var sessionObservationReady = false
@@ -180,10 +185,9 @@ public final class AppState: ObservableObject {
         let store = FinderSessionStore(defaults: defaults)
         self.sessionStore = store
         let homeURL = Self.homeDirectoryURL
-        let devLabPath = homeURL.appendingPathComponent("dev").path
-        let defaultStartURL = FileManager.default.fileExists(atPath: devLabPath)
-            ? URL(fileURLWithPath: devLabPath, isDirectory: true)
-            : homeURL
+        // Without a restored session, start at home like Finder; personal
+        // project folders belong in user-editable favorites, not in code.
+        let defaultStartURL = homeURL
 
         let restored = store.load(defaultRightPath: homeURL.path)
         let snapshot = restored.snapshot
@@ -223,6 +227,12 @@ public final class AppState: ObservableObject {
         volumes.start { [weak self] result in self?.volumeInventory.apply(result) }
         #endif
         setupIndexCallbacks()
+        #if !BETTERFINDER_TESTING
+        visibleDirectoryWatcher = VisibleDirectoryWatcher { changed in
+            Task { @MainActor in AppState.shared.handleDirectoryChanges(changed) }
+        }
+        observeVisibleDirectories()
+        #endif
         sessionObservationReady = true
         observeSessionPanes()
         appSessionObserver = objectWillChange.sink { [weak self] _ in self?.scheduleSessionSave() }
@@ -263,8 +273,46 @@ public final class AppState: ObservableObject {
             FolderSizeCache.shared.invalidate(containing: path)
             FileIconCache.shared.invalidate(containing: path)
         }
-        for tab in tabs + [rightPane] where tab.isAffectedByDirectoryChanges(changedDirs) {
+        // Bursts (copying many files; the index and visible-folder watchers
+        // reporting the same change) collapse into one reload per pane.
+        pendingDirectoryChanges.formUnion(changedDirs)
+        guard !directoryReloadScheduled else { return }
+        directoryReloadScheduled = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            self?.flushDirectoryChanges()
+        }
+    }
+
+    private func flushDirectoryChanges() {
+        let changed = pendingDirectoryChanges
+        pendingDirectoryChanges.removeAll()
+        directoryReloadScheduled = false
+        for tab in tabs + [rightPane] where tab.isAffectedByDirectoryChanges(changed) {
             tab.reloadDirectory(invalidateCaches: false)
+        }
+    }
+
+    /// Keeps the visible-folder watcher in sync with what panes display.
+    private func observeVisibleDirectories() {
+        guard visibleDirectoryWatcher != nil else { return }
+        visibleDirectoryObservers = (tabs + [rightPane]).map { pane in
+            pane.objectWillChange.sink { [weak self] _ in self?.scheduleVisibleDirectorySync() }
+        }
+        scheduleVisibleDirectorySync()
+    }
+
+    private func scheduleVisibleDirectorySync() {
+        guard !visibleDirectorySyncScheduled else { return }
+        visibleDirectorySyncScheduled = true
+        // objectWillChange fires before the change lands; read paths on the next turn.
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.visibleDirectorySyncScheduled = false
+                let paths = (self.tabs + [self.rightPane]).reduce(into: Set<String>()) { $0.formUnion($1.visibleDirectoryPaths) }
+                self.visibleDirectoryWatcher?.update(paths: paths)
+            }
         }
     }
 
@@ -288,7 +336,6 @@ public final class AppState: ObservableObject {
             ("Dokumenty", "doc.fill", "\(home)/Documents"),
             ("Pobrane", "arrow.down.circle.fill", "\(home)/Downloads"),
             ("iCloud Drive", "icloud.fill", "\(home)/Library/Mobile Documents/com~apple~CloudDocs"),
-            ("Projekty", "hammer.fill", "\(home)/dev"),
             ("Kosz", "trash.fill", "\(home)/.Trash")
         ]
         #if !BETTERFINDER_TESTING
@@ -373,6 +420,10 @@ public final class AppState: ObservableObject {
         finishFavoritesMutation(sidebarFavoritesStore.rename(item.id, title: title))
     }
 
+    public func setFavoriteIcon(_ item: SidebarLocationItem, iconName: String) {
+        finishFavoritesMutation(sidebarFavoritesStore.setIcon(item.id, iconName: iconName))
+    }
+
     public func isCurrentSearchSaved(in pane: PaneTabState) -> Bool {
         let candidate = SavedSmartFolderItem.capture(from: pane)
         return savedSmartFolders.contains { $0.hasSameSearch(as: candidate) }
@@ -436,14 +487,33 @@ public final class AppState: ObservableObject {
 
     public func refreshMountedVolumes() { volumeService?.requestRefresh() }
 
+    /// Volumes with an unmount in flight; a repeated click must not queue a second eject.
+    @Published private(set) var ejectingVolumePaths: Set<String> = []
+
     public func ejectVolume(_ vol: VolumeInfoItem) {
-        do {
-            try VolumeEjectAction.perform(vol.url,
-                eject: { try NSWorkspace.shared.unmountAndEjectDevice(at: $0) },
-                refresh: refreshMountedVolumes)
+        let path = vol.url.path
+        guard ejectingVolumePaths.insert(path).inserted else { return }
+        FileOperationsManager.shared.lastStatusMessage = "Wysuwanie woluminu \(vol.name)…"
+        // Unmounting a busy or unresponsive (network) volume can block for a long time; keep it off the main actor.
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let failure: String?
+            do {
+                try NSWorkspace.shared.unmountAndEjectDevice(at: vol.url)
+                failure = nil
+            } catch {
+                failure = error.localizedDescription
+            }
+            await self?.finishEject(vol, path: path, failure: failure)
+        }
+    }
+
+    private func finishEject(_ vol: VolumeInfoItem, path: String, failure: String?) {
+        ejectingVolumePaths.remove(path)
+        if let failure {
+            FileOperationsManager.shared.lastStatusMessage = "Nie można wysunąć \(vol.name): \(failure)"
+        } else {
+            refreshMountedVolumes()
             FileOperationsManager.shared.lastStatusMessage = "Wysunięto wolumin \(vol.name)"
-        } catch {
-            FileOperationsManager.shared.lastStatusMessage = "Nie można wysunąć \(vol.name): \(error.localizedDescription)"
         }
     }
 
