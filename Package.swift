@@ -2,17 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "BetterFinder",
+    name: "Burrow",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "BetterFinder", targets: ["BetterFinder"])
+        .executable(name: "Burrow", targets: ["Burrow"])
     ],
     targets: [
         .executableTarget(
-            name: "BetterFinder",
-            path: "Sources/BetterFinder",
+            name: "Burrow",
+            path: "Sources/Burrow",
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),

@@ -14,7 +14,7 @@ import tempfile
 import time
 import zipfile
 
-SOURCE = (Path(__file__).resolve().parents[1] / "Sources/BetterFinder/Engine/FileOperationsManager.swift").read_text()
+SOURCE = (Path(__file__).resolve().parents[1] / "Sources/Burrow/Engine/FileOperationsManager.swift").read_text()
 
 def command(executable, arguments, cwd, env):
     return subprocess.run([executable, *arguments], cwd=cwd, env=env, check=True,

@@ -1,18 +1,18 @@
-# BetterFinder
+# Burrow
 
 **A native macOS file manager with dual-pane browsing, indexed search, and disk analysis.**
 
-BetterFinder brings everyday file operations and developer tools into one SwiftUI and AppKit app. Browse two folders side by side, find files with structured queries, inspect metadata, and explore what is taking up space without leaving the window.
+Burrow brings everyday file operations and developer tools into one SwiftUI and AppKit app. Browse two folders side by side, find files with structured queries, inspect metadata, and explore what is taking up space without leaving the window.
 
 [Get started](#get-started) · [Features](#features) · [Search syntax](#search-syntax) · [Keyboard shortcuts](#keyboard-shortcuts) · [Development](#development)
 
-![BetterFinder light-mode file list with synthetic preview files](docs/images/betterfinder-light.png)
+![Burrow light-mode file list with synthetic preview files](docs/images/burrow-light.png)
 
 *Earlier native light-mode view render using synthetic files. It predates the latest sidebar and address-bar changes; it is not a desktop screenshot or proof of current GUI validation.*
 
 ## Project status
 
-BetterFinder is under active development. This README describes the source revision containing it. Changes viewed on a pull request branch are not part of `main` until merged. See the [open pull requests](https://github.com/MaciejWlodarski/better-finder/pulls) for ongoing work, and check the results for the exact revision you are evaluating. Documented features and the presence of tests do not imply that a revision has passed native testing.
+Burrow is under active development. This README describes the source revision containing it. Changes viewed on a pull request branch are not part of `main` until merged. See the [open pull requests](https://github.com/MaciejWlodarski/burrow/pulls) for ongoing work, and check the results for the exact revision you are evaluating. Documented features and the presence of tests do not imply that a revision has passed native testing.
 
 The app's interface is currently mostly in Polish, with some English labels. This README is in English; it does not indicate that the app has been fully translated.
 
@@ -31,18 +31,18 @@ Use backups and disposable test files when trying destructive operations. See [D
 A plain clone selects the default branch. To evaluate a pull request, check out its branch after cloning and before running the build commands below.
 
 ```sh
-git clone https://github.com/MaciejWlodarski/better-finder.git
-cd better-finder
+git clone https://github.com/MaciejWlodarski/burrow.git
+cd burrow
 ```
 
 Build and launch the checked-out revision:
 
 ```sh
 zsh ./build_app.sh
-open BetterFinder.app
+open Burrow.app
 ```
 
-The build script compiles an optimized app for your Mac's current architecture, generates its icon, and applies a local ad-hoc code signature. It creates `BetterFinder.app` in the repository root. This is a local development build, not a notarized distribution build.
+The build script compiles an optimized app for your Mac's current architecture, generates its icon, and applies a local ad-hoc code signature. It creates `Burrow.app` in the repository root. This is a local development build, not a notarized distribution build.
 
 An existing app bundle is kept until compilation, icon generation, and signing succeed. The script uses a private temporary build directory and removes it when finished.
 
@@ -177,7 +177,7 @@ Icon-grid thumbnails have separate limits for active requests, queued work, and 
 
 ### Local data and access
 
-Saved indexing configuration, Favorites, retained legacy saved-search records, and session state are stored locally through macOS preferences. The optional index cache contains filenames, paths, and metadata. Its preferred location is `~/Library/Caches/BetterFinder/fsearch_index.bin`; a validated private temporary directory is used as a fallback. If no suitable private location is available, caching is skipped. Paths and filenames may be sensitive.
+Saved indexing configuration, Favorites, retained legacy saved-search records, and session state are stored locally through macOS preferences. The optional index cache contains filenames, paths, and metadata. Its preferred location is `~/Library/Caches/Burrow/fsearch_index.bin`; a validated private temporary directory is used as a fallback. If no suitable private location is available, caching is skipped. Paths and filenames may be sensitive.
 
 If saved index settings are damaged or from an unsupported version, startup automatic indexing and cache writing stay paused rather than falling back to default roots. Settings offers an explicit repair option that preserves a copy of the original record before replacing it. Turning persistent caching off prevents new cache writes from being authorized, but an already-authorized write may finish; it does not delete an existing cache.
 
@@ -219,7 +219,7 @@ On a Mac with the build requirements installed:
 zsh ./scripts/run_tests.sh
 ```
 
-The script compiles the production models, engines, and views with `BETTERFINDER_TESTING`, then runs the regression runner and a separate file-operation harness. It uses a temporary home directory, preferences, and test fixtures to isolate regression startup from normal user state. The harness exercises replacement, rollback, history, clipboard ownership logic, and tag metadata. Replacement tests use a fixture-local substitute for Trash.
+The script compiles the production models, engines, and views with `BURROW_TESTING`, then runs the regression runner and a separate file-operation harness. It uses a temporary home directory, preferences, and test fixtures to isolate regression startup from normal user state. The harness exercises replacement, rollback, history, clipboard ownership logic, and tag metadata. Replacement tests use a fixture-local substitute for Trash.
 
 This isolation applies to the regression runner, not the native preview harness below. It is not a general-purpose OS sandbox.
 
@@ -239,10 +239,10 @@ This experimental local harness builds a separate preview app and attempts keybo
 
 ### Branch-specific validation
 
-The repository includes `.github/workflows/macos-regressions.yml`, which builds the app and runs regression checks on macOS 26 only. The minimum deployment target remains macOS 14; the current CI matrix does not validate compatibility with that older system. Consult the actual checks on the [relevant pull request](https://github.com/MaciejWlodarski/better-finder/pulls); the presence of a workflow is not evidence that a particular revision has passed. A successful check on one branch does not establish that `main` or a newer integrated revision passes the same suite. Automated checks do not replace interactive testing of Quick Look, permissions, filesystem events, external volumes, or Thread Sanitizer runs.
+The repository includes `.github/workflows/macos-regressions.yml`, which builds the app and runs regression checks on macOS 26 only. The minimum deployment target remains macOS 14; the current CI matrix does not validate compatibility with that older system. Consult the actual checks on the [relevant pull request](https://github.com/MaciejWlodarski/burrow/pulls); the presence of a workflow is not evidence that a particular revision has passed. A successful check on one branch does not establish that `main` or a newer integrated revision passes the same suite. Automated checks do not replace interactive testing of Quick Look, permissions, filesystem events, external volumes, or Thread Sanitizer runs.
 
 ### Contributing
 
 Keep changes focused and include reproduction steps for bugs. For a file-operation issue, describe the source and destination volumes, the operation, expected behavior, and actual result. Use disposable fixtures and redact private paths from logs.
 
-Before proposing a change, review the [open pull requests](https://github.com/MaciejWlodarski/better-finder/pulls) to avoid duplicating ongoing work. Run the relevant regression checks and note your macOS version, Swift version, and any manual UI testing in the pull request.
+Before proposing a change, review the [open pull requests](https://github.com/MaciejWlodarski/burrow/pulls) to avoid duplicating ongoing work. Run the relevant regression checks and note your macOS version, Swift version, and any manual UI testing in the pull request.

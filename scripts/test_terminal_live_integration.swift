@@ -20,7 +20,7 @@ import CoreFoundation
         try require(condition(), "Timed out: \(label)")
     }
     @MainActor static func main() {
-        guard let path = ProcessInfo.processInfo.environment["BETTERFINDER_TEST_ROOT"] else {
+        guard let path = ProcessInfo.processInfo.environment["BURROW_TEST_ROOT"] else {
             fputs("FAIL missing isolated test root\n", stderr); exit(1)
         }
         let root = URL(fileURLWithPath: path).appendingPathComponent(UUID().uuidString, isDirectory: true)

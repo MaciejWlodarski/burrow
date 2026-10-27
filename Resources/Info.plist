@@ -20,17 +20,17 @@
         </dict>
     </array>
     <key>CFBundleDisplayName</key>
-    <string>BetterFinder</string>
+    <string>Burrow</string>
     <key>CFBundleExecutable</key>
-    <string>BetterFinder</string>
+    <string>Burrow</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.betterfinder.macos</string>
+    <string>com.burrow.macos</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>BetterFinder</string>
+    <string>Burrow</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

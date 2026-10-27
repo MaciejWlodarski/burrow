@@ -3,14 +3,14 @@ set -euo pipefail
 
 PROJECT_DIR="${0:A:h}"
 cd "${PROJECT_DIR}"
-APP_NAME="BetterFinder"
+APP_NAME="Burrow"
 APP_BUNDLE="${PROJECT_DIR}/${APP_NAME}.app"
-BUILD_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp/}better-finder-build.XXXXXX")"
+BUILD_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp/}burrow-build.XXXXXX")"
 STAGED_APP="${BUILD_TMP_DIR}/${APP_NAME}.app"
 CONTENTS_DIR="${STAGED_APP}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
-MODULE_CACHE="${BETTERFINDER_MODULE_CACHE:-${BUILD_TMP_DIR}/swift-module-cache}"
+MODULE_CACHE="${BURROW_MODULE_CACHE:-${BUILD_TMP_DIR}/swift-module-cache}"
 ICONSET_DIR="${BUILD_TMP_DIR}/${APP_NAME}.iconset"
 ICON_GEN_BIN="${BUILD_TMP_DIR}/generate-icon"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
@@ -31,10 +31,10 @@ xcrun swiftc \
     -O \
     -target "${TARGET_ARCH}-apple-macosx14.0" \
     -sdk "${SDK_PATH}" \
-    Sources/BetterFinder/Models/*.swift \
-    Sources/BetterFinder/Engine/*.swift \
-    Sources/BetterFinder/Views/*.swift \
-    Sources/BetterFinder/BetterFinderApp.swift \
+    Sources/Burrow/Models/*.swift \
+    Sources/Burrow/Engine/*.swift \
+    Sources/Burrow/Views/*.swift \
+    Sources/Burrow/BurrowApp.swift \
     -framework AppKit -framework SwiftUI -framework QuickLookUI \
     -framework QuickLookThumbnailing -framework CoreServices \
     -framework UniformTypeIdentifiers \

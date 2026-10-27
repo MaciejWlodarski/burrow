@@ -4,14 +4,14 @@ import AppKit
 @main
 struct NativePreview {
     @MainActor static func main() throws {
-        let base = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BETTERFINDER_PREVIEW_OUTPUT"]!, isDirectory: true)
+        let base = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BURROW_PREVIEW_OUTPUT"]!, isDirectory: true)
         let fixture = base.appendingPathComponent("Pracownia", isDirectory: true)
         try FileManager.default.createDirectory(at: fixture, withIntermediateDirectories: true)
         for folder in ["Dokumenty", "Fotografie", "Projekty", "Archiwum"] {
             try FileManager.default.createDirectory(at: fixture.appendingPathComponent(folder), withIntermediateDirectories: true)
         }
         for name in ["Notatki ze spotkania.md", "Plan projektu.txt", "README.md", "Szkice.svg", "Zestawienie.csv"] {
-            try Data("BetterFinder preview\n".utf8).write(to: fixture.appendingPathComponent(name))
+            try Data("Burrow preview\n".utf8).write(to: fixture.appendingPathComponent(name))
         }
         UserDefaults.standard.setVolatileDomain([
             "bf.openTabPaths": [fixture.path], "bf.showInspector": false,
@@ -107,13 +107,13 @@ struct NativePreview {
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
             require(false, "native preview timed out; a graphical macOS session is required")
         }
-        BetterFinderApp.main()
+        BurrowApp.main()
     }
 
     @MainActor static func require(_ condition: Bool, _ message: String) {
         guard condition else {
             let summary = "FAIL: \(message)"
-            let output = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BETTERFINDER_PREVIEW_OUTPUT"]!).appendingPathComponent("verification.txt")
+            let output = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BURROW_PREVIEW_OUTPUT"]!).appendingPathComponent("verification.txt")
             try? summary.write(to: output, atomically: true, encoding: .utf8)
             fputs("PREVIEW \(summary)\n", stderr)
             exit(1)

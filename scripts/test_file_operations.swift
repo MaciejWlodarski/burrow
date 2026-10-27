@@ -7,8 +7,8 @@ import Foundation
 // Full manager/history/ZIP/Git regressions also run in FileOperationSafetyTests
 // through scripts/run_tests.sh; do not treat this isolated helper suite as UI coverage.
 let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-let manager = try String(contentsOf: project.appendingPathComponent("Sources/BetterFinder/Engine/FileOperationsManager.swift"), encoding: .utf8)
-let model = try String(contentsOf: project.appendingPathComponent("Sources/BetterFinder/Models/FileItem.swift"), encoding: .utf8)
+let manager = try String(contentsOf: project.appendingPathComponent("Sources/Burrow/Engine/FileOperationsManager.swift"), encoding: .utf8)
+let model = try String(contentsOf: project.appendingPathComponent("Sources/Burrow/Models/FileItem.swift"), encoding: .utf8)
 func section(_ text: String, from start: String, to end: String) -> String {
     guard let a = text.range(of: start), let b = text.range(of: end, range: a.upperBound..<text.endIndex) else {
         fatalError("Production source markers changed: \(start)")
@@ -64,7 +64,7 @@ final class Fixture {
     }
 
     func text(_ url: URL) throws -> String { try String(contentsOf: url, encoding: .utf8) }
-    func isStaged(_ url: URL) -> Bool { url.deletingLastPathComponent().lastPathComponent.hasPrefix(".betterfinder-transfer-") }
+    func isStaged(_ url: URL) -> Bool { url.deletingLastPathComponent().lastPathComponent.hasPrefix(".burrow-transfer-") }
 }
 
 func failure(_ body: () throws -> Void) throws -> FileOperationFailure {

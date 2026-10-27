@@ -14,10 +14,10 @@ struct BenchmarkMain {
 
         for relativePath in [
             "",
-            "Sources/BetterFinder",
-            "Sources/BetterFinder/Models",
-            "Sources/BetterFinder/Engine",
-            "Sources/BetterFinder/Views"
+            "Sources/Burrow",
+            "Sources/Burrow/Models",
+            "Sources/Burrow/Engine",
+            "Sources/Burrow/Views"
         ] {
             FSearchIndex.shared.refreshDirectoryInIndex(projectURL.appendingPathComponent(relativePath).path)
         }
