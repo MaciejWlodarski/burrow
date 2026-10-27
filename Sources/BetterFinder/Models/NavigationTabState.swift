@@ -876,6 +876,25 @@ public final class PaneTabState: ObservableObject, Identifiable {
         reloadDirectory()
     }
 
+    /// Selects the listed paths that are visible; the cursor moves to the first one.
+    public func selectPaths(_ paths: [String]) {
+        let visible = Set(selectableItems.map(\.path))
+        // Callers may pass symlink-resolved paths (/private/tmp/x/a for /tmp/x/a).
+        let resolvedCurrent = currentURL.resolvingSymlinksInPath().path
+        let matched = paths.compactMap { path -> String? in
+            if visible.contains(path) { return path }
+            let url = URL(fileURLWithPath: path)
+            guard url.deletingLastPathComponent().resolvingSymlinksInPath().path == resolvedCurrent else { return nil }
+            let local = currentURL.appendingPathComponent(url.lastPathComponent).path
+            return visible.contains(local) ? local : nil
+        }
+        guard let first = matched.first else { return }
+        selectedPaths = Set(matched)
+        selectionAnchorPath = first
+        selectionCursorPath = first
+        QuickLookCoordinator.shared.updateIfVisible(ownerID: id, urls: selectedItems.map(\.url))
+    }
+
     public func select(_ item: FileItem, extending: Bool = false, toggling: Bool = false) {
         let items = selectableItems
         guard items.contains(where: { $0.path == item.path }) else { return }

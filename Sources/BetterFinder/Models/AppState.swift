@@ -538,6 +538,29 @@ public final class AppState: ObservableObject {
         persistTabsState()
     }
 
+    /// Opens a folder handed over by the system (Dock, `open`, "Show in Finder").
+    /// Reuses a tab already showing it, otherwise opens a new tab, then selects `paths`.
+    public func openExternalLocation(_ url: URL, selecting paths: [String]) {
+        let target = url.standardizedFileURL
+        // LaunchServices hands over resolved paths (/private/tmp for /tmp).
+        let resolvedTarget = target.resolvingSymlinksInPath().path
+        // Paused restored tabs keep their deliberate Resume flow; open a live tab instead.
+        func shows(_ pane: PaneTabState) -> Bool {
+            !pane.isSessionBrowsingPaused && pane.currentURL.resolvingSymlinksInPath().path == resolvedTarget
+        }
+        if let existing = tabs.first(where: shows) {
+            if isDualPane { activePaneSide = .left }
+            activeTabId = existing.id
+            existing.reloadDirectory()
+        } else if isDualPane && shows(rightPane) {
+            activePaneSide = .right
+            rightPane.reloadDirectory()
+        } else {
+            addNewTab(at: target)
+        }
+        if !paths.isEmpty { activeTab.selectPaths(paths) }
+    }
+
     public func closeTab(_ id: UUID) {
         guard tabs.count > 1 else { return }
         if let idx = tabs.firstIndex(where: { $0.id == id }) {

@@ -1061,6 +1061,9 @@ public struct FSearchSettingsSheetView: View {
 
             Divider()
 
+            DefaultFileViewerSettingsSection()
+            Divider()
+
             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
                 Toggle("Zapisuj i przywracaj sesję", isOn: Binding(
                     get: { appState.restoreSessionEnabled },
@@ -1253,5 +1256,49 @@ public struct FSearchSettingsSheetView: View {
         roots.append(expandedPath)
         newRootPath = ""
         rootPathError = nil
+    }
+}
+
+/// Lets the user hand folder opening and "Show in Finder" over to BetterFinder.
+struct DefaultFileViewerSettingsSection: View {
+    @ViewState private var isDefault = DefaultFileViewer.isDefault
+    @ViewState private var isWorking = false
+    @ViewState private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
+            HStack(spacing: 8) {
+                Label(isDefault ? "BetterFinder jest domyślną przeglądarką plików" : "Domyślną przeglądarką plików jest Finder",
+                      systemImage: isDefault ? "checkmark.circle.fill" : "folder")
+                    .foregroundStyle(isDefault ? Color.green : Color.primary)
+                Spacer()
+                if isDefault {
+                    Button("Przywróć Finder") { apply(makeDefault: false) }
+                        .disabled(isWorking)
+                } else {
+                    Button("Ustaw jako domyślną") { apply(makeDefault: true) }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isWorking)
+                }
+            }
+            Text("Foldery otwierane z Docka, Spotlighta, Terminala (open) i innych aplikacji oraz polecenia „Pokaż w Finderze” trafią do BetterFinder. Biurko, Kosz w Docku i okna samego Findera nadal należą do Findera. Uruchomione aplikacje mogą potrzebować ponownego uruchomienia, aby zauważyć zmianę.")
+                .font(FinderUI.captionFont).foregroundStyle(.secondary)
+            if let errorMessage {
+                Text(errorMessage).font(FinderUI.captionFont).foregroundStyle(.orange)
+            }
+        }
+        .onAppear { isDefault = DefaultFileViewer.isDefault }
+    }
+
+    private func apply(makeDefault: Bool) {
+        isWorking = true
+        errorMessage = nil
+        let finish: @MainActor (String?) -> Void = { error in
+            isWorking = false
+            errorMessage = error
+            isDefault = DefaultFileViewer.isDefault
+        }
+        if makeDefault { DefaultFileViewer.makeDefault(completion: finish) }
+        else { DefaultFileViewer.restoreFinder(completion: finish) }
     }
 }

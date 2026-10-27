@@ -8,8 +8,11 @@ struct BetterFinderApp: App {
     @ObservedObject private var fileOps = FileOperationsManager.shared
 
     var body: some Scene {
-        WindowGroup("BetterFinder") {
+        WindowGroup("BetterFinder", id: "main") {
             MainWindowView()
+                // Folders opened from outside reuse this window (AppDelegate adds a tab)
+                // instead of SwiftUI spawning a new window per event.
+                .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: false))
@@ -293,6 +296,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Direct-delegate integration harness: captures reply without terminating its process.
     var terminationReplyForTesting: ((Bool) -> Void)?
     #endif
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // "Show in Finder" from other apps when BetterFinder is the NSFileViewer.
+        NSAppleEventManager.shared().setEventHandler(
+            self, andSelector: #selector(handleRevealEvent(_:withReply:)),
+            forEventClass: AEEventClass(kAEMiscStandards), andEventID: AEEventID(kAEMakeObjectsVisible))
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        ExternalOpenRouter.open(urls)
+    }
+
+    @objc private func handleRevealEvent(_ event: NSAppleEventDescriptor, withReply reply: NSAppleEventDescriptor) {
+        guard let direct = event.paramDescriptor(forKeyword: keyDirectObject) else { return }
+        var urls: [URL] = []
+        if direct.numberOfItems > 0 {
+            for index in 1...direct.numberOfItems {
+                if let url = direct.atIndex(index)?.fileURLValue { urls.append(url) }
+            }
+        } else if let url = direct.fileURLValue {
+            urls.append(url)
+        }
+        ExternalOpenRouter.open(urls)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)

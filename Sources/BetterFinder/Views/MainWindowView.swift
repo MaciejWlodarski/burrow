@@ -4,6 +4,7 @@ import AppKit
 public struct MainWindowView: View {
     @ObservedObject var appState = AppState.shared
     @ObservedObject var fileOps = FileOperationsManager.shared
+    @Environment(\.openWindow) private var openWindow
 
     @ViewState private var terminalHeight = TerminalDrawerLayout.defaultHeight
     @ViewState private var terminalDragStart: CGFloat?
@@ -79,6 +80,10 @@ public struct MainWindowView: View {
         .frame(minWidth: appState.isDualPane ? 1080 : 880, minHeight: 560)
         .background(Color(nsColor: .windowBackgroundColor))
         .onChange(of: appState.activeTabId) { _, _ in appState.persistTabsState() }
+        .onAppear {
+            let open = openWindow
+            ExternalOpenRouter.openMainWindow = { open(id: "main") }
+        }
         .sheet(isPresented: $appState.showQuickFSearchModal) {
             QuickFSearchSpotlightModal(appState: appState, activeTab: activeTab)
         }
