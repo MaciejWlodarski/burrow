@@ -3,34 +3,6 @@ import AppKit
 import CryptoKit
 import Darwin
 
-public struct WizTreeNode: Identifiable, Sendable {
-    public var id: String { path }
-    public let name: String
-    public let path: String
-    public let url: URL
-    public let isDirectory: Bool
-    public let size: Int64
-    public let fileCount: Int
-    public let kindCategory: FileKindCategory
-    public let modificationDate: Date
-    public var children: [WizTreeNode]
-
-    public func toFileItem() -> FileItem {
-        FileItem(
-            url: url,
-            name: name,
-            path: path,
-            parentPath: url.deletingLastPathComponent().path,
-            fileExtension: url.pathExtension.lowercased(),
-            isDirectory: isDirectory,
-            isHidden: name.hasPrefix("."),
-            size: size,
-            modificationDate: modificationDate,
-            kindCategory: kindCategory
-        )
-    }
-}
-
 public struct DuplicateFileGroup: Identifiable, Sendable {
     public let id: String
     public let sha256: String
@@ -57,8 +29,10 @@ struct AnalysisPublicationContext: Equatable, Sendable {
         paneID = pane.id
         self.side = side
         rootPath = pane.currentURL.path
-        revision = pane.directoryRevision
-        hidden = pane.showHiddenFiles
+        // A map is a snapshot of the whole tree: file changes and the hidden-files
+        // toggle stay relevant only to the duplicate scan of the current listing.
+        revision = mode == .duplicates ? pane.directoryRevision : 0
+        hidden = mode == .duplicates ? pane.showHiddenFiles : false
         self.mode = mode.rawValue
     }
 
@@ -245,210 +219,6 @@ enum DuplicateFileSafety {
     }
 }
 
-public struct TreemapPlacedBlock: Identifiable {
-    public let id: String
-    public let node: WizTreeNode
-    public let rect: CGRect
-    public let isGroupContainer: Bool
-    public let parentFolderName: String?
-}
-
-/// Squarified Treemap Algorithm (Bruls, Huizing, van Wijk) for WizTree-style rectangular visualization
-public enum SquarifiedTreemapLayout {
-    public static func computeHierarchicalBlocks(
-        nodes: [WizTreeNode],
-        in bounds: CGRect,
-        maxBlocks: Int = 65
-    ) -> [TreemapPlacedBlock] {
-        guard bounds.width > 16, bounds.height > 16, !nodes.isEmpty else { return [] }
-        let positiveNodes = Array(nodes.filter { $0.size > 0 }.prefix(maxBlocks))
-        guard !positiveNodes.isEmpty else { return [] }
-
-        let topRects = squarify(nodes: positiveNodes, in: bounds.insetBy(dx: 2, dy: 2))
-        var result: [TreemapPlacedBlock] = []
-
-        for (node, rect) in topRects {
-            guard rect.width >= 4 && rect.height >= 4 else { continue }
-            let insetRect = rect.insetBy(dx: 1.5, dy: 1.5)
-            guard insetRect.width >= 3 && insetRect.height >= 3 else { continue }
-
-            if node.isDirectory && !node.children.isEmpty && insetRect.width > 46 && insetRect.height > 38 {
-                result.append(TreemapPlacedBlock(
-                    id: "group:\(node.path)",
-                    node: node,
-                    rect: insetRect,
-                    isGroupContainer: true,
-                    parentFolderName: nil
-                ))
-                let headerHeight: CGFloat = min(18, max(14, insetRect.height * 0.16))
-                let innerRect = CGRect(
-                    x: insetRect.minX + 3,
-                    y: insetRect.minY + headerHeight + 2,
-                    width: insetRect.width - 6,
-                    height: insetRect.height - headerHeight - 5
-                )
-                if innerRect.width > 12 && innerRect.height > 12 {
-                    let subChildren = Array(node.children.filter { $0.size > 0 }.prefix(28))
-                    let childRects = squarify(nodes: subChildren, in: innerRect)
-                    for (child, cRect) in childRects where cRect.width >= 4 && cRect.height >= 4 {
-                        result.append(TreemapPlacedBlock(
-                            id: child.path,
-                            node: child,
-                            rect: cRect.insetBy(dx: 1, dy: 1),
-                            isGroupContainer: false,
-                            parentFolderName: node.name
-                        ))
-                    }
-                }
-            } else {
-                result.append(TreemapPlacedBlock(
-                    id: node.path,
-                    node: node,
-                    rect: insetRect,
-                    isGroupContainer: false,
-                    parentFolderName: nil
-                ))
-            }
-        }
-        return result
-    }
-
-    private static func squarify(nodes: [WizTreeNode], in rect: CGRect) -> [(WizTreeNode, CGRect)] {
-        let totalSize = nodes.reduce(0.0) { $0 + Double(max(1, $1.size)) }
-        guard totalSize > 0, rect.width > 1, rect.height > 1 else { return [] }
-
-        let totalArea = Double(rect.width * rect.height)
-        let scaledAreas = nodes.map { Double(max(1, $0.size)) / totalSize * totalArea }
-
-        var output: [(WizTreeNode, CGRect)] = []
-        output.reserveCapacity(nodes.count)
-
-        var currentRect = rect
-        var rowIndices: [Int] = []
-        var rowAreaSum: Double = 0
-
-        for idx in nodes.indices {
-            let area = scaledAreas[idx]
-            if rowIndices.isEmpty {
-                rowIndices.append(idx)
-                rowAreaSum = area
-                continue
-            }
-
-            let shortSide = Double(min(currentRect.width, currentRect.height))
-            let currentWorst = worstAspectRatio(
-                rowIndices: rowIndices,
-                areas: scaledAreas,
-                rowAreaSum: rowAreaSum,
-                sideLength: shortSide
-            )
-            var candidateRow = rowIndices
-            candidateRow.append(idx)
-            let nextWorst = worstAspectRatio(
-                rowIndices: candidateRow,
-                areas: scaledAreas,
-                rowAreaSum: rowAreaSum + area,
-                sideLength: shortSide
-            )
-
-            if nextWorst <= currentWorst {
-                rowIndices.append(idx)
-                rowAreaSum += area
-            } else {
-                currentRect = layoutRow(
-                    rowIndices: rowIndices,
-                    nodes: nodes,
-                    areas: scaledAreas,
-                    rowAreaSum: rowAreaSum,
-                    in: currentRect,
-                    output: &output
-                )
-                rowIndices = [idx]
-                rowAreaSum = area
-            }
-        }
-
-        if !rowIndices.isEmpty {
-            _ = layoutRow(
-                rowIndices: rowIndices,
-                nodes: nodes,
-                areas: scaledAreas,
-                rowAreaSum: rowAreaSum,
-                in: currentRect,
-                output: &output
-            )
-        }
-
-        return output
-    }
-
-    private static func worstAspectRatio(
-        rowIndices: [Int],
-        areas: [Double],
-        rowAreaSum: Double,
-        sideLength: Double
-    ) -> Double {
-        guard sideLength > 0, rowAreaSum > 0 else { return .greatestFiniteMagnitude }
-        var minArea = Double.greatestFiniteMagnitude
-        var maxArea = 0.0
-        for i in rowIndices {
-            let a = areas[i]
-            if a < minArea { minArea = a }
-            if a > maxArea { maxArea = a }
-        }
-        guard minArea > 0 else { return .greatestFiniteMagnitude }
-        let s2 = rowAreaSum * rowAreaSum
-        let w2 = sideLength * sideLength
-        return max((w2 * maxArea) / s2, s2 / (w2 * minArea))
-    }
-
-    private static func layoutRow(
-        rowIndices: [Int],
-        nodes: [WizTreeNode],
-        areas: [Double],
-        rowAreaSum: Double,
-        in rect: CGRect,
-        output: inout [(WizTreeNode, CGRect)]
-    ) -> CGRect {
-        guard rect.width > 0, rect.height > 0, rowAreaSum > 0 else { return rect }
-        let horizontalSplit = rect.width >= rect.height
-
-        if horizontalSplit {
-            // Stack items vertically in a strip of width `stripWidth` on the left of `rect`
-            let stripWidth = CGFloat(min(Double(rect.width), rowAreaSum / Double(rect.height)))
-            var yCursor = rect.minY
-            for i in rowIndices {
-                let itemHeight = stripWidth > 0 ? CGFloat(areas[i]) / stripWidth : 0
-                let itemRect = CGRect(x: rect.minX, y: yCursor, width: stripWidth, height: max(0, itemHeight))
-                output.append((nodes[i], itemRect))
-                yCursor += itemHeight
-            }
-            return CGRect(
-                x: rect.minX + stripWidth,
-                y: rect.minY,
-                width: max(0, rect.width - stripWidth),
-                height: rect.height
-            )
-        } else {
-            // Stack items horizontally in a strip of height `stripHeight` on the top of `rect`
-            let stripHeight = CGFloat(min(Double(rect.height), rowAreaSum / Double(rect.width)))
-            var xCursor = rect.minX
-            for i in rowIndices {
-                let itemWidth = stripHeight > 0 ? CGFloat(areas[i]) / stripHeight : 0
-                let itemRect = CGRect(x: xCursor, y: rect.minY, width: max(0, itemWidth), height: stripHeight)
-                output.append((nodes[i], itemRect))
-                xCursor += itemWidth
-            }
-            return CGRect(
-                x: rect.minX,
-                y: rect.minY + stripHeight,
-                width: rect.width,
-                height: max(0, rect.height - stripHeight)
-            )
-        }
-    }
-}
-
 public enum WizTreeSubMode: String, CaseIterable, Identifiable, Sendable {
     case treemap = "WizTree Treemap & Drzewo"
     case largestFiles = "Największe pliki"
@@ -457,19 +227,64 @@ public enum WizTreeSubMode: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
-/// Shared production projection builder: keyboard selection uses displayed rows
-/// and rendered tiles, never an arbitrary last-clicked singleton or hidden subtree.
+/// Shared production projection builder: keyboard selection uses displayed rows,
+/// never an arbitrary last-clicked singleton or a collapsed subtree.
 enum WizTreeSelectionProjection {
-    static func items(mode: WizTreeSubMode, branches: [WizTreeNode], largestFiles: [FileItem],
-                      duplicateGroups: [DuplicateFileGroup], visibleBlocks: [TreemapPlacedBlock] = []) -> [FileItem] {
+    static func items(mode: WizTreeSubMode, treeRows: [FileItem], largestFiles: [FileItem],
+                      duplicateGroups: [DuplicateFileGroup]) -> [FileItem] {
         let candidates: [FileItem]
         switch mode {
-        case .treemap: candidates = branches.map { $0.toFileItem() } + visibleBlocks.map { $0.node.toFileItem() }
+        case .treemap: candidates = treeRows
         case .largestFiles: candidates = largestFiles
         case .duplicates: candidates = duplicateGroups.flatMap(\.files)
         }
         var seen = Set<String>()
         return candidates.filter { seen.insert($0.path).inserted }
+    }
+}
+
+/// A row of the expandable tree. `hiddenChildren` marks the closing row of a
+/// folder listing more items than a list can usefully show.
+struct DiskMapRow: Identifiable, Equatable {
+    let node: DiskTree.NodeID
+    let depth: Int
+    let hiddenChildren: Int?
+
+    var id: Int { hiddenChildren == nil ? Self.nodeRowID(node) : -Int(node) - 1 }
+    static func nodeRowID(_ node: DiskTree.NodeID) -> Int { Int(node) }
+}
+
+private struct DiskMapRendering: @unchecked Sendable {
+    let layout: DiskMapLayout
+    let image: CGImage
+}
+
+enum DiskMapPresentation {
+    static let childRowLimit = 500
+
+    static func rows(tree: DiskTree, scope: DiskTree.NodeID, expanded: Set<DiskTree.NodeID>) -> [DiskMapRow] {
+        var rows: [DiskMapRow] = []
+        func append(_ parent: DiskTree.NodeID, depth: Int) {
+            let children = tree.children(of: parent)
+            for child in children.prefix(childRowLimit) {
+                rows.append(DiskMapRow(node: child, depth: depth, hiddenChildren: nil))
+                if expanded.contains(child) { append(child, depth: depth + 1) }
+            }
+            if children.count > childRowLimit {
+                rows.append(DiskMapRow(node: parent, depth: depth, hiddenChildren: children.count - childRowLimit))
+            }
+        }
+        append(scope, depth: 0)
+        return rows
+    }
+
+    static func diagnostic(for tree: DiskTree) -> String? {
+        var messages: [String] = []
+        if tree.reachedEntryLimit { messages.append("Wyniki częściowe: osiągnięto limit \(DiskScanner.defaultMaxEntries.formatted()) wpisów.") }
+        if tree.unreadableDirectoryCount > 0 { messages.append("Foldery bez dostępu: \(tree.unreadableDirectoryCount.formatted()).") }
+        if tree.datalessDirectoryCount > 0 { messages.append("Foldery iCloud bez lokalnej zawartości: \(tree.datalessDirectoryCount.formatted()).") }
+        if tree.skippedMountCount > 0 { messages.append("Pominięte inne dyski i montowania: \(tree.skippedMountCount.formatted()).") }
+        return messages.isEmpty ? nil : messages.joined(separator: " ")
     }
 }
 
@@ -487,7 +302,6 @@ public struct WizTreeAnalyzerView: View {
     @ViewState private var scanDurationMs: Double = 0
     @ViewState private var totalScannedBytes: Int64 = 0
     @ViewState private var totalScannedFiles: Int = 0
-    @ViewState private var topBranches: [WizTreeNode] = []
     @ViewState private var largestFiles: [FileItem] = []
     @ViewState private var categoryStats: [(FileKindCategory, Int64, Int)] = []
     @ViewState private var duplicateGroups: [DuplicateFileGroup] = []
@@ -503,7 +317,20 @@ public struct WizTreeAnalyzerView: View {
     @ViewState private var scanDiagnostic: String?
     @ViewState private var duplicateActionError: String?
     @ViewState private var isValidatingDuplicates = false
-    @ViewState private var hoveredBlock: TreemapPlacedBlock? = nil
+    @ObservedObject private var mapStore = DiskMapStore.shared
+    @ViewState private var mapTree: DiskTree?
+    @ViewState private var mapScope: DiskTree.NodeID = DiskTree.rootID
+    @ViewState private var expandedNodes: Set<DiskTree.NodeID> = []
+    @ViewState private var treeRows: [DiskMapRow] = []
+    @ViewState private var selectedNode: DiskTree.NodeID?
+    @ViewState private var treeScrollTarget: Int?
+    @ViewState private var mapLayout: DiskMapLayout?
+    @ViewState private var mapImage: CGImage?
+    @ViewState private var mapImageScale: CGFloat = 2
+    @ViewState private var mapViewport: CGSize = .zero
+    @ViewState private var hoveredTile: DiskMapTile?
+    @ViewState private var mapRenderTask: Task<Void, Never>?
+    @ViewState private var mapSummaryTask: Task<Void, Never>?
 
     public init(
         appState: AppState,
@@ -538,14 +365,22 @@ public struct WizTreeAnalyzerView: View {
         }
     }
 
-    private func openAnalyzedNode(_ node: WizTreeNode) {
+    private func openMapNode(_ id: DiskTree.NodeID, in tree: DiskTree) {
+        guard !tree.isSynthetic(id) else { return }
+        let item = tree.fileItem(id)
         performPaneAction {
-            if node.isDirectory {
-                pane.navigate(to: node.url)
+            if item.isDirectory {
+                pane.navigate(to: item.url)
             } else {
-                NSWorkspace.shared.open(node.url)
+                NSWorkspace.shared.open(item.url)
             }
         }
+    }
+
+    private var isMapMode: Bool { subMode != .duplicates }
+
+    private var activeMapScan: DiskMapStore.RunningScan? {
+        isMapMode ? mapStore.scan(covering: pane.currentURL.path) : nil
     }
 
     public var body: some View {
@@ -564,17 +399,24 @@ public struct WizTreeAnalyzerView: View {
             if let diagnostic = scanDiagnostic {
                 analysisNotice(diagnostic)
             }
+            if isMapMode, let mapTree, mapTree.unreadableDirectoryCount > 0 {
+                fullDiskAccessHint
+            }
             if let error = duplicateActionError {
                 analysisNotice(error, isError: true)
             }
-            Text("Zakres: \(pane.showHiddenFiles ? "z ukrytymi plikami" : "bez ukrytych plików"), bez śledzenia dowiązań. Limit: 60 000 wpisów.")
+            Text(isMapMode
+                ? "Zakres: wszystkie pliki z ukrytymi, bez innych dysków i śledzenia dowiązań. Rozmiar: miejsce zajęte na dysku."
+                : "Zakres: \(pane.showHiddenFiles ? "z ukrytymi plikami" : "bez ukrytych plików"), bez śledzenia dowiązań. Limit: 60 000 wpisów.")
                 .font(FinderUI.captionFont)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, FinderUI.sectionSpacing)
                 .padding(.vertical, FinderUI.compactSpacing)
             // Main Content
-            if isScanning {
+            if let scan = activeMapScan, mapTree == nil {
+                mapScanProgress(scan)
+            } else if isScanning {
                 VStack(spacing: FinderUI.rowSpacing) {
                     ProgressView()
                         .controlSize(.regular)
@@ -599,14 +441,14 @@ public struct WizTreeAnalyzerView: View {
             } else {
                 switch subMode {
                 case .treemap:
-                    if topBranches.isEmpty {
+                    if let mapTree, !treeRows.isEmpty {
+                        wizTreeSplitWorkspace(mapTree)
+                    } else {
                         analysisEmptyState(
                             title: scanIsComplete ? "Brak elementów do analizy" : "Brak danych w sprawdzonym zakresie",
                             message: "Sprawdź zakres skanowania lub wybierz inny folder.",
                             systemImage: "chart.pie"
                         )
-                    } else {
-                        wizTreeSplitWorkspace
                     }
                 case .largestFiles:
                     if largestFiles.isEmpty {
@@ -629,6 +471,13 @@ public struct WizTreeAnalyzerView: View {
         .onChange(of: subMode) { _, _ in
             performPaneAction { runActiveScan(for: pane.currentURL) }
         }
+        .onChange(of: mapStore.trees.map(\.scannedAt)) { _, _ in
+            if isMapMode { presentDiskMap(startScanIfNeeded: false) }
+        }
+        .onChange(of: pane.selectedPaths) { _, paths in
+            guard let mapTree, paths.count == 1, let path = paths.first else { return }
+            selectedNode = mapTree.node(forPath: path)
+        }
         .onChange(of: livePaneID) { _, _ in
             cancelCleanupForOwnerChange()
             scanToken?.cancel()
@@ -639,8 +488,10 @@ public struct WizTreeAnalyzerView: View {
         }
         .onChange(of: pane.id) { _, _ in runActiveScan(for: pane.currentURL) }
         .onChange(of: pane.currentURL.path) { _, _ in runActiveScan(for: pane.currentURL) }
-        .onChange(of: pane.showHiddenFiles) { _, _ in runActiveScan(for: pane.currentURL) }
-        .onChange(of: pane.directoryRevision) { _, _ in runActiveScan(for: pane.currentURL) }
+        .onChange(of: pane.showHiddenFiles) { _, _ in if !isMapMode { runActiveScan(for: pane.currentURL) } }
+        .onChange(of: pane.directoryRevision) { _, _ in
+            if isMapMode { restoreDiskMapProjection() } else { runActiveScan(for: pane.currentURL) }
+        }
         .onDisappear {
             cancelCleanupForOwnerChange()
             scanToken?.cancel()
@@ -662,12 +513,14 @@ public struct WizTreeAnalyzerView: View {
                         .pickerStyle(.segmented)
                         .frame(width: 420)
                     Spacer(minLength: 0)
+                    wholeDiskButton
                     refreshScanButton
                 }
                 VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
                     HStack {
                         analyzerTitle
                         Spacer()
+                        wholeDiskButton
                         refreshScanButton
                     }
                     analysisModePicker
@@ -675,7 +528,13 @@ public struct WizTreeAnalyzerView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            if isScanning {
+            if let scan = activeMapScan, mapTree != nil {
+                HStack {
+                    Text("Skan w tle: \(scan.rootPath) · elementy: \((mapStore.progress[scan.id]?.entries ?? 0).formatted())")
+                        .font(FinderUI.captionFont)
+                    Button("Anuluj skan") { mapStore.cancel(scan) }.controlSize(.small)
+                }
+            } else if isScanning {
                 HStack {
                     Text(scanWorkState == .queued ? "Skan w kolejce…" : "Skanowanie…")
                         .font(FinderUI.captionFont)
@@ -722,21 +581,93 @@ public struct WizTreeAnalyzerView: View {
 
     @ViewBuilder
     private var analysisTelemetry: some View {
-        Text("\(scanIsComplete ? "Łącznie" : "Co najmniej"): \(FormatHelpers.formatBytes(totalScannedBytes))")
+        Text("\(telemetryTotalTitle): \(FormatHelpers.formatBytes(totalScannedBytes))")
             .fontWeight(.semibold)
             .foregroundStyle(.primary)
             .fixedSize()
         Text("Pliki: \(totalScannedFiles.formatted())")
             .fixedSize()
         if scanDurationMs > 0 {
-            Text("Czas: \(FormatHelpers.formatLatency(scanDurationMs))")
+            Text("Czas: \(scanDurationMs >= 1000 ? String(format: "%.1f s", scanDurationMs / 1000) : FormatHelpers.formatLatency(scanDurationMs))")
+                .fixedSize()
+        }
+        if isMapMode, let free = mapTree?.volumeFreeBytes {
+            Text("Wolne: \(FormatHelpers.formatBytes(free))")
+                .fixedSize()
+        }
+        if isMapMode, let mapTree {
+            Text("Skan: \(mapTree.scannedAt.formatted(date: .omitted, time: .shortened))")
                 .fixedSize()
         }
     }
 
+    private var telemetryTotalTitle: String {
+        if isMapMode, let mapTree, mapTree.unaccountedBytes > 0, mapScope == DiskTree.rootID { return "Zajęte" }
+        return scanIsComplete ? "Łącznie" : "Co najmniej"
+    }
+
+    private var wholeDiskButton: some View {
+        Button {
+            performPaneAction { showWholeDisk() }
+        } label: {
+            Label("Cały dysk", systemImage: "internaldrive")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .help("Przeskanuj cały dysk zawierający ten folder")
+    }
+
+    private var fullDiskAccessHint: some View {
+        Button("Otwórz ustawienia pełnego dostępu do dysku") {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+        .buttonStyle(.link)
+        .font(FinderUI.captionFont)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, FinderUI.sectionSpacing)
+        .help("Burrow liczy więcej folderów po nadaniu pełnego dostępu do dysku. Foldery dostępne tylko dla systemu pozostają w bloku „Niezeskanowane”.")
+    }
+
+    private func mapScanProgress(_ scan: DiskMapStore.RunningScan) -> some View {
+        let progress = mapStore.progress[scan.id]
+        return VStack(spacing: FinderUI.rowSpacing) {
+            if let used = scan.usedBytesEstimate, used > 0 {
+                ProgressView(value: min(1, Double(progress?.bytes ?? 0) / Double(used)))
+                    .frame(maxWidth: 360)
+                    .accessibilityLabel("Postęp skanowania dysku")
+            } else {
+                ProgressView()
+                    .controlSize(.regular)
+                    .accessibilityLabel("Skanowanie folderu")
+            }
+            Text("Skanowanie \(scan.rootPath)…")
+                .font(FinderUI.titleFont)
+            Text("Elementy: \((progress?.entries ?? 0).formatted()) · \(FormatHelpers.formatBytes(progress?.bytes ?? 0))")
+                .font(FinderUI.detailFont)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            Text(progress?.currentPath ?? "")
+                .font(FinderUI.captionFont)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 480)
+            Button("Anuluj skan") { cancelScan() }.controlSize(.small)
+            Text("Skan czeka, gdy macOS pyta o dostęp do chronionych folderów. Po nadaniu pełnego dostępu do dysku pytania nie pojawiają się.")
+                .font(FinderUI.captionFont)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 420)
+        }
+        .multilineTextAlignment(.center)
+        .padding(FinderUI.sheetPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var refreshScanButton: some View {
         Button {
-            performPaneAction { runActiveScan(for: pane.currentURL) }
+            performPaneAction { isMapMode ? presentDiskMap(rescan: true) : runActiveScan(for: pane.currentURL) }
         } label: {
             Label("Odśwież skan", systemImage: "arrow.clockwise")
                 .labelStyle(.iconOnly)
@@ -824,75 +755,104 @@ public struct WizTreeAnalyzerView: View {
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
     }
 
-    // MARK: - Split Workspace: Ranked Tree Table + Interactive Squarified Treemap
+    // MARK: - Split Workspace: Expandable Tree + Full-Depth Treemap
 
-    private var wizTreeSplitWorkspace: some View {
-        VStack(spacing: 0) {
+    private func wizTreeSplitWorkspace(_ tree: DiskTree) -> some View {
+        VSplitView {
             // Optional detail columns collapse in narrow panes, like the file list.
             GeometryReader { geometry in
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(topBranches.enumerated()), id: \.element.id) { index, node in
-                            rankedBranchRow(node, index: index, availableWidth: geometry.size.width)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(treeRows.enumerated()), id: \.element.id) { index, row in
+                                diskTreeRow(row, tree: tree, index: index, availableWidth: geometry.size.width)
+                                    .id(row.id)
+                            }
                         }
+                    }
+                    .onChange(of: treeScrollTarget) { _, target in
+                        if let target { proxy.scrollTo(target, anchor: .center) }
                     }
                 }
             }
-            .frame(height: 175)
+            .frame(minHeight: 120, idealHeight: 240)
 
-            Divider()
-
-            // Interactive Squarified Treemap Canvas
             VStack(spacing: 0) {
                 // Live Hover / Selection HUD Bar
-                treemapHudBar
+                treemapHudBar(tree)
+                diskMapCanvas(tree)
+                    .background(Color(nsColor: .underPageBackgroundColor).opacity(0.45))
+            }
+            .frame(minHeight: 220, idealHeight: 420)
+        }
+    }
 
-                GeometryReader { geo in
-                    let blocks = SquarifiedTreemapLayout.computeHierarchicalBlocks(
-                        nodes: topBranches,
-                        in: CGRect(origin: .zero, size: geo.size)
-                    )
-                    let generation = scanToken
-                    ZStack(alignment: .topLeading) {
-                        if blocks.isEmpty {
-                            Text(topBranches.allSatisfy { $0.size == 0 } ? "Brak zajętego miejsca do przedstawienia na mapie." : "Powiększ panel, aby wyświetlić mapę miejsca.")
-                                .font(FinderUI.detailFont)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(FinderUI.sectionSpacing)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                        ForEach(blocks) { block in
-                            treemapBlockView(block)
-                        }
-                    }
-                    .onAppear { publishTreemapProjection(blocks, token: generation) }
-                    .onChange(of: blocks.map(\.id)) { _, _ in
-                        publishTreemapProjection(blocks, token: generation)
-                    }
-                }
-                .padding(6)
-                .background(Color(nsColor: .underPageBackgroundColor).opacity(0.45))
+    private func diskTreeRow(_ row: DiskMapRow, tree: DiskTree, index: Int, availableWidth: CGFloat) -> some View {
+        Group {
+            if let hidden = row.hiddenChildren {
+                Text("… i jeszcze \(hidden.formatted()) mniejszych elementów")
+                    .font(FinderUI.captionFont)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, CGFloat(row.depth + 1) * 16 + FinderUI.sectionSpacing)
+                    .padding(.vertical, 5)
+            } else {
+                diskNodeRow(row, tree: tree, index: index, availableWidth: availableWidth)
             }
         }
     }
 
-    private func rankedBranchRow(_ node: WizTreeNode, index: Int, availableWidth: CGFloat) -> some View {
+    private func diskNodeRow(_ row: DiskMapRow, tree: DiskTree, index: Int, availableWidth: CGFloat) -> some View {
+        let id = row.node
         let generation = scanToken
-        let fraction = totalScannedBytes > 0 ? Double(node.size) / Double(totalScannedBytes) : 0
-        let isSelected = pane.selectedPaths.contains(node.path)
+        let size = tree.allocatedSize(id)
+        let fraction = totalScannedBytes > 0 ? Double(size) / Double(totalScannedBytes) : 0
+        let isSelected = selectedNode == id
+        let synthetic = tree.isSynthetic(id)
+        let foreground = isSelected ? selectionForegroundColor : Color.primary
+        let secondary = isSelected ? selectionForegroundColor : Color.secondary
 
         return HStack(spacing: FinderUI.rowSpacing) {
-            Image(nsImage: iconCache.icon(for: node.toFileItem(), preferThumbnail: false))
-                .resizable()
-                .frame(width: 18, height: 18)
-                .accessibilityHidden(true)
-            Text(node.name)
-                .font(FinderUI.detailFont.weight(node.isDirectory ? .semibold : .regular))
-                .foregroundStyle(isSelected ? selectionForegroundColor : Color.primary)
+            Group {
+                if tree.isDirectory(id), tree.childCount(id) > 0 {
+                    Button { toggleExpansion(id) } label: {
+                        Image(systemName: expandedNodes.contains(id) ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(secondary)
+                            .frame(width: 14, height: 14)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(expandedNodes.contains(id) ? "Zwiń folder" : "Rozwiń folder")
+                } else {
+                    Color.clear.frame(width: 14, height: 14)
+                }
+            }
+            .padding(.leading, CGFloat(row.depth) * 16)
+            if synthetic {
+                Image(systemName: "questionmark.square.dashed")
+                    .frame(width: 18, height: 18)
+                    .foregroundStyle(secondary)
+                    .accessibilityHidden(true)
+            } else {
+                Image(nsImage: iconCache.icon(for: tree.fileItem(id), preferThumbnail: false))
+                    .resizable()
+                    .frame(width: 18, height: 18)
+                    .accessibilityHidden(true)
+            }
+            Text(tree.name(id))
+                .font(FinderUI.detailFont.weight(tree.isDirectory(id) ? .semibold : .regular))
+                .foregroundStyle(foreground)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if tree.isUnreadable(id) {
+                Image(systemName: "lock.fill")
+                    .font(FinderUI.captionFont)
+                    .foregroundStyle(secondary)
+                    .help("Brak dostępu do tego folderu")
+                    .accessibilityLabel("Brak dostępu")
+            }
 
             if availableWidth >= 650 {
                 GeometryReader { geometry in
@@ -900,7 +860,7 @@ public struct WizTreeAnalyzerView: View {
                         RoundedRectangle(cornerRadius: 4)
                             .fill(Color.primary.opacity(0.07))
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(node.kindCategory.treemapColor.gradient)
+                            .fill(tree.category(id).treemapColor.gradient)
                             .frame(width: max(3, geometry.size.width * CGFloat(fraction)))
                     }
                 }
@@ -911,64 +871,75 @@ public struct WizTreeAnalyzerView: View {
                 Text(String(format: "%5.1f%%", fraction * 100.0))
                     .font(FinderUI.captionFont)
                     .monospacedDigit()
-                    .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
+                    .foregroundStyle(secondary)
                     .frame(width: 56, alignment: .trailing)
             }
-            Text(FormatHelpers.formatBytes(node.size))
+            Text(FormatHelpers.formatBytes(size))
                 .font(FinderUI.captionFont.weight(.semibold))
                 .monospacedDigit()
-                .foregroundStyle(isSelected ? selectionForegroundColor : Color.primary)
+                .foregroundStyle(foreground)
                 .frame(width: 90, alignment: .trailing)
             if availableWidth >= 760 {
-                Text("Pliki: \(node.fileCount)")
+                Text("Pliki: \(tree.fileCount(id).formatted())")
                     .font(FinderUI.captionFont)
                     .monospacedDigit()
-                    .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
-                    .frame(width: 85, alignment: .trailing)
+                    .foregroundStyle(secondary)
+                    .frame(width: 100, alignment: .trailing)
             }
         }
         .padding(.horizontal, FinderUI.sectionSpacing)
         .padding(.vertical, 5)
         .background(isSelected ? selectionBackgroundColor : (index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.025)))
         .contentShape(Rectangle())
-        .help(node.path)
+        .help(synthetic ? "Miejsce zajęte przez system, migawki APFS, dane usuwalne i foldery bez dostępu" : tree.path(id))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityAction {
-            selectAnalyzedItem(node.toFileItem(), generation: generation)
-        }
+        .accessibilityAction { selectMapNode(id, in: tree, generation: generation) }
         .simultaneousGesture(
             TapGesture(count: 2).onEnded {
-                openAnalyzedNode(node)
+                openMapNode(id, in: tree)
             }
         )
         .simultaneousGesture(
             TapGesture(count: 1).onEnded {
-                selectAnalyzedItem(node.toFileItem(), generation: generation)
+                selectMapNode(id, in: tree, generation: generation)
             }
         )
+        .contextMenu { mapNodeMenu(id, tree: tree, generation: generation) }
     }
 
-    private var treemapHudBar: some View {
+    private func treemapHudBar(_ tree: DiskTree) -> some View {
         HStack(spacing: 8) {
-            if let hov = hoveredBlock {
+            if mapScope != DiskTree.rootID, let parent = tree.parent(mapScope) {
+                Button {
+                    openMapNode(parent, in: tree)
+                } label: {
+                    Label("W górę", systemImage: "arrow.up")
+                }
+                .buttonStyle(.borderless)
+                .font(FinderUI.captionFont)
+                .help("Pokaż folder nadrzędny na mapie")
+            }
+            if let tile = hoveredTile {
+                let size = tile.isRemainder ? remainderSize(tile, in: tree) : tree.allocatedSize(tile.node)
                 Circle()
-                    .fill(hov.node.kindCategory.treemapColor)
+                    .fill(tree.category(tile.node).treemapColor)
                     .frame(width: 9, height: 9)
-                Text(hov.node.name)
+                Text(tile.isRemainder ? "Mniejsze elementy" : tree.name(tile.node))
                     .font(FinderUI.detailFont.weight(.semibold))
                     .lineLimit(1)
-                if let parent = hov.parentFolderName {
-                    Text("w \(parent)/")
+                if let parent = tree.parent(tile.node) {
+                    Text("w \(tree.name(parent))/")
                         .font(FinderUI.captionFont)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                Text("· \(FormatHelpers.formatBytes(hov.node.size))")
+                Text("· \(FormatHelpers.formatBytes(size))")
                     .font(FinderUI.captionFont.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(Color.accentColor)
                 if totalScannedBytes > 0 {
-                    let pct = Double(hov.node.size) * 100.0 / Double(totalScannedBytes)
+                    let pct = Double(size) * 100.0 / Double(totalScannedBytes)
                     Text("(\(String(format: "%.1f%%", pct)))")
                         .font(FinderUI.captionFont)
                         .monospacedDigit()
@@ -978,9 +949,10 @@ public struct WizTreeAnalyzerView: View {
                 Image(systemName: "hand.point.up.left.fill")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.secondary)
-                Text("Najedź na mapę, aby zobaczyć szczegóły. Kliknij element, aby otworzyć Inspektor, lub kliknij dwukrotnie folder, aby go otworzyć.")
+                Text("Kliknij element, aby wskazać go w drzewie. Kliknij dwukrotnie folder, aby go powiększyć.")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer()
         }
@@ -990,145 +962,136 @@ public struct WizTreeAnalyzerView: View {
         .overlay(alignment: .bottom) { Divider() }
     }
 
-    @ViewBuilder
-    private func treemapBlockView(_ block: TreemapPlacedBlock) -> some View {
-        let generation = scanToken
-        let isHovered = (hoveredBlock?.id == block.id)
-        let isSelected = pane.selectedPaths.contains(block.node.path)
-        let baseColor = block.node.kindCategory.treemapColor
+    private func remainderSize(_ tile: DiskMapTile, in tree: DiskTree) -> Int64 {
+        guard let parent = tree.parent(tile.node) else { return 0 }
+        return tree.children(of: parent).drop { $0 != tile.node }
+            .reduce(0) { $0 + tree.allocatedSize($1) }
+    }
 
-        if block.isGroupContainer {
-            // Folder Group Container Frame (WizTree style)
+    private func mapRect(_ tile: DiskMapTile) -> CGRect {
+        CGRect(x: CGFloat(tile.x0) / mapImageScale, y: CGFloat(tile.y0) / mapImageScale,
+               width: CGFloat(tile.x1 - tile.x0) / mapImageScale, height: CGFloat(tile.y1 - tile.y0) / mapImageScale)
+    }
+
+    private func mapTile(at location: CGPoint) -> DiskMapTile? {
+        mapLayout?.tile(atX: Int32(location.x * mapImageScale), y: Int32(location.y * mapImageScale))
+    }
+
+    /// Too-small children have no identity on the map; their folder stands in.
+    private func actionNode(for tile: DiskMapTile, in tree: DiskTree) -> DiskTree.NodeID {
+        tile.isRemainder ? (tree.parent(tile.node) ?? tile.node) : tile.node
+    }
+
+    private func diskMapCanvas(_ tree: DiskTree) -> some View {
+        GeometryReader { geo in
+            let generation = scanToken
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(Color.primary.opacity(0.06))
-                RoundedRectangle(cornerRadius: 7)
-                    .strokeBorder(
-                        isSelected ? Color.white : baseColor.opacity(0.55),
-                        lineWidth: isSelected ? 2 : 1
-                    )
-                if block.rect.width > 55 {
-                    HStack(spacing: 4) {
-                        Image(systemName: "folder.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(baseColor)
-                        Text("\(block.node.name) · \(FormatHelpers.formatBytes(block.node.size))")
-                            .font(.system(size: 9.5, weight: .bold))
-                            .foregroundStyle(.primary.opacity(0.85))
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 5)
-                    .padding(.top, 2)
+                if let mapImage {
+                    Image(decorative: mapImage, scale: mapImageScale)
+                        .resizable()
+                        .interpolation(.none)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .accessibilityLabel("Mapa zajętego miejsca")
+                } else {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if let selected = selectedNode, let tile = mapLayout?.tile(for: selected, in: tree) {
+                    mapHighlight(tile, color: .white, lineWidth: 2)
+                }
+                if let hoveredTile {
+                    mapHighlight(hoveredTile, color: .white.opacity(0.85), lineWidth: 1)
                 }
             }
-            .frame(width: block.rect.width, height: block.rect.height)
-            .offset(x: block.rect.minX, y: block.rect.minY)
-            .onTapGesture(count: 2) {
-                openAnalyzedNode(block.node)
-            }
-            .help("\(block.node.path) · \(FormatHelpers.formatBytes(block.node.size))")
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Folder \(block.node.name), \(FormatHelpers.formatBytes(block.node.size))")
-            .accessibilityAction(named: Text("Otwórz folder")) { openAnalyzedNode(block.node) }
-        } else {
-            // Individual File or Leaf Folder Tile
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                baseColor.opacity(isHovered ? 0.92 : 0.78),
-                                baseColor.opacity(isHovered ? 0.72 : 0.52)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-
-                RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(
-                        isSelected || isHovered ? Color.white : Color.white.opacity(0.22),
-                        lineWidth: isSelected ? 2.0 : (isHovered ? 1.5 : 0.6)
-                    )
-
-                if block.rect.width > 42 && block.rect.height > 24 {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(block.node.name)
-                            .font(.system(size: block.rect.width > 90 ? 11 : 9.5, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .shadow(color: .black.opacity(0.35), radius: 1, x: 0, y: 1)
-
-                        if block.rect.height > 36 {
-                            Text(FormatHelpers.formatBytes(block.node.size))
-                                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.9))
-                                .lineLimit(1)
-                        }
-                    }
-                    .padding(5)
-                }
-            }
-            .frame(width: block.rect.width, height: block.rect.height)
-            .offset(x: block.rect.minX, y: block.rect.minY)
-            .help("\(block.node.path) · \(FormatHelpers.formatBytes(block.node.size))")
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(block.node.name), \(FormatHelpers.formatBytes(block.node.size))")
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
-            .accessibilityAction {
-                selectAnalyzedItem(block.node.toFileItem(), generation: generation)
-            }
-            .onHover { hovering in
-                if hovering {
-                    hoveredBlock = block
-                } else if hoveredBlock?.id == block.id {
-                    hoveredBlock = nil
+            .contentShape(Rectangle())
+            .onContinuousHover(coordinateSpace: .local) { phase in
+                switch phase {
+                case .active(let location):
+                    let tile = mapTile(at: location)
+                    if tile != hoveredTile { hoveredTile = tile }
+                case .ended:
+                    hoveredTile = nil
                 }
             }
             .simultaneousGesture(
-                TapGesture(count: 2).onEnded {
-                    openAnalyzedNode(block.node)
+                SpatialTapGesture(count: 2).onEnded { value in
+                    guard let tile = mapTile(at: value.location) else { return }
+                    openMapNode(actionNode(for: tile, in: tree), in: tree)
                 }
             )
             .simultaneousGesture(
-                TapGesture(count: 1).onEnded {
-                    selectAnalyzedItem(block.node.toFileItem(), generation: generation)
+                SpatialTapGesture(count: 1).onEnded { value in
+                    guard let tile = mapTile(at: value.location) else { return }
+                    selectMapNode(actionNode(for: tile, in: tree), in: tree, generation: generation)
                 }
             )
             .contextMenu {
-                if block.node.isDirectory {
-                    Button {
-                        openAnalyzedNode(block.node)
-                    } label: {
-                        Label("Otwórz folder w analizie", systemImage: "arrow.down.right.and.arrow.up.left")
+                if let tile = hoveredTile {
+                    mapNodeMenu(actionNode(for: tile, in: tree), tree: tree, generation: generation)
+                }
+            }
+            .onAppear {
+                mapViewport = geo.size
+                renderMap()
+            }
+            .onChange(of: geo.size) { _, size in
+                mapViewport = size
+                renderMap()
+            }
+        }
+    }
+
+    private func mapHighlight(_ tile: DiskMapTile, color: Color, lineWidth: CGFloat) -> some View {
+        let rect = mapRect(tile)
+        return Rectangle()
+            .strokeBorder(color, lineWidth: lineWidth)
+            .frame(width: rect.width, height: rect.height)
+            .offset(x: rect.minX, y: rect.minY)
+            .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func mapNodeMenu(_ id: DiskTree.NodeID, tree: DiskTree, generation: AnalysisRequestToken?) -> some View {
+        if !tree.isSynthetic(id) {
+            let item = tree.fileItem(id)
+            if item.isDirectory {
+                Button {
+                    openMapNode(id, in: tree)
+                } label: {
+                    Label("Otwórz folder w analizie", systemImage: "arrow.down.right.and.arrow.up.left")
+                }
+            } else if let parent = tree.parent(id) {
+                Button {
+                    openMapNode(parent, in: tree)
+                } label: {
+                    Label("Otwórz folder nadrzędny w analizie", systemImage: "arrow.down.right.and.arrow.up.left")
+                }
+            }
+            Button {
+                performPaneAction {
+                    if pane.navigate(to: item.isDirectory ? item.url : item.url.deletingLastPathComponent()) {
+                        pane.viewMode = .list
+                        pane.selectedPaths = [item.path]
                     }
                 }
-                Button {
-                    performPaneAction {
-                        if pane.navigate(to: block.node.isDirectory ? block.node.url : block.node.url.deletingLastPathComponent()) {
-                            pane.viewMode = .list
-                            pane.selectedPaths = [block.node.path]
-                        }
-                    }
-                } label: {
-                    Label("Pokaż na liście plików", systemImage: "list.bullet")
-                }
-                Button {
-                    performPaneAction { QuickLookCoordinator.shared.preview(ownerID: pane.id, urls: [block.node.url]) }
-                } label: {
-                    Label("Quick Look (Spacja)", systemImage: "eye")
-                }
-                Button {
-                    performPaneAction { FileOperationsManager.shared.openInTerminal(at: block.node.url) }
-                } label: {
-                    Label("Otwórz w Terminalu", systemImage: "terminal")
-                }
-                Divider()
-                Button(role: .destructive) {
-                    performPaneAction { trashAnalyzedItem(block.node.toFileItem(), generation: generation) }
-                } label: {
-                    Label("Przenieś do Kosza", systemImage: "trash")
-                }
+            } label: {
+                Label("Pokaż na liście plików", systemImage: "list.bullet")
+            }
+            Button {
+                performPaneAction { QuickLookCoordinator.shared.preview(ownerID: pane.id, urls: [item.url]) }
+            } label: {
+                Label("Quick Look (Spacja)", systemImage: "eye")
+            }
+            Button {
+                performPaneAction { FileOperationsManager.shared.openInTerminal(at: item.url) }
+            } label: {
+                Label("Otwórz w Terminalu", systemImage: "terminal")
+            }
+            Divider()
+            Button(role: .destructive) {
+                performPaneAction { trashAnalyzedItem(item, generation: generation) }
+            } label: {
+                Label("Przenieś do Kosza", systemImage: "trash")
             }
         }
     }
@@ -1361,6 +1324,11 @@ public struct WizTreeAnalyzerView: View {
     // MARK: - Generation-bound, bounded scans
 
     private func runActiveScan(for rootURL: URL) {
+        if isMapMode {
+            presentDiskMap()
+            return
+        }
+        clearDiskMap()
         cancelCleanupForOwnerChange()
         // Invalidate publication immediately, but let submit replace an admitted
         // pending request in place so repeated refreshes keep their FIFO slot.
@@ -1381,14 +1349,12 @@ public struct WizTreeAnalyzerView: View {
         isScanning = true
         scanIsComplete = false
         scanDiagnostic = nil
-        topBranches = []
         largestFiles = []
         duplicateGroups = []
         categoryStats = []
         totalScannedBytes = 0
         totalScannedFiles = 0
         scanDurationMs = 0
-        hoveredBlock = nil
         pane.beginAnalysisProjection(rootPath: rootURL.path, generation: token.id)
         let showHidden = pane.showHiddenFiles
         let mode = subMode
@@ -1409,7 +1375,6 @@ public struct WizTreeAnalyzerView: View {
                 }
             }, completion: { result in
                 guard let result, token.canPublishAnalysis(active: self.scanToken, appState: self.appState, mode: self.subMode) else { return }
-                self.topBranches = result.branches
                 self.largestFiles = Array(result.files.sorted { $0.size > $1.size }.prefix(150))
                 self.duplicateGroups = result.groups
                 self.categoryStats = result.categories
@@ -1419,13 +1384,18 @@ public struct WizTreeAnalyzerView: View {
                 self.scanIsComplete = result.complete
                 self.scanDiagnostic = result.diagnostic
                 self.isScanning = false
-                let visible = WizTreeSelectionProjection.items(mode: mode, branches: self.topBranches,
+                let visible = WizTreeSelectionProjection.items(mode: mode, treeRows: [],
                     largestFiles: self.largestFiles, duplicateGroups: duplicateGroups)
                 self.pane.publishAnalysisItems(visible, rootPath: token.rootPath, generation: token.id)
             })
     }
 
     private func cancelScan() {
+        if let scan = activeMapScan {
+            mapStore.cancel(scan)
+            scanWorkState = .cancelled
+            return
+        }
         cancelCleanupForOwnerChange()
         scanToken?.cancel()
         scanTask?.cancel()
@@ -1450,14 +1420,176 @@ public struct WizTreeAnalyzerView: View {
         duplicateActionError = "Anulowano weryfikację. Trwający odczyt systemowy może jeszcze kończyć pracę."
     }
 
-    private func publishTreemapProjection(_ blocks: [TreemapPlacedBlock], token: AnalysisRequestToken?) {
-        guard let token, token.canPublishAnalysis(active: scanToken, appState: appState, mode: subMode),
-              !isScanning, subMode == .treemap else { return }
-        // Ranked rows are visible in the scrollable list. Only rendered tiles, not
-        // children hidden by geometry/max-block limits, join the keyboard projection.
-        let visible = WizTreeSelectionProjection.items(mode: .treemap, branches: topBranches,
-            largestFiles: largestFiles, duplicateGroups: duplicateGroups, visibleBlocks: blocks)
+    // MARK: - Disk map state
+
+    /// Shows the map from a tree covering the current folder, scanning only when
+    /// none exists. Navigation inside a tree is therefore instant, and a whole-disk
+    /// scan outlives this view.
+    private func presentDiskMap(rescan: Bool = false, startScanIfNeeded: Bool = true) {
+        cancelCleanupForOwnerChange()
+        scanToken?.cancel()
+        scanTask?.cancel()
+        verificationTask?.cancel()
+        verificationToken = nil
+        isScanning = false
+        isValidatingDuplicates = false
+        duplicateGroups = []
+        let path = pane.currentURL.path
+        let context = AnalysisPublicationContext(pane: pane, side: paneSide, mode: subMode)
+        guard context.matches(appState: appState, mode: subMode) else { return }
+        let covered = mapStore.tree(covering: path)
+        if rescan {
+            mapStore.startScan(root: covered?.tree.rootPath ?? path)
+        } else if covered == nil, startScanIfNeeded, mapStore.scan(covering: path) == nil {
+            mapStore.startScan(root: path)
+        }
+        let token = AnalysisRequestToken(rootPath: path, context: context)
+        scanToken = token
+        scanWorkState = .finished
+        pane.beginAnalysisProjection(rootPath: path, generation: token.id)
+        guard let covered else {
+            clearDiskMap()
+            return
+        }
+        if covered.tree !== mapTree {
+            expandedNodes = []
+            selectedNode = nil
+            mapImage = nil
+            mapLayout = nil
+        }
+        mapTree = covered.tree
+        if covered.node != mapScope { mapLayout = nil }
+        mapScope = covered.node
+        hoveredTile = nil
+        refreshDiskMapContents(token: token)
+    }
+
+    private func clearDiskMap() {
+        mapRenderTask?.cancel()
+        mapSummaryTask?.cancel()
+        mapTree = nil
+        mapScope = DiskTree.rootID
+        mapImage = nil
+        mapLayout = nil
+        hoveredTile = nil
+        expandedNodes = []
+        selectedNode = nil
+        treeRows = []
+        largestFiles = []
+        categoryStats = []
+        totalScannedBytes = 0
+        totalScannedFiles = 0
+        scanDurationMs = 0
+        scanIsComplete = false
+        scanDiagnostic = nil
+    }
+
+    private func refreshDiskMapContents(token: AnalysisRequestToken) {
+        guard let tree = mapTree else { return }
+        totalScannedBytes = tree.allocatedSize(mapScope)
+        totalScannedFiles = tree.fileCount(mapScope)
+        scanDurationMs = tree.elapsedMilliseconds
+        scanIsComplete = tree.isComplete
+        scanDiagnostic = DiskMapPresentation.diagnostic(for: tree)
+        treeRows = DiskMapPresentation.rows(tree: tree, scope: mapScope, expanded: expandedNodes)
+        publishDiskMapSelection(token: token)
+        renderMap()
+        mapSummaryTask?.cancel()
+        let scope = mapScope
+        mapSummaryTask = Task { @MainActor in
+            let summary = await Task.detached(priority: .userInitiated) { () -> (DiskTree.Summary, [FileItem]) in
+                tree.read {
+                    let summary = tree.summary(of: scope, isCancelled: { Task.isCancelled })
+                    return (summary, summary.largestFiles.prefix(150).map(tree.fileItem))
+                }
+            }.value
+            guard !Task.isCancelled, scanToken === token else { return }
+            categoryStats = summary.0.categories
+            largestFiles = summary.1
+            publishDiskMapSelection(token: token)
+        }
+    }
+
+    private func publishDiskMapSelection(token: AnalysisRequestToken) {
+        guard let tree = mapTree, token.canPublishAnalysis(active: scanToken, appState: appState, mode: subMode) else { return }
+        let rows = subMode == .treemap ? treeRows.filter { $0.hiddenChildren == nil && !tree.isSynthetic($0.node) }.map { tree.fileItem($0.node) } : []
+        let visible = WizTreeSelectionProjection.items(mode: subMode, treeRows: rows,
+            largestFiles: largestFiles, duplicateGroups: [])
         pane.publishAnalysisItems(visible, rootPath: token.rootPath, generation: token.id)
+    }
+
+    /// A directory reload clears the pane's projection, and on `/` reloads never
+    /// stop. The map stays a snapshot, so rows and selection are simply put back.
+    private func restoreDiskMapProjection() {
+        guard let tree = mapTree, let token = scanToken, !isScanning else { return }
+        let selected = selectedNode
+        pane.beginAnalysisProjection(rootPath: token.rootPath, generation: token.id)
+        publishDiskMapSelection(token: token)
+        guard let selected, !tree.isRemoved(selected) else { return }
+        pane.setAnalysisSelection([tree.fileItem(selected)], rootPath: token.rootPath)
+    }
+
+    private func toggleExpansion(_ id: DiskTree.NodeID) {
+        if !expandedNodes.insert(id).inserted { expandedNodes.remove(id) }
+        rebuildTreeRows()
+    }
+
+    private func rebuildTreeRows() {
+        guard let tree = mapTree else { return }
+        treeRows = DiskMapPresentation.rows(tree: tree, scope: mapScope, expanded: expandedNodes)
+        if let token = scanToken { publishDiskMapSelection(token: token) }
+    }
+
+    /// Reveals a node from either side: the tree opens down to it, and both the
+    /// row and the map tile show the same selection.
+    private func selectMapNode(_ id: DiskTree.NodeID, in tree: DiskTree, generation: AnalysisRequestToken?) {
+        guard !tree.isSynthetic(id), canUseRenderedResult(generation, requiresComplete: false) else { return }
+        var ancestor = tree.parent(id)
+        while let current = ancestor, current != mapScope {
+            expandedNodes.insert(current)
+            ancestor = tree.parent(current)
+        }
+        rebuildTreeRows()
+        selectedNode = id
+        treeScrollTarget = DiskMapRow.nodeRowID(id)
+        selectAnalyzedItem(tree.fileItem(id), generation: generation)
+    }
+
+    private func showWholeDisk() {
+        let root = DiskMapStore.volumeRoot(of: pane.currentURL.path)
+        if subMode == .duplicates { subMode = .treemap }
+        if pane.currentURL.path == root {
+            presentDiskMap(rescan: mapTree?.rootPath != root)
+        } else {
+            pane.navigate(to: URL(fileURLWithPath: root, isDirectory: true))
+        }
+    }
+
+    private func renderMap() {
+        mapRenderTask?.cancel()
+        guard let tree = mapTree, subMode == .treemap, mapViewport.width >= 8, mapViewport.height >= 8 else { return }
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        let width = Int(mapViewport.width * scale), height = Int(mapViewport.height * scale)
+        let scope = mapScope
+        mapRenderTask = Task { @MainActor in
+            // Coalesces live window resizing.
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard !Task.isCancelled else { return }
+            let worker = Task.detached(priority: .userInitiated) { () -> DiskMapRendering? in
+                tree.read {
+                    guard let layout = DiskMapLayoutEngine.layout(tree: tree, scope: scope, width: width, height: height,
+                                                                  scale: Double(scale), isCancelled: { Task.isCancelled }),
+                          let image = DiskMapRenderer.image(layout: layout, tree: tree, scale: Double(scale),
+                                                            isCancelled: { Task.isCancelled }) else { return nil }
+                    return DiskMapRendering(layout: layout, image: image)
+                }
+            }
+            let rendering = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+            guard !Task.isCancelled, let rendering, mapTree === tree, mapScope == scope else { return }
+            mapLayout = rendering.layout
+            mapImage = rendering.image
+            mapImageScale = scale
+        }
     }
 
     private func canUseRenderedResult(_ generation: AnalysisRequestToken?, requiresComplete: Bool) -> Bool {
@@ -1475,7 +1607,17 @@ public struct WizTreeAnalyzerView: View {
         guard canUseRenderedResult(generation, requiresComplete: false),
               item.path.hasPrefix(root == "/" ? "/" : root + "/") else { return }
         FileOperationsManager.shared.moveToTrash([item])
-        runActiveScan(for: pane.currentURL)
+        guard isMapMode else {
+            runActiveScan(for: pane.currentURL)
+            return
+        }
+        // The map is a snapshot: drop what really left the disk instead of rescanning it.
+        var info = stat()
+        guard let tree = mapTree, let node = tree.node(forPath: item.path), lstat(item.path, &info) != 0,
+              let token = scanToken else { return }
+        tree.remove(node)
+        if selectedNode == node { selectedNode = nil }
+        refreshDiskMapContents(token: token)
     }
 
     private func trashDuplicates(_ groups: [DuplicateFileGroup], generation: AnalysisRequestToken?, onlyPath: String? = nil) {

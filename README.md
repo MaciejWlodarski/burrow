@@ -51,7 +51,7 @@ An existing app bundle is kept until compilation, icon generation, and signing s
 ### Browse your way
 
 - **Dual panes** for side-by-side browsing, folder comparison, and copying a selection to the other pane.
-- **Four views:** list, icon grid, Miller columns, and a disk-usage treemap.
+- **Four views:** list, icon grid, Miller columns, and a WizTree-style disk map: a full-depth treemap with an expandable size tree. **Whole disk** scans the entire volume; folders inside a finished scan open instantly.
 - **Tabs** with duplication, reopening closed tabs, and [opt-in resumption of restored views](#session-restoration) across both panes.
 - **An always-visible address field in each pane.** Click it or press **⌘L** to edit; **Return** navigates and **Escape** cancels. Paths support `~` and relative locations.
 - **Adjustable layout** with resizable panes, an optional sidebar and inspector, and system light and dark appearances.

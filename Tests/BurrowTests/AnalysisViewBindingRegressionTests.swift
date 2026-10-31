@@ -101,7 +101,7 @@ struct AnalysisViewBindingRegressionTests {
         try expect(scan.isComplete)
         let groups = DuplicateFileSafety.groups(from: scan.entries, token: token).groups
         let largest = scan.entries.map { $0.toFileItem(loadTags: false) }.sorted { $0.size > $1.size }
-        let duplicates = WizTreeSelectionProjection.items(mode: .duplicates, branches: [], largestFiles: largest, duplicateGroups: groups)
+        let duplicates = WizTreeSelectionProjection.items(mode: .duplicates, treeRows: [], largestFiles: largest, duplicateGroups: groups)
         pane.beginAnalysisProjection(rootPath: root.path, generation: token.id)
         pane.publishAnalysisItems(duplicates, rootPath: root.path, generation: token.id)
         // No preceding click is required for Cmd+A or keyboard traversal.
@@ -116,26 +116,16 @@ struct AnalysisViewBindingRegressionTests {
         // A late geometry/scan publication from the previous mode cannot restore it.
         pane.publishAnalysisItems(duplicates, rootPath: root.path, generation: token.id)
         try expect(pane.selectableItems.isEmpty)
-        let allLargest = WizTreeSelectionProjection.items(mode: .largestFiles, branches: [], largestFiles: largest, duplicateGroups: groups)
+        let allLargest = WizTreeSelectionProjection.items(mode: .largestFiles, treeRows: [], largestFiles: largest, duplicateGroups: groups)
         pane.publishAnalysisItems(allLargest, rootPath: root.path, generation: next.id)
         pane.selectAll()
         try expect(pane.selectedItems.count == 3)
 
-        // Treemap keyboard items include only ranked rows and actually rendered
-        // tiles. An unrendered child is not actionable merely because it was scanned.
-        let folder = WizTreeNode(name: "group", path: root.appendingPathComponent("group").path,
-            url: root.appendingPathComponent("group"), isDirectory: true, size: 8, fileCount: 2,
-            kindCategory: .folder, modificationDate: .distantPast, children: [])
-        let leafItem = duplicates[0]
-        let leaf = WizTreeNode(name: leafItem.name, path: leafItem.path, url: leafItem.url,
-            isDirectory: false, size: leafItem.size, fileCount: 1, kindCategory: leafItem.kindCategory,
-            modificationDate: leafItem.modificationDate, children: [])
-        let visibleBlock = TreemapPlacedBlock(id: leaf.id, node: leaf, rect: .zero,
-            isGroupContainer: false, parentFolderName: folder.name)
-        let treemap = WizTreeSelectionProjection.items(mode: .treemap, branches: [folder], largestFiles: largest,
-            duplicateGroups: groups, visibleBlocks: [visibleBlock, visibleBlock])
-        try expect(treemap.map(\.path) == [folder.path, leaf.path])
-        try expect(!treemap.contains { $0.path == duplicates[1].path })
+        // Treemap keyboard items are the displayed tree rows, without repeats.
+        // A file of a collapsed folder is not actionable merely because it was scanned.
+        let treemap = WizTreeSelectionProjection.items(mode: .treemap, treeRows: [duplicates[0], duplicates[0]],
+            largestFiles: largest, duplicateGroups: groups)
+        try expect(treemap.map(\.path) == [duplicates[0].path])
         print("PASS actual crawl/duplicate scan publishes ordered mode projections, keyboard traversal and generation rejection")
     }
 

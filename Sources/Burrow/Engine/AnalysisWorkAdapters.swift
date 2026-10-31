@@ -6,7 +6,6 @@ struct AnalysisScanInput: Sendable {
     let mode: WizTreeSubMode
 }
 struct AnalysisScanResult: Sendable {
-    let branches: [WizTreeNode]
     let files: [FileItem]
     let groups: [DuplicateFileGroup]
     let categories: [(FileKindCategory, Int64, Int)]
@@ -50,27 +49,6 @@ enum AnalysisWorkAdapters {
             let previous = categoryMap[item.kindCategory] ?? (0, 0)
             categoryMap[item.kindCategory] = (previous.0 + item.size, previous.1 + 1)
         }
-        let rootPrefix = rootURL.path == "/" ? "/" : rootURL.path + "/"
-        var filesByBranch: [String: [FileItem]] = [:]
-        for item in files {
-            let relative = item.path.dropFirst(rootPrefix.count)
-            let first = String(relative.split(separator: "/", maxSplits: 1).first ?? "")
-            filesByBranch[first, default: []].append(item)
-        }
-        var branches: [WizTreeNode] = []
-        for entry in scan.entries where entry.parentPath == rootURL.path && !entry.isSymlink {
-            let branchFiles = filesByBranch[entry.name] ?? []
-            let item = entry.toFileItem(loadTags: false)
-            let children = branchFiles.sorted { $0.size > $1.size }.prefix(32).map { leaf in
-                WizTreeNode(name: leaf.name, path: leaf.path, url: leaf.url, isDirectory: false,
-                    size: leaf.size, fileCount: 1, kindCategory: leaf.kindCategory,
-                    modificationDate: leaf.modificationDate, children: [])
-            }
-            branches.append(WizTreeNode(name: entry.name, path: entry.fullPath, url: item.url,
-                isDirectory: entry.isDirectory, size: entry.isDirectory ? branchFiles.reduce(0) { $0 + $1.size } : item.size,
-                fileCount: entry.isDirectory ? branchFiles.count : 1, kindCategory: item.kindCategory,
-                modificationDate: item.modificationDate, children: entry.isDirectory ? children : []))
-        }
         let complete = scan.isComplete && failedHashes == 0
         var messages: [String] = []
         if scan.reachedEntryLimit { messages.append("Wyniki częściowe: osiągnięto limit 60 000 wpisów.") }
@@ -80,8 +58,7 @@ enum AnalysisWorkAdapters {
         if !complete && messages.isEmpty { messages.append("Skan niepełny; suma jest dolnym oszacowaniem.") }
         let elapsed = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
         guard !token.isCancelled else { return nil }
-        return AnalysisScanResult(branches: branches.sorted { $0.size > $1.size },
-            files: files, groups: groups,
+        return AnalysisScanResult(files: files, groups: groups,
             categories: categoryMap.map { ($0.key, $0.value.0, $0.value.1) }.sorted { $0.1 > $1.1 },
             complete: complete, diagnostic: messages.isEmpty ? nil : messages.joined(separator: " "), elapsed: elapsed)
     }

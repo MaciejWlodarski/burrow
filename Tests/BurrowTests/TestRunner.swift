@@ -79,6 +79,7 @@ func expect(_ condition: @autoclosure () -> Bool, file: StaticString = #filePath
             try comparisonSnapshots.testComparisonEntryBudgetOverflowDisablesCopy()
             print("PASS comparison pair snapshots and retained-entry boundaries")
             try await DiskAnalysisRegressionTests().runAll()
+            try await DiskMapRegressionTests().runAll()
             try TerminalPresentationRegressionTests().runAll()
             try TerminalDrawerLayoutRegressionTests.runAll()
             try await DirectoryReconciliationRegressionTests.runAll()
