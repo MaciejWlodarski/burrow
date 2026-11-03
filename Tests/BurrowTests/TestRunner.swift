@@ -46,6 +46,7 @@ func expect(_ condition: @autoclosure () -> Bool, file: StaticString = #filePath
             try await tests.testSearchCommitPublishesUpdatedMetadataAndRevision()
             print("PASS same-path search updates publish fresh metadata to the inspector")
             try await tests.testNavigationCannotSelectOldSearchResults()
+            try await tests.testSlowFolderOpensWithoutBlocking()
             try tests.testViewModeSwitchRemovesInvisibleOutlineSelection()
             try tests.testVisibleExpandedAndAncestorColumnChangesInvalidate()
             try tests.testAnalysisSelectionIsBoundedToModeAndRoot()

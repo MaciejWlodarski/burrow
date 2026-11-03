@@ -23,6 +23,10 @@ public struct FSearchResultBundle: Sendable {
 
 /// High-performance fsearch-compatible search & indexing engine with mmap persistence, trigram Bloom filters & FSEvents
 public final class FSearchIndex: @unchecked Sendable {
+    /// Set once by the app before indexing starts: protected folders the user
+    /// has not allowed are left out, so indexing never opens a privacy prompt.
+    /// Tests leave it nil.
+    nonisolated(unsafe) public var indexPrivacy: FolderSizePrivacy?
     public static let shared: FSearchIndex = {
         #if BURROW_TESTING
         return FSearchIndex()
@@ -293,7 +297,12 @@ public final class FSearchIndex: @unchecked Sendable {
 
     /// Reserves the next pass before releasing stateLock; no false idle gap.
     private func launchCrawlLocked() {
-        let targetRoots = _configuredRoots
+        let privacy = indexPrivacy
+        let blockedRoots = privacy.map { p in _configuredRoots.filter { !p.allowsIndexing($0) } } ?? []
+        let targetRoots = _configuredRoots.filter { !blockedRoots.contains($0) }
+        let privateSkips = privacy.map { p in
+            targetRoots.reduce(into: Set<String>()) { $0.formUnion(p.skippedRoots(whileIndexing: $1)) }
+        } ?? []
         let skipHeavy = _skipHeavyDevDirs
         let skippedSet = _skippedDirectoryNames
         let persist = _usePersistentMMapCache
@@ -330,13 +339,14 @@ public final class FSearchIndex: @unchecked Sendable {
             self.crawlRootsHookForTesting?(crawlRoots)
             #endif
             let result = BulkCrawler.crawlTreeResult(roots: crawlRoots, skipHeavyDevDirs: skipHeavy,
-                customSkippedDirs: skippedSet, maxEntries: 500_000, progress: { count in
+                customSkippedDirs: skippedSet, skippedPaths: privateSkips, maxEntries: 500_000, progress: { count in
                     #if BURROW_TESTING
                     self.crawlProgressHookForTesting?(count)
                     #endif
                 })
             let configurationChanged = configuration != self.cacheConfigurationData()
-            self.installEntries(result.entries, isPartial: !result.isComplete || configurationChanged || !watcherStarted || unmonitoredSupplementalScope)
+            self.installEntries(result.entries, isPartial: !result.isComplete || configurationChanged || !watcherStarted
+                || unmonitoredSupplementalScope || !blockedRoots.isEmpty)
             self.loadedFromMMapCache = false
             self.trigramLock.lock()
             self.trigramBloomCache.removeAll(keepingCapacity: true)
@@ -631,6 +641,8 @@ public final class FSearchIndex: @unchecked Sendable {
         updateLock.lock()
         defer { updateLock.unlock() }
         let normalized = URL(fileURLWithPath: dirPath).standardizedFileURL.path
+        // A change inside a folder the user has not allowed is not read.
+        if let privacy = indexPrivacy, !privacy.allowsIndexing(normalized) { return [] }
         #if BURROW_TESTING
         refreshReadHookForTesting?(normalized)
         #endif

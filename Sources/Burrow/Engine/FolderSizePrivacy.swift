@@ -12,6 +12,10 @@ public struct FolderSizePrivacy: Sendable {
     /// Downloads): opening one in a pane proves access, so it counts as consent.
     /// Listing ~/Library or /Volumes does not, because only folders inside them prompt.
     public let rootsGrantedByListing: Set<String>
+    /// Folders whose children each prompt separately (disks in /Volumes, other
+    /// apps' containers). A child is sized once allowed, opened, or when the
+    /// parent itself was allowed. Full Disk Access lifts this.
+    public let gatedParents: Set<String>
     /// Media libraries (Photos, Music, TV) prompt wherever they are and whatever
     /// they are called, so they are recognised by extension.
     public let protectedBundleExtensions: Set<String>
@@ -21,12 +25,13 @@ public struct FolderSizePrivacy: Sendable {
     public let hasFullDiskAccess: @Sendable () -> Bool
     public let consent: FolderSizeConsent
 
-    public init(protectedRoots: [String], rootsGrantedByListing: [String] = [],
+    public init(protectedRoots: [String], rootsGrantedByListing: [String] = [], gatedParents: [String] = [],
                 protectedBundleExtensions: Set<String> = [], cloudRoots: [String],
                 hasFullDiskAccess: @escaping @Sendable () -> Bool,
                 consent: FolderSizeConsent = FolderSizeConsent()) {
         self.protectedRoots = protectedRoots.map(FolderSizeCache.normalizedKey)
         self.rootsGrantedByListing = Set(rootsGrantedByListing.map(FolderSizeCache.normalizedKey))
+        self.gatedParents = Set(gatedParents.map(FolderSizeCache.normalizedKey))
         self.protectedBundleExtensions = Set(protectedBundleExtensions.map { $0.lowercased() })
         self.cloudRoots = cloudRoots.map(FolderSizeCache.normalizedKey)
         self.hasFullDiskAccess = hasFullDiskAccess
@@ -35,11 +40,18 @@ public struct FolderSizePrivacy: Sendable {
 
     public static let none = FolderSizePrivacy(protectedRoots: [], cloudRoots: [], hasFullDiskAccess: { true })
 
+    /// One instance for folder sizes and the search index, so a choice made
+    /// in one is seen by the other at once.
+    public static let shared = FolderSizePrivacy.system()
+
     public static func system(home: String = NSHomeDirectory()) -> FolderSizePrivacy {
         let listed = ["Desktop", "Documents", "Downloads"].map { "\(home)/\($0)" }
+        // Other apps' data: one "access data from other apps" prompt.
+        let appData = ["\(home)/Library/Containers", "\(home)/Library/Group Containers"]
         return FolderSizePrivacy(
-            protectedRoots: listed + ["\(home)/Library", "/Volumes"],
+            protectedRoots: listed + appData + ["\(home)/Library", "/Volumes"],
             rootsGrantedByListing: listed,
+            gatedParents: appData + ["/Volumes"],
             protectedBundleExtensions: ["photoslibrary", "photolibrary", "aplibrary", "musiclibrary", "tvlibrary"],
             cloudRoots: ["\(home)/Library/CloudStorage", "\(home)/Library/Mobile Documents"],
             hasFullDiskAccess: FullDiskAccess.isGranted,
@@ -61,18 +73,55 @@ public struct FolderSizePrivacy: Sendable {
         return !ext.isEmpty && protectedBundleExtensions.contains(ext)
     }
 
-    /// True for a protected folder the user has not allowed yet: sizing it
-    /// would show a prompt. Folders inside one were already opened by the user.
-    public func requiresConsent(_ path: String) -> Bool {
-        let key = FolderSizeCache.normalizedKey(path)
-        guard protectedRoots.contains(key) || isProtectedBundle(key) else { return false }
-        return !hasFullDiskAccess() && !consent.contains(key)
+    private static func parent(of key: String) -> String {
+        let parent = (key as NSString).deletingLastPathComponent
+        return parent.isEmpty ? "/" : parent
     }
 
-    /// The protected root a successful listing of `path` grants, if any.
+    /// True for a protected folder the user has not allowed yet: sizing it
+    /// would show a prompt. Deeper folders were already opened by the user.
+    public func requiresConsent(_ path: String) -> Bool {
+        let key = FolderSizeCache.normalizedKey(path)
+        let parent = Self.parent(of: key)
+        guard !consent.contains(key) else { return false }
+        // File Providers may ask even with Full Disk Access.
+        if cloudRoots.contains(key) { return true }
+        if cloudRoots.contains(parent) { return !consent.contains(parent) }
+        guard !hasFullDiskAccess() else { return false }
+        if protectedRoots.contains(key) || isProtectedBundle(key) { return true }
+        return gatedParents.contains(parent) && !consent.contains(parent)
+    }
+
+    /// The folder a successful listing of `path` allows, if any: Desktop,
+    /// Documents or Downloads, a disk in /Volumes, a cloud account, or other
+    /// apps' data as a whole.
     public func rootGranted(byListing path: String) -> String? {
         let key = FolderSizeCache.normalizedKey(path)
-        return rootsGrantedByListing.first { key == $0 || key.hasPrefix($0 + "/") }
+        if let root = rootsGrantedByListing.first(where: { key == $0 || key.hasPrefix($0 + "/") }) { return root }
+        for parent in gatedParents.union(cloudRoots) where key.hasPrefix(parent + "/") {
+            let child = parent + "/" + key.dropFirst(parent.count + 1).prefix { $0 != "/" }
+            // Opening one app's container is the prompt for all of them.
+            return parent == "/Volumes" || cloudRoots.contains(parent) ? child : parent
+        }
+        return nil
+    }
+
+    /// False when indexing `root` would open a prompt: it is, or lies inside,
+    /// a protected folder the user has not allowed.
+    public func allowsIndexing(_ root: String) -> Bool {
+        guard !hasFullDiskAccess() else { return true }
+        let key = FolderSizeCache.normalizedKey(root)
+        return !protectedRoots.contains { protected in
+            (key == protected || key.hasPrefix(protected + "/")) && !consent.contains(protected)
+        }
+    }
+
+    /// Protected folders not yet allowed strictly inside an index root.
+    public func skippedRoots(whileIndexing root: String) -> Set<String> {
+        guard !hasFullDiskAccess() else { return [] }
+        let key = FolderSizeCache.normalizedKey(root)
+        let prefix = key == "/" ? "/" : key + "/"
+        return Set(protectedRoots.filter { $0.hasPrefix(prefix) && !consent.contains($0) })
     }
 
     /// Folders skipped while sizing `path`: protected roots not yet allowed and

@@ -55,7 +55,7 @@ struct FullDiskAccessSheetView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Text("Without it, Burrow still works: macOS asks once each for Desktop, Documents and Downloads, which search indexes, and other protected folders are sized when you ask.")
+                Text("Without it, Burrow still works: protected folders such as Desktop and Documents are searched and sized once you open them or ask, and macOS asks about each of them once.")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

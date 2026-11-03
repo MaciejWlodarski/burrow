@@ -374,6 +374,14 @@ public final class PaneTabState: ObservableObject, Identifiable {
     /// network disk). The window stays responsive and shows it as opening.
     @Published private(set) var openingLocation: URL?
     private var pendingNavigationID: UUID?
+    private var pendingReloadID: UUID?
+    /// How long the main thread waits for a folder listing before showing
+    /// it as opening. Tests wait long so slow CI machines stay deterministic.
+    #if BURROW_TESTING
+    nonisolated(unsafe) static var directoryReadWait: Double = 10
+    #else
+    static let directoryReadWait: Double = 0.15
+    #endif
     var fileOpener: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
     @Published private(set) var navigationDiagnostic: String?
     @Published private(set) var navigationFailureIsPermissionDenied = false
@@ -448,7 +456,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
                     reader: { BulkCrawler.readDirectoryResult(at: $0, includeHidden: $1) }))
             }
             // Local folders answer well within this; only slow disks go async.
-            if let result = read.wait(seconds: 0.15) {
+            if let result = read.wait(seconds: Self.directoryReadWait) {
                 outcome = result
             } else {
                 let id = UUID()
@@ -601,7 +609,33 @@ public final class PaneTabState: ObservableObject, Identifiable {
             return
         }
         cancelSessionRestoration()
-        let result = BulkCrawler.readDirectoryResult(at: currentURL.path, includeHidden: showHiddenFiles)
+        let path = currentURL.path
+        let showHidden = showHiddenFiles
+        let read = DirectoryReadHandoff()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = BulkCrawler.readDirectoryResult(at: path, includeHidden: showHidden)
+            read.finishRead(result)
+        }
+        // Local folders answer within the wait; a slow disk keeps the current
+        // items on screen until its listing arrives.
+        if let result = read.waitForRead(seconds: Self.directoryReadWait) {
+            applyReload(result, invalidateCaches: invalidateCaches)
+            return
+        }
+        let id = UUID()
+        pendingReloadID = id
+        let generation = directoryLoadGeneration
+        read.whenReadFinished { result in
+            Task { @MainActor [weak self] in
+                guard let self, self.pendingReloadID == id, self.currentURL.path == path,
+                      self.directoryLoadGeneration == generation, self.pendingNavigationID == nil else { return }
+                self.pendingReloadID = nil
+                self.applyReload(result, invalidateCaches: invalidateCaches)
+            }
+        }
+    }
+
+    private func applyReload(_ result: BulkCrawler.DirectoryReadResult, invalidateCaches: Bool) {
         guard result.isComplete, result.errorCode == nil else {
             // A failed refresh (deleted folder, dropped share) must not look like
             // a genuinely empty folder: clear the stale items and explain why.
@@ -1025,6 +1059,34 @@ private final class DirectoryReadHandoff: @unchecked Sendable {
     private let done = DispatchSemaphore(value: 0)
     private var result: Result<[IndexedFileEntry], Error>?
     private var callback: (@Sendable (Result<[IndexedFileEntry], Error>) -> Void)?
+    private var readResult: BulkCrawler.DirectoryReadResult?
+    private var readCallback: (@Sendable (BulkCrawler.DirectoryReadResult) -> Void)?
+
+    func finishRead(_ value: BulkCrawler.DirectoryReadResult) {
+        lock.lock()
+        readResult = value
+        let waiting = readCallback
+        lock.unlock()
+        done.signal()
+        waiting?(value)
+    }
+
+    func waitForRead(seconds: Double) -> BulkCrawler.DirectoryReadResult? {
+        guard done.wait(timeout: .now() + seconds) == .success else { return nil }
+        lock.lock(); defer { lock.unlock() }
+        return readResult
+    }
+
+    func whenReadFinished(_ handler: @escaping @Sendable (BulkCrawler.DirectoryReadResult) -> Void) {
+        lock.lock()
+        if let readResult {
+            lock.unlock()
+            handler(readResult)
+        } else {
+            readCallback = handler
+            lock.unlock()
+        }
+    }
 
     func finish(_ value: Result<[IndexedFileEntry], Error>) {
         lock.lock()

@@ -33,6 +33,36 @@ extension NavigationTests {
         pane.clearSearch()
     }
 
+    /// A folder that does not answer within the wait opens asynchronously:
+    /// the old folder stays until the new listing arrives, and a newer
+    /// navigation wins over an older pending one.
+    @MainActor func testSlowFolderOpensWithoutBlocking() async throws {
+        let root = try cacheFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let slow = root.appendingPathComponent("slow", isDirectory: true)
+        let other = root.appendingPathComponent("other", isDirectory: true)
+        for folder in [slow, other] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
+        try Data("x".utf8).write(to: slow.appendingPathComponent("inside.txt"))
+        let pane = PaneTabState(initialURL: root)
+        let previousWait = PaneTabState.directoryReadWait
+        PaneTabState.directoryReadWait = 0
+        defer { PaneTabState.directoryReadWait = previousWait }
+
+        try expect(pane.navigate(to: slow))
+        try expect(pane.openingLocation == slow.standardizedFileURL && pane.currentURL == root)
+        for _ in 0..<300 where pane.openingLocation != nil { try await Task.sleep(for: .milliseconds(10)) }
+        try expect(pane.currentURL == slow.standardizedFileURL && pane.directoryItems.map(\.name) == ["inside.txt"])
+
+        pane.navigate(to: root)
+        for _ in 0..<300 where pane.openingLocation != nil { try await Task.sleep(for: .milliseconds(10)) }
+        pane.navigate(to: slow)
+        pane.navigate(to: other)
+        for _ in 0..<300 where pane.openingLocation != nil { try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(50))
+        try expect(pane.currentURL == other.standardizedFileURL)
+        print("PASS a slow folder opens without blocking; the newest navigation wins")
+    }
+
     @MainActor func testViewModeSwitchRemovesInvisibleOutlineSelection() throws {
         let root = try cacheFixture()
         defer { try? FileManager.default.removeItem(at: root) }

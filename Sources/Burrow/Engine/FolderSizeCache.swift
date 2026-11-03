@@ -55,6 +55,9 @@ public final class FolderSizeCache: ObservableObject {
     private let calculator: @Sendable (String, @Sendable () -> Bool) -> FolderSizeResult
     private let privacy: FolderSizePrivacy
     private var lastFullDiskAccess: Bool?
+    /// Called when the user allowed a protected folder or Full Disk Access
+    /// changed, so the search index can include what it had to leave out.
+    var onPrivacyAccessChanged: (@MainActor () -> Void)?
 
     init(maxWorkers: Int = 2, maxDemand: Int = 256, maxResults: Int = 512,
          privacy: FolderSizePrivacy? = nil,
@@ -64,7 +67,7 @@ public final class FolderSizeCache: ObservableObject {
         self.maxDemand = maxDemand
         self.maxResults = maxResults
         // Injected calculators are test fixtures: no privacy gate unless one is passed.
-        let privacy = privacy ?? (cancellableCalculator == nil ? FolderSizePrivacy.system() : .none)
+        let privacy = privacy ?? (cancellableCalculator == nil ? FolderSizePrivacy.shared : .none)
         self.privacy = privacy
         self.calculator = cancellableCalculator ?? { path, isCancelled in
             FolderSizeCache.calculateFolderSize(at: path, maxEntries: 15_000,
@@ -180,8 +183,10 @@ public final class FolderSizeCache: ObservableObject {
     /// now. The choice is remembered, and folders containing it are sized again.
     public func calculateProtected(_ folderPath: String) {
         let path = key(folderPath)
-        privacy.consent.insert(path)
+        if privacy.consent.insert(path) { onPrivacyAccessChanged?() }
         if demand[path] == nil { requestSizeIfNeeded(for: path) } else { enqueueIfNeeded(path) }
+        // Allowing /Volumes or other apps' data also ungates the folders in it.
+        for child in demand.keys where child.hasPrefix(path + "/") { enqueueIfNeeded(child) }
         revalidate(containing: path)
     }
 
@@ -190,6 +195,7 @@ public final class FolderSizeCache: ObservableObject {
         let skipped = protectedFoldersLeftOut(of: folderPath)
         for path in skipped { privacy.consent.insert(key(path)) }
         guard !skipped.isEmpty else { return }
+        onPrivacyAccessChanged?()
         for path in skipped { enqueueIfNeeded(key(path)) }
         invalidate(folderPath)
         if demand[key(folderPath)] == nil { requestSizeIfNeeded(for: folderPath) }
@@ -214,7 +220,9 @@ public final class FolderSizeCache: ObservableObject {
     /// the prompt itself, so its size no longer needs a separate request.
     public func noteListed(_ folderPath: String) {
         guard let root = privacy.rootGranted(byListing: folderPath), privacy.consent.insert(root) else { return }
-        enqueueIfNeeded(root)
+        onPrivacyAccessChanged?()
+        // Allowing a parent (other apps' data) ungates each of its children.
+        for path in demand.keys where path == root || path.hasPrefix(root + "/") { enqueueIfNeeded(path) }
         revalidate(containing: root)
     }
 
@@ -225,6 +233,7 @@ public final class FolderSizeCache: ObservableObject {
         let granted = privacy.hasFullDiskAccess()
         defer { lastFullDiskAccess = granted }
         guard let previous = lastFullDiskAccess, previous != granted else { return }
+        onPrivacyAccessChanged?()
         let partial = results.filter { !$0.value.privacySkippedPaths.isEmpty }.map(\.key)
         for path in demand.keys where results[path] == nil { enqueueIfNeeded(path) }
         for path in partial where demand[path] != nil {

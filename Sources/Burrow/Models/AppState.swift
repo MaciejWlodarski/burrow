@@ -307,6 +307,13 @@ public final class AppState: ObservableObject {
             }
         }
         #if !BURROW_TESTING
+        // Indexing leaves out protected folders the user has not allowed, and
+        // picks them up as soon as they are allowed.
+        FSearchIndex.shared.indexPrivacy = FolderSizePrivacy.shared
+        FolderSizeCache.shared.onPrivacyAccessChanged = { [weak self] in
+            guard let self, !self.indexingWaitsForOnboarding else { return }
+            FSearchIndex.shared.startIndexing()
+        }
         if showFullDiskAccessSheet {
             indexingWaitsForOnboarding = true
         } else {

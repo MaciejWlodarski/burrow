@@ -977,6 +977,32 @@ struct FolderSizeLifecycleRegressionTests {
         try expect(["photoslibrary", "musiclibrary", "tvlibrary"].allSatisfy(system.protectedBundleExtensions.contains))
         try expect(system.cloudRoots.contains(home + "/Library/Mobile Documents"))
 
+        // Inside ~/Library and /Volumes each child prompts on its own: disks,
+        // other apps' containers and cloud accounts wait for a request.
+        let containers = home + "/Library/Containers"
+        try expect(system.requiresConsent("/Volumes/USB") && system.requiresConsent(containers + "/com.app"))
+        try expect(system.requiresConsent(home + "/Library/CloudStorage") && system.requiresConsent(home + "/Library/CloudStorage/GoogleDrive-a"))
+        try expect(!system.requiresConsent(home + "/Library/Caches") && !system.requiresConsent("/Volumes/USB/Photos"))
+        // Opening a disk or cloud account allows just it; opening one app's
+        // container answers the prompt for all of them.
+        try expect(system.rootGranted(byListing: "/Volumes/USB/Photos") == "/Volumes/USB")
+        try expect(system.rootGranted(byListing: home + "/Library/CloudStorage/GoogleDrive-a/x") == home + "/Library/CloudStorage/GoogleDrive-a")
+        try expect(system.rootGranted(byListing: containers + "/com.app/Data") == containers)
+        system.consent.insert(containers)
+        try expect(!system.requiresConsent(containers) && !system.requiresConsent(containers + "/com.other"))
+
+        // Search indexing leaves out protected folders until they are allowed.
+        try expect(!system.allowsIndexing(home + "/Documents") && !system.allowsIndexing(home + "/Downloads/sub"))
+        try expect(system.allowsIndexing(home + "/dev") && system.allowsIndexing("/Applications"))
+        try expect(system.skippedRoots(whileIndexing: home).contains(home + "/Desktop"))
+        system.consent.insert(home + "/Documents")
+        try expect(system.allowsIndexing(home + "/Documents"))
+        let fullAccess = FolderSizePrivacy(protectedRoots: system.protectedRoots, gatedParents: Array(system.gatedParents),
+                                           cloudRoots: system.cloudRoots, hasFullDiskAccess: { true })
+        try expect(fullAccess.allowsIndexing(home + "/Desktop") && !fullAccess.requiresConsent("/Volumes/USB"))
+        // File Providers may ask even with Full Disk Access.
+        try expect(fullAccess.requiresConsent(home + "/Library/CloudStorage/GoogleDrive-a"))
+
         // The user's choices survive a relaunch.
         let suite = "com.burrow.tests.consent.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
