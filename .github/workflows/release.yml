@@ -1,0 +1,86 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release, e.g. v0.1.0
+        required: true
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 40
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Version from tag
+        run: |
+          version="${TAG#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "Bad tag $TAG"; exit 1; }
+          echo "BURROW_VERSION=$version" >> "$GITHUB_ENV"
+          echo "BURROW_BUILD_NUMBER=${{ github.run_number }}" >> "$GITHUB_ENV"
+      - name: Localization
+        run: python3 scripts/check_localization.py
+      - name: Regression suite
+        run: zsh ./scripts/run_tests.sh
+      - name: Import signing identity
+        env:
+          BURROW_SIGNING_P12: ${{ secrets.BURROW_SIGNING_P12 }}
+          BURROW_SIGNING_P12_PASSWORD: ${{ secrets.BURROW_SIGNING_P12_PASSWORD }}
+          BURROW_SIGNING_DIR: ${{ runner.temp }}/signing
+        run: zsh ./scripts/ci_import_signing.sh
+      - name: Build universal app
+        env:
+          BURROW_ARCHS: arm64 x86_64
+          BURROW_SIGNING_DIR: ${{ runner.temp }}/signing
+          BURROW_SIGNING_IDENTITY: Burrow Release Signing
+        run: zsh ./build_app.sh
+      - name: Verify bundle
+        run: |
+          codesign --verify --strict --verbose=2 Burrow.app
+          codesign -dr - Burrow.app
+          lipo -info Burrow.app/Contents/MacOS/Burrow
+      - name: Package
+        run: zsh ./scripts/package_release.sh
+      - name: Write release notes
+        run: |
+          {
+            echo "## Install"
+            echo
+            echo "Download **Burrow.dmg**, open it and drag Burrow to Applications. Or use Homebrew:"
+            echo
+            echo '```sh'
+            echo 'brew tap maciejwlodarski/burrow https://github.com/MaciejWlodarski/burrow'
+            echo 'brew install --cask burrow'
+            echo '```'
+            echo
+            echo "Burrow is not notarized by Apple, so macOS blocks the first launch. Open"
+            echo "**System Settings → Privacy & Security** and choose **Open Anyway**, or run"
+            echo '`xattr -dr com.apple.quarantine /Applications/Burrow.app`.'
+            echo "Grant **Full Disk Access** in the same place so the disk map can read everything."
+            echo
+            echo "Requires macOS 14 Sonoma or later. Universal: Apple silicon and Intel."
+            echo
+            echo "SHA-256:"
+            echo '```'
+            cat dist/SHA256SUMS.txt
+            echo '```'
+          } > notes.md
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=()
+          if [[ "$BURROW_VERSION" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$TAG" dist/Burrow.dmg dist/Burrow.zip dist/SHA256SUMS.txt \
+            --title "Burrow $BURROW_VERSION" --notes-file notes.md --generate-notes --verify-tag "${prerelease[@]}"
+      - name: Remove keychain
+        if: always()
+        run: security delete-keychain "${{ runner.temp }}/signing/burrow-signing.keychain-db" 2>/dev/null || true

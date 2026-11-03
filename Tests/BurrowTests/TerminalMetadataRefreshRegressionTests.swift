@@ -35,6 +35,16 @@ struct TerminalMetadataRefreshRegressionTests {
         let oldTabs = app.tabs, oldActiveID = app.activeTabId
         defer { app.tabs = oldTabs; app.activeTabId = oldActiveID }
         app.tabs = [pane, other]; app.activeTabId = other.id
+        // Creating the fixture folders produces late file-system events that may
+        // reload either pane. Measure only after both have stopped changing.
+        var settled = (pane.directoryRevision, other.directoryRevision), quietTicks = 0
+        for _ in 0..<60 where quietTicks < 8 {
+            try await Task.sleep(nanoseconds: 250_000_000)
+            let now = (pane.directoryRevision, other.directoryRevision)
+            quietTicks = now == settled ? quietTicks + 1 : 0
+            settled = now
+        }
+        try expect(!other.isAffectedByDirectoryChanges([root.path]))
         let revision = pane.directoryRevision, otherRevision = other.directoryRevision
         let lifecycle = TerminalApplicationLifecycle()
         let tab = TerminalTab(directory: root, lifecycle: lifecycle,

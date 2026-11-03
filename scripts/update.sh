@@ -13,14 +13,14 @@ zsh ./build_app.sh
 was_running=0
 if pgrep -f "${RUNNING_BINARY}" >/dev/null; then
     was_running=1
-    echo "Zamykanie działającego Burrow…"
+    echo "Quitting the running Burrow…"
     osascript -e "tell application id \"${APP_ID}\" to quit" >/dev/null 2>&1 || true
     for _ in {1..30}; do
         pgrep -f "${RUNNING_BINARY}" >/dev/null || break
         sleep 0.5
     done
     if pgrep -f "${RUNNING_BINARY}" >/dev/null; then
-        echo "Burrow nadal działa (może czeka na potwierdzenie). Zamknij go i uruchom ponownie scripts/update.sh." >&2
+        echo "Burrow is still running (it may be waiting for a confirmation). Quit it and run scripts/update.sh again." >&2
         rm -rf -- Burrow.app
         exit 1
     fi
@@ -29,4 +29,4 @@ fi
 zsh scripts/install.sh
 rm -rf -- Burrow.app
 if (( was_running )); then open -b "${APP_ID}"; fi
-echo "Zaktualizowano Burrow."
+echo "Burrow updated."

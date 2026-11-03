@@ -1,0 +1,64 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Lint and localization
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell scripts parse
+        run: for f in build_app.sh scripts/*.sh; do zsh -n "$f"; done
+      - name: Property lists are valid
+        run: plutil -lint Resources/Info.plist Resources/*.lproj/*.strings
+      - name: Localization
+        run: python3 scripts/check_localization.py
+
+  test:
+    name: Build and test (${{ matrix.os }})
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, macos-15, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: xcrun swiftc --version && sw_vers
+      - name: Build universal app
+        run: BURROW_ARCHS="arm64 x86_64" zsh ./build_app.sh
+      - name: Verify bundle
+        run: |
+          codesign --verify --strict Burrow.app
+          lipo -info Burrow.app/Contents/MacOS/Burrow
+          test -f Burrow.app/Contents/Resources/pl.lproj/Localizable.strings
+      - name: CLI smoke test
+        run: |
+          Burrow.app/Contents/Helpers/burrow help >/dev/null
+          Burrow.app/Contents/Helpers/burrow scan Sources --depth 1 --json | python3 -m json.tool >/dev/null
+          Burrow.app/Contents/Helpers/burrow size README.md
+      - name: Regression suite
+        run: zsh ./scripts/run_tests.sh
+      - name: Live terminal integration
+        run: zsh ./scripts/run_terminal_live_integration.sh
+      - name: Zip app
+        if: matrix.os == 'macos-26' && github.event_name == 'push'
+        run: ditto -c -k --keepParent Burrow.app Burrow.zip
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'macos-26' && github.event_name == 'push'
+        with:
+          name: Burrow-${{ github.sha }}
+          path: Burrow.zip
+          retention-days: 14

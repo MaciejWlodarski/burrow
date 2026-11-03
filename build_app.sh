@@ -14,20 +14,21 @@ MODULE_CACHE="${BURROW_MODULE_CACHE:-${BUILD_TMP_DIR}/swift-module-cache}"
 ICONSET_DIR="${BUILD_TMP_DIR}/${APP_NAME}.iconset"
 ICON_GEN_BIN="${BUILD_TMP_DIR}/generate-icon"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
-TARGET_ARCH="$(uname -m)"
+# Release builds set BURROW_ARCHS="arm64 x86_64" for a universal app.
+ARCHS=(${=BURROW_ARCHS:-$(uname -m)})
 
 # A stable identity (scripts/setup_signing.sh) keeps macOS privacy grants such
 # as Full Disk Access across rebuilds. Without it the build is signed ad hoc and
 # every rebuild needs those grants again.
 SIGNING_DIR="${BURROW_SIGNING_DIR:-${HOME}/Library/Application Support/Burrow/Signing}"
 SIGNING_KEYCHAIN="${SIGNING_DIR}/burrow-signing.keychain-db"
-SIGNING_IDENTITY="Burrow Local Signing"
+SIGNING_IDENTITY="${BURROW_SIGNING_IDENTITY:-Burrow Local Signing}"
 SIGN_ARGS=(--sign -)
 if [[ -f "${SIGNING_KEYCHAIN}" && -f "${SIGNING_DIR}/keychain-password" ]] \
     && security unlock-keychain -p "$(<"${SIGNING_DIR}/keychain-password")" "${SIGNING_KEYCHAIN}" 2>/dev/null; then
     SIGN_ARGS=(--keychain "${SIGNING_KEYCHAIN}" --sign "${SIGNING_IDENTITY}")
 else
-    echo "Uwaga: brak stałej tożsamości podpisu; uruchom scripts/setup_signing.sh, inaczej uprawnienia trzeba nadawać po każdym buildzie." >&2
+    echo "Note: no stable signing identity; run scripts/setup_signing.sh, or macOS permissions must be granted again after every build." >&2
 fi
 
 cleanup_temp() {
@@ -37,44 +38,57 @@ trap cleanup_temp EXIT
 
 # Work only in this invocation's private directory. Keep the previous app until
 # compilation, icon generation and signing have all succeeded.
-echo "Budowanie ${APP_NAME} (${TARGET_ARCH})…"
-mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${MODULE_CACHE}" "${ICONSET_DIR}"
+echo "Building ${APP_NAME} (${ARCHS[*]})…"
+mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${MODULE_CACHE}" "${ICONSET_DIR}" "${CONTENTS_DIR}/Helpers"
 
-xcrun swiftc \
-    -module-cache-path "${MODULE_CACHE}" \
-    -O \
-    -target "${TARGET_ARCH}-apple-macosx14.0" \
-    -sdk "${SDK_PATH}" \
+# Compiles one executable for every architecture and merges the slices.
+compile() {
+    local output="$1"; shift
+    local slices=()
+    for arch in "${ARCHS[@]}"; do
+        xcrun swiftc \
+            -module-cache-path "${MODULE_CACHE}/${arch}" \
+            -O \
+            -target "${arch}-apple-macosx14.0" \
+            -sdk "${SDK_PATH}" \
+            "$@" \
+            -o "${output}.${arch}"
+        slices+=("${output}.${arch}")
+    done
+    lipo -create "${slices[@]}" -output "${output}"
+    rm -f -- "${slices[@]}"
+}
+
+compile "${MACOS_DIR}/${APP_NAME}" \
     Sources/Burrow/Models/*.swift \
     Sources/Burrow/Engine/*.swift \
     Sources/Burrow/Views/*.swift \
     Sources/Burrow/BurrowApp.swift \
     -framework AppKit -framework SwiftUI -framework QuickLookUI \
     -framework QuickLookThumbnailing -framework CoreServices \
-    -framework UniformTypeIdentifiers \
-    -o "${MACOS_DIR}/${APP_NAME}"
+    -framework UniformTypeIdentifiers
 
 # The `burrow` command-line tool shares the disk map's scanner. Helpers/ keeps
 # it apart from MacOS/Burrow on a case-insensitive disk.
-mkdir -p "${CONTENTS_DIR}/Helpers"
-xcrun swiftc \
-    -module-cache-path "${MODULE_CACHE}" \
-    -O \
-    -target "${TARGET_ARCH}-apple-macosx14.0" \
-    -sdk "${SDK_PATH}" \
+compile "${CONTENTS_DIR}/Helpers/burrow" \
     Sources/Burrow/Engine/DiskTree.swift \
     Sources/Burrow/Models/FileItem.swift \
-    Sources/BurrowCLI/*.swift \
-    -o "${CONTENTS_DIR}/Helpers/burrow"
+    Sources/BurrowCLI/*.swift
 codesign --force "${SIGN_ARGS[@]}" --identifier com.burrow.cli --timestamp=none "${CONTENTS_DIR}/Helpers/burrow"
 
 cp Resources/Info.plist "${CONTENTS_DIR}/Info.plist"
+if [[ -n "${BURROW_VERSION:-}" ]]; then
+    plutil -replace CFBundleShortVersionString -string "${BURROW_VERSION}" "${CONTENTS_DIR}/Info.plist"
+fi
+if [[ -n "${BURROW_BUILD_NUMBER:-}" ]]; then
+    plutil -replace CFBundleVersion -string "${BURROW_BUILD_NUMBER}" "${CONTENTS_DIR}/Info.plist"
+fi
 for lproj in Resources/*.lproj(N); do
     cp -R "${lproj}" "${RESOURCES_DIR}/"
 done
 xcrun swiftc \
     -module-cache-path "${MODULE_CACHE}" \
-    -target "${TARGET_ARCH}-apple-macosx14.0" \
+    -target "$(uname -m)-apple-macosx14.0" \
     -sdk "${SDK_PATH}" \
     scripts/generate_icon.swift -framework AppKit -o "${ICON_GEN_BIN}"
 "${ICON_GEN_BIN}" "${ICONSET_DIR}/icon_512x512@2x.png"
@@ -101,4 +115,4 @@ if ! mv -- "${STAGED_APP}" "${APP_BUNDLE}"; then
     fi
     exit 1
 fi
-echo "Gotowe: ${APP_BUNDLE}"
+echo "Built: ${APP_BUNDLE}"

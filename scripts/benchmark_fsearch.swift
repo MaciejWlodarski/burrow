@@ -10,7 +10,7 @@ struct BenchmarkMain {
         let crawled = BulkCrawler.crawlTree(roots: roots, skipHeavyDevDirs: true, maxEntries: 300_000)
         let t1 = DispatchTime.now().uptimeNanoseconds
         let crawlMs = Double(t1 - t0) / 1_000_000.0
-        print(String(format: "[getattrlistbulk] Zaindeksowano %d plików/folderów w %.2f ms", crawled.count, crawlMs))
+        print(String(format: "[getattrlistbulk] Indexed %d files and folders in %.2f ms", crawled.count, crawlMs))
 
         for relativePath in [
             "",
@@ -24,11 +24,11 @@ struct BenchmarkMain {
 
         let testQueries = [
             "fsearch",
-            "fserach", // 1-literówka dla słowa 5+ znaków!
+            "fserach", // one typo in a word of 5+ letters
             "ext:swift",
             "type:code size:>2kb",
-            "ext:swift grep:getattrlistbulk", // 1. przebieg buduje filtr Blooma trigramów
-            "ext:swift grep:getattrlistbulk", // 2. przebieg używa 64-bitowego filtra Blooma trigramów w RAM!
+            "ext:swift grep:getattrlistbulk", // first run builds the trigram Bloom filter
+            "ext:swift grep:getattrlistbulk", // second run uses the in-memory 64-bit trigram Bloom filter
             "^File .swift$"
         ]
 
@@ -40,7 +40,7 @@ struct BenchmarkMain {
                 includeHidden: true,
                 fuzzyEnabled: true
             )
-            print(String(format: "[#%d] Zapytanie %-32@ -> %3d wyników w %.3f ms (trigram cache: %d)", i + 1, q as NSString, res.items.count, res.elapsedMilliseconds, FSearchIndex.shared.trigramCacheCount))
+            print(String(format: "[#%d] Query %-32@ -> %3d results in %.3f ms (trigram cache: %d)", i + 1, q as NSString, res.items.count, res.elapsedMilliseconds, FSearchIndex.shared.trigramCacheCount))
         }
     }
 }

@@ -18,7 +18,7 @@ IDENTITY="Burrow Local Signing"
 if [[ -f "${KEYCHAIN}" && -f "${PASSWORD_FILE}" ]]; then
     security unlock-keychain -p "$(<"${PASSWORD_FILE}")" "${KEYCHAIN}"
     if security find-certificate -c "${IDENTITY}" "${KEYCHAIN}" >/dev/null 2>&1; then
-        echo "Tożsamość \"${IDENTITY}\" już istnieje: ${KEYCHAIN}"
+        echo "Identity \"${IDENTITY}\" already exists: ${KEYCHAIN}"
         exit 0
     fi
 fi
@@ -54,4 +54,4 @@ security set-keychain-settings "${KEYCHAIN}"
 security unlock-keychain -p "${PASSWORD}" "${KEYCHAIN}"
 security import "${WORK_DIR}/identity.p12" -k "${KEYCHAIN}" -P "${PASSWORD}" -T /usr/bin/codesign >/dev/null
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${PASSWORD}" "${KEYCHAIN}" >/dev/null
-echo "Utworzono tożsamość \"${IDENTITY}\": ${KEYCHAIN}"
+echo "Created identity \"${IDENTITY}\": ${KEYCHAIN}"

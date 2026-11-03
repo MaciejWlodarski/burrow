@@ -11,11 +11,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/MaciejWlodarski/burrow/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/MaciejWlodarski/burrow?label=release"></a>
+  <a href="https://github.com/MaciejWlodarski/burrow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/MaciejWlodarski/burrow/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.10%2B-F05138?logo=swift&logoColor=white">
   <img alt="SwiftUI and AppKit" src="https://img.shields.io/badge/UI-SwiftUI%20%2B%20AppKit-0A84FF">
   <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-34C759">
-  <img alt="Status: early" src="https://img.shields.io/badge/status-early%20development-FF9F0A">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue"></a>
 </p>
 
 <p align="center">
@@ -50,7 +52,7 @@ Burrow is a single native app with no third-party dependencies. It is built from
 
 ![Disk map of /System/Library: size tree above a cushion-shaded treemap colored by file type](docs/images/disk-map.png)
 
-Press **⌘4** and choose **Cały dysk** (Whole disk), or map any folder. Burrow works like WizTree, but on macOS:
+Press **⌘4** and choose **Whole Disk**, or map any folder. Burrow works like WizTree, but on macOS:
 
 - **Fast whole-disk scans.** Eight parallel `getattrlistbulk` workers. On the author's Mac a scan of about 3.9 million entries takes around 20 seconds.
 - **Every level at once.** The treemap shows the full depth, not just the top folders. Hover for details, click to reveal an item in the tree, double-click to zoom in without rescanning.
@@ -103,7 +105,24 @@ Regenerable clutter (30.0 GB in 3 items; risk safe = rebuilt on demand, review =
 
 ## Install
 
-**Requirements:** macOS 14 Sonoma or later and the Xcode command-line tools (`xcode-select --install`).
+**Requirements:** macOS 14 Sonoma or later, on Apple silicon or Intel.
+
+**Download.** Get [**Burrow.dmg**](https://github.com/MaciejWlodarski/burrow/releases/latest/download/Burrow.dmg) from the [latest release](https://github.com/MaciejWlodarski/burrow/releases/latest), open it and drag Burrow to Applications.
+
+**Homebrew.** The cask also links the `burrow` CLI:
+
+```sh
+brew tap maciejwlodarski/burrow https://github.com/MaciejWlodarski/burrow
+brew install --cask burrow
+```
+
+**First launch.** Burrow is open source and not notarized by Apple, so macOS blocks it the first time. Open **System Settings → Privacy & Security** and choose **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Burrow.app`. Grant **Full Disk Access** in the same place so the disk map can read protected folders. Releases are signed with the same certificate, so updates keep that permission.
+
+The interface follows the macOS language (English or Polish). To choose one, open **Settings → Language**.
+
+### Build from source
+
+You need the Xcode command-line tools (`xcode-select --install`).
 
 ```sh
 git clone https://github.com/MaciejWlodarski/burrow.git
@@ -112,7 +131,7 @@ zsh scripts/setup_signing.sh   # once: a local signing identity, so permissions 
 zsh scripts/update.sh          # build, install to /Applications, link the burrow CLI
 ```
 
-`update.sh` is also how you update: it builds, quits a running Burrow, replaces `/Applications/Burrow.app`, relaunches it and removes the build from the repository. It links `burrow` into `/opt/homebrew/bin`, `/usr/local/bin` or `~/.local/bin`, whichever is writable first.
+`update.sh` is also how you update a source build: it builds, quits a running Burrow, replaces `/Applications/Burrow.app`, relaunches it and removes the build from the repository. It links `burrow` into `/opt/homebrew/bin`, `/usr/local/bin` or `~/.local/bin`, whichever is writable first.
 
 **Why the signing step?** macOS ties Full Disk Access and folder permissions to an app's code signature. An ad-hoc signature changes with every build, so each rebuild would lose them. `setup_signing.sh` creates a self-signed “Burrow Local Signing” certificate in its own keychain under `~/Library/Application Support/Burrow/Signing`, and every later build is signed with it. Grant Full Disk Access once and it stays.
 
@@ -149,8 +168,8 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 
 **Next**
 
-- [ ] **English interface.** Most of the UI is in Polish today; move strings into a localization catalog.
-- [ ] **Downloadable releases.** A notarized DMG and a Homebrew cask, so trying Burrow does not require building it.
+- [ ] **Notarized releases.** Releases are signed with a self-signed certificate today; notarization needs a paid Apple Developer account.
+- [ ] **More languages.** The interface is in English and Polish. A new language is one `Localizable.strings` file; see [Development](#development).
 - [ ] **Optional fsearch backend.** When the [fsearch](https://github.com/noahdunnagan/fsearch) daemon is running, query its whole-disk index and content grep over its local socket instead of indexing chosen folders only.
 - [ ] **Live disk map.** Keep a finished scan current with FSEvents instead of rescanning.
 - [ ] **Faster CLI for agents.** A cached scan the CLI can reuse between commands, and an MCP server exposing `scan`, `top`, `junk` and `trash`.
@@ -162,7 +181,6 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 - [ ] Count hard links once in folder sizes and search crawls, and keep those crawls on one disk, as the disk map already does.
 - [ ] Move Trash and navigation work off the main thread; independent state for multiple windows.
 - [ ] A full terminal emulator in the command drawer (it runs `zsh -c` today).
-- [ ] CI on macOS 14, the minimum supported version.
 
 Ideas and bug reports are welcome in [issues](https://github.com/MaciejWlodarski/burrow/issues).
 
@@ -170,8 +188,7 @@ Ideas and bug reports are welcome in [issues](https://github.com/MaciejWlodarski
 
 Burrow is in early, active development and is used daily by its author. Expect rough edges:
 
-- The interface is mostly Polish, with some English labels.
-- Builds are local and self-signed, not notarized.
+- Releases are self-signed, not notarized, so the first launch needs **Open Anyway**.
 - **Undo is not a backup.** File history lives in memory and does not survive a restart. Keep backups of important files and try destructive operations on disposable data first.
 
 The [guide](docs/GUIDE.md) documents behavior, limits and safety checks in detail: file operations and recovery, indexing coverage, session restoration, previews, comparison and duplicate cleanup.
@@ -183,6 +200,14 @@ zsh ./scripts/run_tests.sh
 ```
 
 The regression runner compiles the app's models, engines and views with `BURROW_TESTING` and runs them against real temporary files, with an isolated home folder and preferences. It covers navigation, search, file operations, the disk scanner, the CLI and session restoration. `swift test` is not equivalent: `Package.swift` declares an executable target only. See the [guide](docs/GUIDE.md#development) for the UI preview harness and CI notes.
+
+**Translations.** English is the source language. Polish lives in `Resources/pl.lproj/Localizable.strings`, keyed by the English text. To add a language, copy that file to `Resources/<code>.lproj/`, translate the values and add the code to `CFBundleLocalizations` in `Resources/Info.plist`. `python3 scripts/check_localization.py` reports missing translations and mismatched placeholders.
+
+**CI and releases.** [CI](.github/workflows/ci.yml) checks localization, builds a universal app and runs the regression suites on macOS 26, 15 and 14. Pushing a `v*` tag runs the [release workflow](.github/workflows/release.yml), which tests, builds, signs and publishes `Burrow.dmg` and `Burrow.zip` to GitHub Releases.
+
+## License
+
+Burrow is available under the [MIT License](LICENSE).
 
 ## Acknowledgements
 
