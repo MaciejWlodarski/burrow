@@ -23,6 +23,17 @@ jobs:
         run: plutil -lint Resources/Info.plist Resources/*.lproj/*.strings
       - name: Localization
         run: python3 scripts/check_localization.py
+      - name: Release signing identity imports
+        # Secrets are unavailable to pull requests from forks; the script then skips.
+        if: github.event_name != 'pull_request'
+        env:
+          BURROW_SIGNING_P12: ${{ secrets.BURROW_SIGNING_P12 }}
+          BURROW_SIGNING_P12_PASSWORD: ${{ secrets.BURROW_SIGNING_P12_PASSWORD }}
+          BURROW_SIGNING_DIR: ${{ runner.temp }}/signing
+        run: zsh ./scripts/ci_import_signing.sh
+      - name: Remove signing keychain
+        if: always()
+        run: security delete-keychain "${{ runner.temp }}/signing/burrow-signing.keychain-db" 2>/dev/null || true
 
   test:
     name: Build and test (${{ matrix.os }})
