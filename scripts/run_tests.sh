@@ -28,6 +28,7 @@ xcrun swiftc -parse-as-library -D BURROW_TESTING \
     -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
     Sources/Burrow/Models/*.swift Sources/Burrow/Engine/*.swift \
     Sources/Burrow/Views/*.swift \
+    Sources/BurrowCLI/DiskCLI.swift \
     Tests/BurrowTests/*.swift \
     -o "${TEST_TMP_DIR}/regression-tests"
 "${TEST_TMP_DIR}/regression-tests"

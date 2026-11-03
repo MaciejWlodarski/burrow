@@ -40,6 +40,20 @@ xcrun swiftc \
     -framework UniformTypeIdentifiers \
     -o "${MACOS_DIR}/${APP_NAME}"
 
+# The `burrow` command-line tool shares the disk map's scanner. Helpers/ keeps
+# it apart from MacOS/Burrow on a case-insensitive disk.
+mkdir -p "${CONTENTS_DIR}/Helpers"
+xcrun swiftc \
+    -module-cache-path "${MODULE_CACHE}" \
+    -O \
+    -target "${TARGET_ARCH}-apple-macosx14.0" \
+    -sdk "${SDK_PATH}" \
+    Sources/Burrow/Engine/DiskTree.swift \
+    Sources/Burrow/Models/FileItem.swift \
+    Sources/BurrowCLI/*.swift \
+    -o "${CONTENTS_DIR}/Helpers/burrow"
+codesign --force --sign - --timestamp=none "${CONTENTS_DIR}/Helpers/burrow"
+
 cp Resources/Info.plist "${CONTENTS_DIR}/Info.plist"
 xcrun swiftc \
     -module-cache-path "${MODULE_CACHE}" \

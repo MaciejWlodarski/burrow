@@ -46,6 +46,30 @@ The build script compiles an optimized app for your Mac's current architecture, 
 
 An existing app bundle is kept until compilation, icon generation, and signing succeed. The script uses a private temporary build directory and removes it when finished.
 
+To install the build into `/Applications` and put the `burrow` command on your `PATH`, run `zsh scripts/install.sh`. It links the command into the first writable folder of `/opt/homebrew/bin`, `/usr/local/bin` or `~/.local/bin`.
+
+### Command-line disk analysis
+
+The app bundle includes `burrow`, a command-line tool that uses the disk map's scanner. It is meant for scripts and AI agents: every command prints readable text, or a single JSON document with `--json`.
+
+```sh
+burrow scan / --depth 2 --files 20 --types --junk   # whole disk: tree, largest files, types, clutter
+burrow scan ~/dev --min-size 1G                       # one folder, hide small items
+burrow top ~ --ext mov,dmg,zip --older-than 180       # largest old files of some types
+burrow junk                                           # caches, build outputs, node_modules in your home
+burrow size ~/Downloads ~/dev/app/node_modules        # on-disk size of paths
+burrow trash ~/dev/app/target --dry-run               # preview, then run without --dry-run
+```
+
+- **Sizes** are on-disk bytes. Hard links count once, and other disks and iCloud-only files are skipped.
+- **Every command scans fresh.** A whole disk takes about 20 seconds, so combine `--files`, `--types` and `--junk` in one `scan`.
+- **Junk results are labeled.** Each item has a risk level (`safe` items are rebuilt on demand, `review` items need a check first) and a hint.
+- **`trash` only moves items to the Trash**, so they can be recovered, and space is freed when the Trash is emptied. It refuses the disk root, system folders, mounted volumes, your home and its standard folders.
+- **Unreadable folders** are reported, and their space is counted as unscanned. Give the app that runs `burrow`, such as your terminal, Full Disk Access for a complete scan.
+- **Exit status** is 0 on success, 1 when a scan or move fails, and 2 for invalid usage.
+
+Run `burrow help` for every option.
+
 ## Features
 
 ### Browse your way
