@@ -7,6 +7,8 @@ enum CloudFilesRegressionTests {
         try testBreadcrumbsStartAtProvider()
         try testLocationsAndContainment()
         try testIndexCacheKeepsDatalessFlag()
+        // iCloud Drive is listed under Cloud, not duplicated in Favorites.
+        try expect(!AppState.shared.favorites.contains { $0.url.path.hasSuffix("com~apple~CloudDocs") })
         print("PASS cloud provider detection and dataless metadata")
     }
 

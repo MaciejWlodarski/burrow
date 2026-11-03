@@ -158,10 +158,26 @@ public final class AppState: ObservableObject {
     public var localMountedVolumes: [VolumeInfoItem] { VolumeSidebarGroups.build(from: mountedVolumes).localVolumes }
     public var networkServerGroups: [NetworkVolumeGroup] { VolumeSidebarGroups.build(from: mountedVolumes).networkServers }
     private var volumeService: VolumeRefreshService?
-    private lazy var sidebarFavoritesStore = SidebarFavoritesStore(
-        defaults: Self.initialSidebarFavorites,
-        read: { Self.preferences.object(forKey: SidebarFavoritesStore.key) },
-        write: { Self.preferences.set($0, forKey: SidebarFavoritesStore.key) })
+    private lazy var sidebarFavoritesStore: SidebarFavoritesStore = {
+        let store = SidebarFavoritesStore(
+            defaults: Self.initialSidebarFavorites,
+            read: { Self.preferences.object(forKey: SidebarFavoritesStore.key) },
+            write: { Self.preferences.set($0, forKey: SidebarFavoritesStore.key) })
+        Self.removeDefaultICloudFavorite(from: store)
+        return store
+    }()
+
+    /// iCloud Drive moved to the Cloud section. Remove the untouched default
+    /// favorite once; a renamed or re-added one is the user's and stays.
+    private static func removeDefaultICloudFavorite(from store: SidebarFavoritesStore) {
+        let key = "bf.sidebarFavorites.cloudSectionMigrated"
+        guard !preferences.bool(forKey: key) else { return }
+        let path = "\(homeDirectoryURL.path)/Library/Mobile Documents/com~apple~CloudDocs"
+        if store.items.contains(where: { $0.path == path && $0.title == "iCloud Drive" && $0.iconName == "icloud.fill" }) {
+            store.remove(path)
+        }
+        preferences.set(true, forKey: key)
+    }
     @Published public private(set) var pinnedFolderNotice: String?
 
 
@@ -355,7 +371,6 @@ public final class AppState: ObservableObject {
             (String(localized: "Desktop"), "menubar.dock.rectangle", "\(home)/Desktop"),
             (String(localized: "Documents"), "doc.fill", "\(home)/Documents"),
             (String(localized: "Downloads"), "arrow.down.circle.fill", "\(home)/Downloads"),
-            ("iCloud Drive", "icloud.fill", "\(home)/Library/Mobile Documents/com~apple~CloudDocs"),
             (String(localized: "Trash"), "trash.fill", "\(home)/.Trash")
         ]
         #if !BURROW_TESTING
