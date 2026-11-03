@@ -7,7 +7,8 @@
 <p align="center">
   <b>A native macOS file manager that also tells you where your disk went.</b><br>
   Dual panes, an Explorer-style address bar, fsearch-style indexed search,<br>
-  a WizTree-style map of the whole disk, and a <code>burrow</code> CLI for scripts and AI agents.
+  a WizTree-style map of the whole disk, iCloud Drive, Google Drive and OneDrive in the sidebar,<br>
+  and a <code>burrow</code> CLI for scripts and AI agents.
 </p>
 
 <p align="center">
@@ -30,7 +31,9 @@
   <a href="docs/GUIDE.md">Guide</a>
 </p>
 
-![Burrow with two panes: System Applications as a list and Utilities as icons](docs/images/dual-pane.png)
+https://github.com/user-attachments/assets/154919ab-4196-4dbc-abe3-9a577abc60cc
+
+![Burrow with two panes: System Applications as a list and Utilities as icons, with Favorites, Locations and Cloud in the sidebar](docs/images/dual-pane.png)
 
 ## Highlights
 
@@ -117,7 +120,7 @@ brew tap maciejwlodarski/burrow https://github.com/MaciejWlodarski/burrow
 brew install --cask burrow
 ```
 
-**First launch.** Burrow is open source and not notarized by Apple, so macOS blocks it the first time. Open **System Settings → Privacy & Security** and choose **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Burrow.app`. Grant **Full Disk Access** in the same place so the disk map can read protected folders. Releases are signed with the same certificate, so updates keep that permission.
+**First launch.** Burrow is open source and not notarized by Apple, so macOS blocks it the first time. Open **System Settings → Privacy & Security** and choose **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Burrow.app`. Grant **Full Disk Access** in the same place so the disk map can read protected folders. Releases from 0.1.1 on are signed with the same certificate, so updates keep that permission. Version 0.1.0 was signed ad hoc: after updating from it, grant Full Disk Access once more.
 
 The interface follows the macOS language (English or Polish). To choose one, open **Settings → Language**.
 
@@ -173,6 +176,7 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 - [ ] **More languages.** The interface is in English and Polish. A new language is one `Localizable.strings` file; see [Development](#development).
 - [ ] **Optional fsearch backend.** When the [fsearch](https://github.com/noahdunnagan/fsearch) daemon is running, query its whole-disk index and content grep over its local socket instead of indexing chosen folders only.
 - [ ] **Live disk map.** Keep a finished scan current with FSEvents instead of rescanning.
+- [ ] **More cloud controls.** Keep chosen folders downloaded, show download progress as a percentage, and share links through the provider.
 - [ ] **Faster CLI for agents.** A cached scan the CLI can reuse between commands, and an MCP server exposing `scan`, `top`, `junk` and `trash`.
 
 **Later**
