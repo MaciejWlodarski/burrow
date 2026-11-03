@@ -94,10 +94,10 @@ public final class FolderSizeCache: ObservableObject {
     }
     public func statusText(for folderPath: String) -> String {
         switch status(for: folderPath) {
-        case .deferred: return "Odroczono (limit)"
-        case .queued: return "W kolejce…"
-        case .scanning: return "Obliczanie…"
-        case .complete, .partial: return displaySize(for: folderPath) ?? "Niedostępny"
+        case .deferred: return String(localized: "Deferred (limit)")
+        case .queued: return String(localized: "Queued…")
+        case .scanning: return String(localized: "Calculating…")
+        case .complete, .partial: return displaySize(for: folderPath) ?? String(localized: "Unavailable")
         }
     }
 

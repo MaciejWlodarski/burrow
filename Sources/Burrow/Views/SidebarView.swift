@@ -52,27 +52,27 @@ public struct SidebarView: View {
         }
         .font(FinderUI.bodyFont)
         .background(FinderUI.sidebarSurface)
-        .accessibilityLabel("Pasek boczny")
+        .accessibilityLabel("Sidebar")
         .onDisappear { dropLoad.cancel(); draggedFavoriteID = nil; favoriteDragNonce = nil }
-        .alert("Nazwa w ulubionych", isPresented: Binding(
+        .alert("Favorite Name", isPresented: Binding(
             get: { renamingFavorite != nil },
             set: { if !$0 { renamingFavorite = nil } }
         )) {
-            TextField("Nazwa", text: $favoriteTitle)
-            Button("Anuluj", role: .cancel) { renamingFavorite = nil }
-            Button("Zapisz") {
+            TextField("Name", text: $favoriteTitle)
+            Button("Cancel", role: .cancel) { renamingFavorite = nil }
+            Button("Save") {
                 if let item = renamingFavorite { appState.renameFavorite(item, title: favoriteTitle) }
                 renamingFavorite = nil
             }
             .disabled(favoriteTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: {
-            Text("Zmienia tylko nazwę na pasku bocznym, nie nazwę folderu na dysku.")
+            Text("This only changes the name in the sidebar, not the name of the folder on disk.")
         }
     }
 
     private var placesSection: some View {
         VStack(alignment: .leading, spacing: FinderUI.sidebarRowGap) {
-            sidebarSectionHeader("Miejsca")
+            sidebarSectionHeader("Locations")
             if let notice = appState.volumeInventory.notice {
                 Text(notice)
                     .font(FinderUI.detailFont)
@@ -80,7 +80,7 @@ public struct SidebarView: View {
                     .padding(.horizontal, FinderUI.rowSpacing)
             }
             if appState.volumeInventory.canShowEmpty {
-                Text("Brak dostępnych woluminów")
+                Text("No volumes available")
                     .font(FinderUI.detailFont)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, FinderUI.rowSpacing)
@@ -94,7 +94,7 @@ public struct SidebarView: View {
                     } else {
                         ForEach(server.volumes) { volume in
                             volumeRow(volume)
-                                .help("Udział sieciowy. Nie udało się ustalić serwera.")
+                                .help("Network share. The server could not be determined.")
                         }
                     }
                 }
@@ -113,7 +113,7 @@ public struct SidebarView: View {
         VStack(alignment: .leading, spacing: FinderUI.sidebarRowGap) {
             Button { areTagsExpanded.toggle() } label: {
                 HStack {
-                    Text("Tagi").font(FinderUI.captionFont.weight(.semibold))
+                    Text("Tags").font(FinderUI.captionFont.weight(.semibold))
                     Spacer(minLength: 0)
                     Image(systemName: tagsAreExpanded ? "chevron.down" : "chevron.right")
                         .font(FinderUI.captionFont.weight(.semibold))
@@ -124,9 +124,9 @@ public struct SidebarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Tagi")
-            .accessibilityValue(tagsAreExpanded ? "Rozwinięte" : "Zwinięte")
-            .accessibilityHint("Pokaż lub ukryj siedem kolorów tagów")
+            .accessibilityLabel("Tags")
+            .accessibilityValue(tagsAreExpanded ? String(localized: "Expanded") : String(localized: "Collapsed"))
+            .accessibilityHint("Show or hide the seven tag colors")
             if tagsAreExpanded {
                 ForEach(FinderTagColor.allCases) { tagColor in tagRow(tagColor) }
             }
@@ -163,14 +163,14 @@ public struct SidebarView: View {
     private var favoritesSection: some View {
         VStack(alignment: .leading, spacing: FinderUI.sidebarRowGap) {
             HStack(spacing: FinderUI.compactSpacing) {
-                sidebarSectionHeader("Ulubione")
+                sidebarSectionHeader("Favorites")
                 Spacer(minLength: 0)
                 Menu {
-                    Button("Dodaj bieżący folder", systemImage: "folder.badge.plus") {
+                    Button("Add Current Folder", systemImage: "folder.badge.plus") {
                         appState.addBookmark(for: activeTab.currentURL)
                     }
                     .disabled(appState.favorites.contains { $0.url.path == activeTab.currentURL.path })
-                    Button("Wybierz folder…", systemImage: "folder") { chooseFavoriteFolder() }
+                    Button("Choose Folder…", systemImage: "folder") { chooseFavoriteFolder() }
                 } label: {
                     Image(systemName: "plus").frame(width: 24, height: 24)
                 }
@@ -178,8 +178,8 @@ public struct SidebarView: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .disabled(appState.pinnedFolderNotice != nil)
-                .help("Dodaj folder do ulubionych")
-                .accessibilityLabel("Dodaj folder do ulubionych")
+                .help("Add folder to Favorites")
+                .accessibilityLabel("Add folder to Favorites")
             }
             if let notice = appState.pinnedFolderNotice {
                 Text(notice)
@@ -198,7 +198,7 @@ public struct SidebarView: View {
             ForEach(appState.favorites) { item in sidebarLocationRow(item) }
             if appState.favorites.isEmpty && appState.pinnedFolderNotice == nil {
                 Button(action: chooseFavoriteFolder) {
-                    Label("Dodaj folder…", systemImage: "folder.badge.plus")
+                    Label("Add Folder…", systemImage: "folder.badge.plus")
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, FinderUI.sidebarRowInset)
                         .frame(maxWidth: .infinity, minHeight: FinderUI.sidebarRowHeight, alignment: .leading)
@@ -241,7 +241,7 @@ public struct SidebarView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = "Dodaj do ulubionych"
+        panel.prompt = String(localized: "Add to Favorites")
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor in appState.addBookmark(for: url) }
@@ -272,9 +272,9 @@ public struct SidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Pokaż pliki z tagiem: \(tagColor.displayName)")
+        .help("Show files with tag: \(tagColor.displayName)")
         .accessibilityLabel("Tag: \(tagColor.displayName)")
-        .accessibilityHint("Wyszukuje pliki z tym tagiem w całym indeksie")
+        .accessibilityHint("Searches the whole index for files with this tag")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -302,14 +302,14 @@ public struct SidebarView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { openFavorite(item.url) }
-        .help(isTrash ? "Otwórz Kosz w Finderze" : item.url.path)
+        .help(isTrash ? String(localized: "Open Trash in Finder") : item.url.path)
         .accessibilityLabel(item.title)
-        .accessibilityValue(isSelected ? "Bieżący folder: \(item.url.path)" : item.url.path)
-        .accessibilityHint(isTrash ? "Otwórz Kosz w Finderze. Menu kontekstowe pozwala zmienić kolejność lub usunąć z ulubionych." : "Otwiera folder. Menu kontekstowe pozwala zmienić kolejność lub usunąć z ulubionych. Przeciągnięcie plików przenosi je do folderu; Option kopiuje.")
+        .accessibilityValue(isSelected ? String(localized: "Current folder: \(item.url.path)") : item.url.path)
+        .accessibilityHint(isTrash ? String(localized: "Opens the Trash in Finder. The context menu lets you reorder or remove it from Favorites.") : String(localized: "Opens the folder. The context menu lets you reorder or remove it from Favorites. Dragging files moves them into the folder; Option copies."))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityAction(named: Text("Przesuń wyżej")) { appState.moveFavorite(item, by: -1) }
-        .accessibilityAction(named: Text("Przesuń niżej")) { appState.moveFavorite(item, by: 1) }
-        .accessibilityAction(named: Text("Usuń z ulubionych")) { appState.removeBookmark(item) }
+        .accessibilityAction(named: Text("Move Up")) { appState.moveFavorite(item, by: -1) }
+        .accessibilityAction(named: Text("Move Down")) { appState.moveFavorite(item, by: 1) }
+        .accessibilityAction(named: Text("Remove from Favorites")) { appState.removeBookmark(item) }
     }
 
     private func favoriteRowLabel(_ item: SidebarLocationItem, isSelected: Bool, isDropTarget: Bool) -> some View {
@@ -347,25 +347,25 @@ public struct SidebarView: View {
             Button {
                 appState.addNewTab(at: item.url)
             } label: {
-                Label("Otwórz w nowej karcie", systemImage: "plus.square.on.square")
+                Label("Open in New Tab", systemImage: "plus.square.on.square")
             }
         }
         Button {
             if isTrash { openFavorite(item.url) }
             else { NSWorkspace.shared.open(item.url) }
         } label: {
-            Label(isTrash ? "Otwórz Kosz w Finderze" : "Otwórz w Finderze", systemImage: isTrash ? "trash" : "folder")
+            Label(isTrash ? String(localized: "Open Trash in Finder") : String(localized: "Open in Finder"), systemImage: isTrash ? "trash" : "folder")
         }
         Button {
             FileOperationsManager.shared.copyPathString(item.url.path)
         } label: {
-            Label("Kopiuj ścieżkę", systemImage: "doc.on.doc")
+            Label("Copy Path", systemImage: "doc.on.doc")
         }
     }
 
     @ViewBuilder
     private func favoriteEditingMenu(_ item: SidebarLocationItem) -> some View {
-        Button("Zmień nazwę w ulubionych…", systemImage: "pencil") {
+        Button("Rename in Favorites…", systemImage: "pencil") {
             favoriteTitle = item.title
             renamingFavorite = item
         }
@@ -379,18 +379,18 @@ public struct SidebarView: View {
                 }
             }
         } label: {
-            Label("Zmień ikonę", systemImage: "paintbrush")
+            Label("Change Icon", systemImage: "paintbrush")
         }
         .disabled(appState.pinnedFolderNotice != nil)
-        Button("Przesuń wyżej", systemImage: "arrow.up") {
+        Button("Move Up", systemImage: "arrow.up") {
             appState.moveFavorite(item, by: -1)
         }
         .disabled(appState.pinnedFolderNotice != nil || appState.favorites.first?.id == item.id)
-        Button("Przesuń niżej", systemImage: "arrow.down") {
+        Button("Move Down", systemImage: "arrow.down") {
             appState.moveFavorite(item, by: 1)
         }
         .disabled(appState.pinnedFolderNotice != nil || appState.favorites.last?.id == item.id)
-        Button("Usuń z ulubionych", systemImage: "minus.circle") {
+        Button("Remove from Favorites", systemImage: "minus.circle") {
             appState.removeBookmark(item)
         }
         .disabled(appState.pinnedFolderNotice != nil)
@@ -452,10 +452,10 @@ public struct SidebarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("\(server.title) · zamontowane udziały: \(server.volumes.count)")
-            .accessibilityLabel("Serwer \(server.title), \(server.volumes.count) udziałów")
-            .accessibilityValue(expanded ? "Rozwinięty" : "Zwinięty")
-            .accessibilityHint("Pokaż lub ukryj zamontowane udziały tego serwera")
+            .help("\(server.title) · mounted shares: \(server.volumes.count)")
+            .accessibilityLabel("Server \(server.title), \(server.volumes.count) shares")
+            .accessibilityValue(expanded ? String(localized: "Expanded") : String(localized: "Collapsed"))
+            .accessibilityHint("Show or hide the mounted shares of this server")
             if expanded {
                 ForEach(server.volumes) { volume in volumeRow(volume) }
                     .padding(.leading, FinderUI.panelInset)
@@ -488,11 +488,11 @@ public struct SidebarView: View {
                 .buttonStyle(.plain)
                 .help(volume.url.path)
                 .accessibilityLabel(volume.name)
-                .accessibilityValue(isSelected ? "Bieżący folder: \(volume.url.path)" : volume.url.path)
+                .accessibilityValue(isSelected ? String(localized: "Current folder: \(volume.url.path)") : volume.url.path)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
 
                 if volume.isRemovable {
-                    sidebarActionButton(icon: "eject", label: "Wysuń wolumin \(volume.name)") {
+                    sidebarActionButton(icon: "eject", label: "Eject volume \(volume.name)") {
                         appState.ejectVolume(volume)
                     }
                     .disabled(appState.ejectingVolumePaths.contains(volume.url.path))
@@ -516,9 +516,9 @@ public struct SidebarView: View {
                     }
                     .frame(height: 4)
                     .accessibilityElement()
-                    .accessibilityLabel("Zajęte miejsce na \(volume.name)")
-                    .accessibilityValue("\(Int(usedFraction * 100)) procent")
-                    Text("\(FormatHelpers.formatBytes(freeBytes)) wolne")
+                    .accessibilityLabel("Used space on \(volume.name)")
+                    .accessibilityValue("\(Int(usedFraction * 100)) percent")
+                    Text("\(FormatHelpers.formatBytes(freeBytes)) free")
                         .font(FinderUI.captionFont)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -529,12 +529,12 @@ public struct SidebarView: View {
                 .padding(.trailing, FinderUI.sidebarRowInset)
                 .padding(.top, -2)
                 .padding(.bottom, 4)
-                .help("\(FormatHelpers.formatBytes(freeBytes)) wolne z \(FormatHelpers.formatBytes(totalBytes))")
+                .help("\(FormatHelpers.formatBytes(freeBytes)) free of \(FormatHelpers.formatBytes(totalBytes))")
             }
         }
     }
 
-    private func sidebarSectionHeader(_ text: String) -> some View {
+    private func sidebarSectionHeader(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(FinderUI.captionFont.weight(.semibold))
             .foregroundStyle(.secondary)
@@ -543,7 +543,7 @@ public struct SidebarView: View {
             .accessibilityAddTraits(.isHeader)
     }
 
-    private func sidebarActionButton(icon: String, label: String, action: @escaping () -> Void) -> some View {
+    private func sidebarActionButton(icon: String, label: LocalizedStringKey, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .frame(width: 24, height: 24)
@@ -571,13 +571,13 @@ public struct SidebarView: View {
 
     /// Icons a user can pick for any favorite; none of them is reserved for a specific folder.
     static let favoriteIconChoices: [(title: String, symbol: String)] = [
-        ("Folder", "folder"), ("Dom", "house"), ("Biurko", "desktopcomputer"),
-        ("Dokumenty", "doc"), ("Pobrane", "arrow.down.circle"), ("Chmura", "icloud"),
-        ("Projekty", "hammer"), ("Kod", "chevron.left.forwardslash.chevron.right"), ("Terminal", "terminal"),
-        ("Obrazy", "photo"), ("Muzyka", "music.note"), ("Filmy", "film"),
-        ("Archiwum", "archivebox"), ("Praca", "briefcase"), ("Książki", "book"),
-        ("Gwiazdka", "star"), ("Serce", "heart"), ("Flaga", "flag"),
-        ("Dysk", "externaldrive"), ("Sieć", "network"), ("Aplikacje", "app"), ("Kosz", "trash")
+        (String(localized: "Folder"), "folder"), (String(localized: "Home"), "house"), (String(localized: "Desktop"), "desktopcomputer"),
+        (String(localized: "Documents"), "doc"), (String(localized: "Downloads"), "arrow.down.circle"), (String(localized: "Cloud"), "icloud"),
+        (String(localized: "Projects"), "hammer"), (String(localized: "Code"), "chevron.left.forwardslash.chevron.right"), (String(localized: "Terminal"), "terminal"),
+        (String(localized: "Images"), "photo"), (String(localized: "Music"), "music.note"), (String(localized: "Movies"), "film"),
+        (String(localized: "Archive"), "archivebox"), (String(localized: "Work"), "briefcase"), (String(localized: "Books"), "book"),
+        (String(localized: "Star"), "star"), (String(localized: "Heart"), "heart"), (String(localized: "Flag"), "flag"),
+        (String(localized: "Disk"), "externaldrive"), (String(localized: "Network"), "network"), (String(localized: "Applications"), "app"), (String(localized: "Trash"), "trash")
     ]
 
     private func locationIcon(for item: SidebarLocationItem) -> String {
@@ -604,7 +604,7 @@ public struct SidebarView: View {
         let outcome = SystemTrashNavigation.open(url, systemTrashURL: appState.systemTrashURL,
             openInFinder: { NSWorkspace.shared.open($0) }, navigate: { navigate(to: $0) })
         if outcome == .failedToOpenFinder {
-            favoriteOpenNotice = "Nie udało się otworzyć Kosza w Finderze. Otwórz go z Docka. Bieżący folder nie został zmieniony."
+            favoriteOpenNotice = String(localized: "Could not open the Trash in Finder. Open it from the Dock. The current folder was not changed.")
         }
     }
 
@@ -646,14 +646,14 @@ public struct SidebarView: View {
     private var indexFooter: some View {
         VStack(alignment: .leading, spacing: FinderUI.sidebarRowGap) {
             HStack(spacing: FinderUI.sidebarRowGap) {
-                Text("Indeks plików")
+                Text("File Index")
                     .font(FinderUI.detailFont.weight(.semibold))
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                sidebarActionButton(icon: "gearshape", label: "Ustawienia wyszukiwania i aplikacji") {
+                sidebarActionButton(icon: "gearshape", label: "Search and app settings") {
                     appState.showSettingsSheet = true
                 }
-                sidebarActionButton(icon: "arrow.clockwise", label: "Przebuduj indeks wyszukiwania") {
+                sidebarActionButton(icon: "arrow.clockwise", label: "Rebuild search index") {
                     FSearchIndex.shared.startIndexing()
                 }
                 .disabled(appState.isIndexing)
@@ -662,21 +662,21 @@ public struct SidebarView: View {
                 HStack(spacing: FinderUI.rowSpacing) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Indeksowanie…")
+                    Text("Indexing…")
                         .font(FinderUI.detailFont)
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Indeksowanie plików")
+                .accessibilityLabel("Indexing files")
             }
-            Text("\(appState.indexedFileCount.formatted()) plików w indeksie")
+            Text("\(appState.indexedFileCount.formatted()) files in index")
                 .font(FinderUI.detailFont)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .help(appState.indexBuildDurationMs > 0
-                    ? "Ostatnie indeksowanie: \(FormatHelpers.formatLatency(appState.indexBuildDurationMs))"
-                    : "Liczba plików dostępnych do wyszukiwania")
+                    ? String(localized: "Last indexing: \(FormatHelpers.formatLatency(appState.indexBuildDurationMs))")
+                    : String(localized: "Number of files available for search"))
         }
         .padding(.leading, FinderUI.sidebarInset + FinderUI.sidebarRowInset)
         .padding(.trailing, FinderUI.sidebarInset)

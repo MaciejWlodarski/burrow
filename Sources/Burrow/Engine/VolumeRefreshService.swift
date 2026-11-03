@@ -16,17 +16,17 @@ enum VolumeRefreshResult: Sendable {
 public struct VolumeInventoryState {
     public private(set) var items: [VolumeInfoItem] = []
     public private(set) var hasSnapshot = false
-    public private(set) var notice: String? = "Wczytywanie woluminów…"
+    public private(set) var notice: String? = String(localized: "Loading volumes…")
     public private(set) var canShowEmpty = false
     mutating func apply(_ result: VolumeRefreshResult) {
         switch result {
         case .success(let snapshot):
             items = snapshot.items; hasSnapshot = true
             canShowEmpty = items.isEmpty
-            notice = snapshot.partial ? "Część informacji o woluminach jest niedostępna." : nil
+            notice = snapshot.partial ? String(localized: "Some volume information is unavailable.") : nil
         case .failure:
             canShowEmpty = false
-            notice = "Nie można odświeżyć woluminów. Ostatnie dane mogą być nieaktualne."
+            notice = String(localized: "Could not refresh volumes. The last data may be out of date.")
         }
     }
 }

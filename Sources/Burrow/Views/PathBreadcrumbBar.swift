@@ -57,7 +57,7 @@ public struct PathBreadcrumbBar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 pathEditor
-                pathActionButton(icon: "doc.on.doc", label: "Kopiuj ścieżkę bieżącego folderu", help: pane.currentURL.path) {
+                pathActionButton(icon: "doc.on.doc", label: String(localized: "Copy Current Folder Path"), help: pane.currentURL.path) {
                     activatePane()
                     FileOperationsManager.shared.copyPathString(pane.currentURL.path)
                 }
@@ -131,11 +131,11 @@ public struct PathBreadcrumbBar: View {
                     cancel: cancelEditing
                 )
                 .frame(minWidth: 40, maxWidth: .infinity, minHeight: 24)
-                .help("Return otwiera folder, Escape anuluje. Obsługuje ~ i adresy file:///.")
+                .help("Return opens the folder, Escape cancels. Supports ~ and file:/// addresses.")
 
-                pathActionButton(icon: "arrow.right", label: "Otwórz wpisany folder", help: "Otwórz folder (Return)", action: submitPath)
+                pathActionButton(icon: "arrow.right", label: String(localized: "Open Entered Folder"), help: String(localized: "Open Folder (Return)"), action: submitPath)
                     .accessibilityIdentifier("folder.address.go")
-                pathActionButton(icon: "xmark", label: "Anuluj edycję ścieżki", help: "Anuluj (Escape)", action: cancelEditing)
+                pathActionButton(icon: "xmark", label: String(localized: "Cancel Path Editing"), help: String(localized: "Cancel (Escape)"), action: cancelEditing)
                     .accessibilityIdentifier("folder.address.cancel")
             } else {
                 breadcrumbs
@@ -168,9 +168,9 @@ public struct PathBreadcrumbBar: View {
                 .frame(height: 28)
                 .contentShape(Rectangle())
                 .onTapGesture { beginEditingFromBreadcrumbs() }
-                .help("Kliknij, aby edytować lub skopiować ścieżkę (⌘L)")
+                .help("Click to edit or copy the path (⌘L)")
                 .accessibilityElement()
-                .accessibilityLabel("Edytuj ścieżkę")
+                .accessibilityLabel("Edit Path")
                 .accessibilityValue(pane.currentURL.path)
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { beginEditingFromBreadcrumbs() }
@@ -195,8 +195,8 @@ public struct PathBreadcrumbBar: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .help("Ukryte foldery nadrzędne")
-                .accessibilityLabel("Ukryte foldery nadrzędne")
+                .help("Hidden parent folders")
+                .accessibilityLabel("Hidden parent folders")
             }
             ForEach(Array(segments.enumerated()).dropFirst(start), id: \.element.id) { index, segment in
                 let isCurrent = index == segments.count - 1
@@ -220,7 +220,7 @@ public struct PathBreadcrumbBar: View {
                 .help(segment.url.path)
                 .contextMenu { folderContextActions(for: segment.url) }
                 .accessibilityLabel(segment.name)
-                .accessibilityHint(isCurrent ? "Odśwież bieżący folder" : "Przejdź do folderu")
+                .accessibilityHint(isCurrent ? String(localized: "Refresh current folder") : String(localized: "Go to folder"))
 
                 BreadcrumbSubfolderButton(
                     url: segment.url,
@@ -229,7 +229,7 @@ public struct PathBreadcrumbBar: View {
                     open: { navigate(to: $0) }
                 )
                 .frame(width: 16, height: 22)
-                .help("Podfoldery: \(segment.name)")
+                .help("Subfolders: \(segment.name)")
             }
         }
     }
@@ -243,7 +243,7 @@ public struct PathBreadcrumbBar: View {
 
     private var folderActionsMenu: some View {
         Menu {
-            Section("Foldery nadrzędne") {
+            Section("Parent Folders") {
                 ForEach(Array(segments.dropLast().reversed())) { segment in
                     Button(segment.isRoot ? segment.name : segment.url.path) { navigate(to: segment.url) }
                 }
@@ -255,7 +255,7 @@ public struct PathBreadcrumbBar: View {
                 Button {
                     FileOperationsManager.shared.copyPaths(pane.selectedItems)
                 } label: {
-                    Label("Kopiuj ścieżki zaznaczonych elementów", systemImage: "doc.on.doc")
+                    Label("Copy Paths of Selected Items", systemImage: "doc.on.doc")
                 }
             }
 
@@ -265,13 +265,13 @@ public struct PathBreadcrumbBar: View {
                 activatePane()
                 appState.showNewFileSheet = true
             } label: {
-                Label("Nowy plik…", systemImage: "doc.badge.plus")
+                Label("New File…", systemImage: "doc.badge.plus")
             }
             Button {
                 activatePane()
                 appState.showNewFolderSheet = true
             } label: {
-                Label("Nowy folder…", systemImage: "folder.badge.plus")
+                Label("New Folder…", systemImage: "folder.badge.plus")
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -280,8 +280,8 @@ public struct PathBreadcrumbBar: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .help("Działania dla bieżącego folderu")
-        .accessibilityLabel("Działania dla bieżącego folderu")
+        .help("Actions for the current folder")
+        .accessibilityLabel("Actions for the current folder")
     }
 
     @ViewBuilder
@@ -289,17 +289,17 @@ public struct PathBreadcrumbBar: View {
         Button {
             appState.addNewTab(at: url)
         } label: {
-            Label("Otwórz w nowej karcie", systemImage: "plus.square.on.square")
+            Label("Open in New Tab", systemImage: "plus.square.on.square")
         }
         Button {
             NSWorkspace.shared.open(url)
         } label: {
-            Label("Otwórz w Finderze", systemImage: "folder")
+            Label("Open in Finder", systemImage: "folder")
         }
         Button {
             FileOperationsManager.shared.copyPathString(url.path)
         } label: {
-            Label("Kopiuj ścieżkę folderu", systemImage: "doc.on.doc")
+            Label("Copy Folder Path", systemImage: "doc.on.doc")
         }
 
         Divider()
@@ -307,17 +307,17 @@ public struct PathBreadcrumbBar: View {
         Button {
             FileOperationsManager.shared.openInTerminal(at: url)
         } label: {
-            Label("Otwórz w Terminalu", systemImage: "terminal")
+            Label("Open in Terminal", systemImage: "terminal")
         }
         Button {
             FileOperationsManager.shared.openInCodeEditor(at: url)
         } label: {
-            Label("Otwórz w edytorze kodu", systemImage: "chevron.left.forwardslash.chevron.right")
+            Label("Open in Code Editor", systemImage: "chevron.left.forwardslash.chevron.right")
         }
         Button {
             appState.addBookmark(for: url)
         } label: {
-            Label("Dodaj folder do Ulubionych", systemImage: "star")
+            Label("Add Folder to Favorites", systemImage: "star")
         }
         .disabled(appState.customBookmarks.contains { $0.url.path == url.path })
     }
@@ -355,8 +355,8 @@ public struct PathBreadcrumbBar: View {
             guard pane.navigate(to: target, clearSearch: true) else {
                 // The pane banner carries the full diagnostic; don't repeat it here.
                 pathValidationMessage = pane.navigationDiagnostic == nil
-                    ? "Nie udało się otworzyć folderu."
-                    : "Nie udało się otworzyć tej ścieżki. Szczegóły są w komunikacie poniżej."
+                    ? String(localized: "Couldn’t open the folder.")
+                    : String(localized: "Couldn’t open this path. See the message below for details.")
                 return
             }
             cancelEditing()
@@ -430,7 +430,7 @@ private struct BreadcrumbSubfolderButton: NSViewRepresentable {
             setChevron(open: false)
             target = self
             action = #selector(showMenu)
-            setAccessibilityLabel("Podfoldery")
+            setAccessibilityLabel(String(localized: "Subfolders"))
         }
 
         required init?(coder: NSCoder) { nil }
@@ -475,12 +475,12 @@ private struct BreadcrumbSubfolderButton: NSViewRepresentable {
                 menu.addItem(item)
             }
             if folders.count > Self.itemLimit {
-                let more = NSMenuItem(title: "… i \(folders.count - Self.itemLimit) więcej", action: nil, keyEquivalent: "")
+                let more = NSMenuItem(title: String(localized: "… and \(folders.count - Self.itemLimit) more"), action: nil, keyEquivalent: "")
                 more.isEnabled = false
                 menu.addItem(more)
             }
             if folders.isEmpty {
-                let empty = NSMenuItem(title: "Brak podfolderów", action: nil, keyEquivalent: "")
+                let empty = NSMenuItem(title: String(localized: "No Subfolders"), action: nil, keyEquivalent: "")
                 empty.isEnabled = false
                 menu.addItem(empty)
             }

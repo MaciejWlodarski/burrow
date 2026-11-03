@@ -39,7 +39,7 @@ enum DefaultFileViewer {
     static func restoreFinder(completion: @escaping @MainActor (String?) -> Void) {
         setFileViewer(nil)
         guard let finderURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: finderBundleID) else {
-            Task { @MainActor in completion("Nie znaleziono aplikacji Finder.") }
+            Task { @MainActor in completion(String(localized: "The Finder application was not found.")) }
             return
         }
         setFolderHandler(appURL: finderURL, completion: completion)
@@ -55,7 +55,7 @@ enum DefaultFileViewer {
         NSWorkspace.shared.setDefaultApplication(at: appURL, toOpen: .folder) { error in
             Task { @MainActor in
                 if let error {
-                    completion("Nie zmieniono domyślnej aplikacji dla folderów: \(error.localizedDescription)")
+                    completion(String(localized: "Could not change the default application for folders: \(error.localizedDescription)"))
                 } else {
                     completion(nil)
                 }

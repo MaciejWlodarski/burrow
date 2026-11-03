@@ -37,8 +37,8 @@ public final class FSearchIndex: @unchecked Sendable {
         stateLock.lock(); defer { stateLock.unlock() }
         guard preferencesNeedRepair else { return nil }
         return configurationBlocked
-            ? "Nie można odczytać ustawień indeksu. Automatyczne indeksowanie i zapis są wstrzymane. Napraw jawnie ustawienia poniżej; oryginał zostanie zachowany."
-            : "Nie można odczytać zapisanych ustawień indeksu. Zachowano bieżącą konfigurację. Napraw jawnie ustawienia poniżej; oryginał zostanie zachowany."
+            ? String(localized: "Index settings cannot be read. Automatic indexing and saving are paused. Repair the settings below explicitly; the original will be preserved.")
+            : String(localized: "The saved index settings cannot be read. The current configuration was kept. Repair the settings below explicitly; the original will be preserved.")
     }
     public convenience init(preferences: IndexingPreferences, defaultConfiguration: IndexingConfiguration? = nil,
                             enableMonitoring: Bool = true) {
@@ -706,7 +706,7 @@ public final class FSearchIndex: @unchecked Sendable {
                 totalIndexedCount: indexedCount,
                 backendName: "fsearch-native",
                 isPartial: isCancelled(),
-                diagnostic: parsed.validationError ?? (isCancelled() ? "Search cancelled." : nil)
+                diagnostic: parsed.validationError ?? (isCancelled() ? "Search canceled." : nil)
             )
         }
 
@@ -902,7 +902,7 @@ public final class FSearchIndex: @unchecked Sendable {
             totalIndexedCount: indexedCount,
             backendName: loadedFromMMapCache ? "fsearch-mmap" : "fsearch-native",
             isPartial: partial || isCancelled(),
-            diagnostic: isCancelled() ? "Search cancelled." : (diagnostics.isEmpty ? nil : diagnostics.joined(separator: " "))
+            diagnostic: isCancelled() ? "Search canceled." : (diagnostics.isEmpty ? nil : diagnostics.joined(separator: " "))
         )
     }
 

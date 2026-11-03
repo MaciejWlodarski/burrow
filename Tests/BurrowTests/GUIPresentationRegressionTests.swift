@@ -23,7 +23,7 @@ struct GUIPresentationRegressionTests {
         try expect(analysis.totalCount == 3)
         try expect(analysis.selectedCount == 3)
         try expect(analysis.isAnalysis)
-        try expect(analysis.countDescription == "Zaznaczono 3 z 3")
+        try expect(analysis.countDescription == "3 of 3 selected")
         // Clearing the visible analysis must clear the status, even while the
         // ordinary directory snapshot still exists behind it.
         pane.beginAnalysisProjection(rootPath: root.path, generation: UUID())
@@ -33,7 +33,7 @@ struct GUIPresentationRegressionTests {
         try expect(!FinderSelectionSummary(pane: pane).isAnalysis)
         try expect(FinderSelectionSummary(pane: pane).totalCount == pane.displayedItems.count)
         pane.isSearching = true
-        try expect(FinderSelectionSummary(pane: pane).countDescription == "Wyszukiwanie…")
+        try expect(FinderSelectionSummary(pane: pane).countDescription == "Searching…")
         pane.isSearching = false
         print("PASS status summary follows production analysis/list selection and pending search")
         try testPaneActionRouting(root: root, files: files)

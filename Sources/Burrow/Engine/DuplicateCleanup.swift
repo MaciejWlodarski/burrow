@@ -59,16 +59,16 @@ struct DuplicateCleanupResult: @unchecked Sendable {
     var unattempted: Int { total - attempted }
     var verifiedRecoveryCount: Int { undoActions.count - recoveryIdentityMissing }
     var summary: String {
-        var parts = ["Duplikaty: potwierdzono przeniesienie do Kosza \(confirmedMoved) z \(total)."]
+        var parts = [String(localized: "Duplicates: confirmed \(confirmedMoved) of \(total) moved to the Trash.")]
         switch stop {
         case .complete: break
-        case .cancelled: parts.append("Anulowano dalsze kroki; niewykonane: \(unattempted).")
-        case .invalidated(let reason): parts.append("Przerwano: \(reason). Niewykonane: \(unattempted).")
+        case .cancelled: parts.append(String(localized: "Further steps canceled; not performed: \(unattempted)."))
+        case .invalidated(let reason): parts.append(String(localized: "Stopped: \(reason). Not performed: \(unattempted)."))
         }
-        if unconfirmed > 0 { parts.append("Niepotwierdzony wynik operacji: \(unconfirmed). Sprawdź folder i Kosz; nie ponowiono automatycznie.") }
-        if movedWithoutURL > 0 { parts.append("Brak ścieżki przywracania dla \(movedWithoutURL) przeniesionych plików; ⌘Z ich nie przywróci.") }
-        if recoveryIdentityMissing > 0 { parts.append("Niepotwierdzona tożsamość \(recoveryIdentityMissing) rekordów przywracania; zapisano je jako oczekujące, ale nie można ich teraz wykonać.") }
-        if verifiedRecoveryCount > 0 { parts.append("⌘Z: zapisano \(verifiedRecoveryCount) sprawdzonych rekordów przywracania w jednej operacji.") }
+        if unconfirmed > 0 { parts.append(String(localized: "Unconfirmed operation result: \(unconfirmed). Check the folder and the Trash; not retried automatically.")) }
+        if movedWithoutURL > 0 { parts.append(String(localized: "No restore path for \(movedWithoutURL) moved files; ⌘Z will not restore them.")) }
+        if recoveryIdentityMissing > 0 { parts.append(String(localized: "Unconfirmed identity for \(recoveryIdentityMissing) restore records; saved as pending, but they cannot be performed now.")) }
+        if verifiedRecoveryCount > 0 { parts.append(String(localized: "⌘Z: saved \(verifiedRecoveryCount) verified restore records in a single operation.")) }
         if !errors.isEmpty { parts.append(errors.joined(separator: "; ")) }
         return parts.joined(separator: " ")
     }
@@ -138,7 +138,7 @@ enum DuplicateCleanupExecutor {
         if cancellation.isCancelled { stop = .cancelled; return result() }
         let selected: [Candidate]
         do { selected = try candidates(plan) }
-        catch { stop = .invalidated("Plan duplikatów jest nieaktualny lub zawiera nakładające się pliki"); return result() }
+        catch { stop = .invalidated(String(localized: "The duplicate plan is out of date or contains overlapping files")); return result() }
         for candidate in selected {
             if cancellation.isCancelled { stop = .cancelled; break }
             progress(DuplicateCleanupProgress(currentFile: candidate.item.name, attempted: attempted, total: total))

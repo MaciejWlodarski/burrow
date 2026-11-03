@@ -76,7 +76,7 @@ public struct VolumeSidebarGroups: Sendable {
         let servers = groups.map { key, values in
             let shares = values.sorted { $0.id < $1.id }
             let server = shares.first?.networkServer
-            return NetworkVolumeGroup(id: key, title: server?.title ?? "Serwer nieznany",
+            return NetworkVolumeGroup(id: key, title: server?.title ?? String(localized: "Unknown Server"),
                                       volumes: shares, isServerKnown: server != nil)
         }.sorted { $0.id < $1.id }
         return VolumeSidebarGroups(localVolumes: local.sorted { $0.id < $1.id }, networkServers: servers)

@@ -17,13 +17,13 @@ public enum FinderTagColor: String, CaseIterable, Identifiable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .red: return "Czerwony"
-        case .orange: return "Pomarańczowy"
-        case .yellow: return "Żółty"
-        case .green: return "Zielony"
-        case .blue: return "Niebieski"
-        case .purple: return "Fioletowy"
-        case .gray: return "Szary"
+        case .red: return String(localized: "Red")
+        case .orange: return String(localized: "Orange")
+        case .yellow: return String(localized: "Yellow")
+        case .green: return String(localized: "Green")
+        case .blue: return String(localized: "Blue")
+        case .purple: return String(localized: "Purple")
+        case .gray: return String(localized: "Gray")
         }
     }
 
@@ -55,8 +55,8 @@ public enum FinderTagColor: String, CaseIterable, Identifiable, Sendable {
         let lower = rawTagName.lowercased()
         switch lower {
         case "red", "czerwony": return .red
-        case "orange", "pomarańczowy", "pomaranczowy": return .orange
-        case "yellow", "żółty", "zolty": return .yellow
+        case "orange", "pomarańczowy", "pomaranczowy": return .orange // l10n-ignore: Polish Finder tag names
+        case "yellow", "żółty", "zolty": return .yellow // l10n-ignore
         case "green", "zielony": return .green
         case "blue", "niebieski": return .blue
         case "purple", "fioletowy": return .purple
@@ -106,6 +106,20 @@ public enum FileKindCategory: String, CaseIterable, Sendable {
     case archive = "Archive"
     case executable = "Executable"
     case other = "File"
+
+    public var displayName: String {
+        switch self {
+        case .folder: return String(localized: "Folder")
+        case .code: return String(localized: "Code")
+        case .document: return String(localized: "Document")
+        case .image: return String(localized: "Image")
+        case .audio: return String(localized: "Audio")
+        case .video: return String(localized: "Video")
+        case .archive: return String(localized: "Archive")
+        case .executable: return String(localized: "Executable")
+        case .other: return String(localized: "File")
+        }
+    }
 
     public var symbolName: String {
         switch self {
@@ -275,21 +289,21 @@ public struct FileItem: Identifiable, Hashable, Sendable {
     }
 
     public var kindDisplayString: String {
-        if isSymlink { return "Dowiązanie" }
+        if isSymlink { return String(localized: "Symlink") }
         if isDirectory {
-            return fileExtension.lowercased() == "app" ? "Aplikacja" : "Folder"
+            return fileExtension.lowercased() == "app" ? String(localized: "Application") : String(localized: "Folder")
         }
         let category: String
         switch kindCategory {
-        case .folder: category = "Folder"
-        case .code: category = "Kod źródłowy"
-        case .document: category = "Dokument"
-        case .image: category = "Obraz"
-        case .audio: category = "Dźwięk"
-        case .video: category = "Wideo"
-        case .archive: category = "Archiwum"
-        case .executable: category = "Plik wykonywalny"
-        case .other: category = "Plik"
+        case .folder: category = String(localized: "Folder")
+        case .code: category = String(localized: "Source Code")
+        case .document: category = String(localized: "Document")
+        case .image: category = String(localized: "Image")
+        case .audio: category = String(localized: "Audio")
+        case .video: category = String(localized: "Video")
+        case .archive: category = String(localized: "Archive")
+        case .executable: category = String(localized: "Executable")
+        case .other: category = String(localized: "File")
         }
         return fileExtension.isEmpty ? category : "\(category) \(fileExtension.uppercased())"
     }

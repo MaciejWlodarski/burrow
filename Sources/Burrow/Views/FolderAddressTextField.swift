@@ -30,8 +30,8 @@ struct FolderAddressTextField: NSViewRepresentable {
         field.lineBreakMode = .byTruncatingMiddle
         field.cell?.isScrollable = true
         field.maximumNumberOfLines = 1
-        field.placeholderString = "Ścieżka folderu"
-        field.setAccessibilityLabel("Ścieżka folderu")
+        field.placeholderString = String(localized: "Folder path")
+        field.setAccessibilityLabel(String(localized: "Folder path"))
         field.setAccessibilityIdentifier("folder.address")
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         field.delegate = context.coordinator

@@ -267,18 +267,18 @@ struct AnalysisWorkLifecycleRegressionTests {
         let service = AnalysisWorkService(maxWorkers: 1, maxPending: 1)
         let gate = AnalysisWorkerGate(), deliveries = Deliveries()
         defer { gate.releaseAll() }
-        let token = AnalysisRequestToken(rootPath: "/analysis-test/pre-cancelled")
+        let token = AnalysisRequestToken(rootPath: "/analysis-test/pre-canceled")
         token.cancel()
-        let request = service.submit(consumer: .init(rawValue: "cancelled"), token: token,
+        let request = service.submit(consumer: .init(rawValue: "canceled"), token: token,
             work: { gate.perform("never-io", token: token) },
             completion: { deliveries.values.append($0) })
         try expect(request.state == .cancelled)
         try expect(service.debugSnapshot.running == 0 && service.debugSnapshot.pending == 0)
         submit("sentinel", consumer: "sentinel", service: service, gate: gate, deliveries: deliveries)
-        try await until("sentinel after pre-cancelled request") { gate.names.count == 1 }
+        try await until("sentinel after pre-canceled request") { gate.names.count == 1 }
         try expect(gate.names == ["sentinel"])
         gate.release(0)
-        try await until("pre-cancelled test drained") { service.debugSnapshot.running == 0 }
+        try await until("pre-canceled test drained") { service.debugSnapshot.running == 0 }
         try expect(deliveries.values == ["sentinel"] && gate.names == ["sentinel"])
     }
 

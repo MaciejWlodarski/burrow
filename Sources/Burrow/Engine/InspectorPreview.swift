@@ -79,7 +79,7 @@ final class InspectorPreviewService: @unchecked Sendable {
         if launchNow { launch(job) }
         else if rejected {
             request.finish()
-            deliver(job, .unavailable("Podgląd jest zajęty. Użyj przycisku „Ponów podgląd” lub Quick Look."))
+            deliver(job, .unavailable(String(localized: "Preview is busy. Use the “Retry Preview” button or Quick Look.")))
         }
         return request
     }
@@ -94,7 +94,7 @@ final class InspectorPreviewService: @unchecked Sendable {
 
     private func launch(_ job: Job) {
         queue.async { [self] in
-            var result: InspectorPreviewContent = .unavailable("Anulowano podgląd.")
+            var result: InspectorPreviewContent = .unavailable(String(localized: "Preview canceled."))
             if !job.request.isCancelled {
                 do { result = try prepare(job.input, job.request) }
                 catch { result = .unavailable(error.localizedDescription) }
@@ -127,12 +127,12 @@ final class InspectorPreviewService: @unchecked Sendable {
         try check(request)
         guard limits.imageBytes > 0, limits.originalPixels > 0,
               limits.thumbnailDimension > 0, limits.textBytes > 0 else {
-            return .unavailable("Nieprawidłowy limit podglądu.")
+            return .unavailable(String(localized: "Invalid preview limit."))
         }
         var entry = stat()
         guard input.url.path.withCString({ lstat($0, &entry) }) == 0,
               entry.st_mode & S_IFMT == S_IFREG else {
-            return .unavailable("Szybki podgląd obsługuje tylko zwykłe pliki, nie dowiązania ani urządzenia.")
+            return .unavailable(String(localized: "Quick preview supports only regular files, not symbolic links or devices."))
         }
         try hooks.beforeOpen?()
         try check(request)
@@ -144,12 +144,12 @@ final class InspectorPreviewService: @unchecked Sendable {
         guard fstat(fd, &initial) == 0, initial.st_mode & S_IFMT == S_IFREG,
               initial.st_dev == entry.st_dev, initial.st_ino == entry.st_ino,
               initial.st_gen == entry.st_gen, initial.st_size >= 0 else {
-            return .unavailable("Plik zmienił się przed odczytem podglądu.")
+            return .unavailable(String(localized: "The file changed before the preview was read."))
         }
         try check(request)
-        if initial.st_size == 0 { return .unavailable("Plik jest pusty.") }
+        if initial.st_size == 0 { return .unavailable(String(localized: "The file is empty.")) }
         if input.isImage && initial.st_size > Int64(limits.imageBytes) {
-            return .unavailable("Obraz przekracza limit szybkiego podglądu (32 MiB). Użyj Quick Look.")
+            return .unavailable(String(localized: "The image exceeds the quick preview limit (32 MiB). Use Quick Look."))
         }
         let byteCount = input.isImage ? Int(initial.st_size) : Int(min(initial.st_size, Int64(limits.textBytes)))
         var data = Data()
@@ -157,7 +157,7 @@ final class InspectorPreviewService: @unchecked Sendable {
         while data.count < byteCount {
             try check(request)
             guard let chunk = try handle.read(upToCount: min(256 * 1024, byteCount - data.count)), !chunk.isEmpty else {
-                return .unavailable("Plik zmienił się podczas odczytu podglądu.")
+                return .unavailable(String(localized: "The file changed while the preview was being read."))
             }
             data.append(chunk)
         }
@@ -170,11 +170,11 @@ final class InspectorPreviewService: @unchecked Sendable {
                   let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
                   let w = properties[kCGImagePropertyPixelWidth] as? NSNumber,
                   let h = properties[kCGImagePropertyPixelHeight] as? NSNumber else {
-                return .unavailable("Nie można odczytać obrazu. Użyj Quick Look.")
+                return .unavailable(String(localized: "Can’t read the image. Use Quick Look."))
             }
             let width = w.intValue, height = h.intValue
             guard width > 0, height > 0, width <= limits.originalPixels / height else {
-                return .unavailable("Obraz przekracza limit 40 megapikseli szybkiego podglądu. Użyj Quick Look.")
+                return .unavailable(String(localized: "The image exceeds the quick preview limit of 40 megapixels. Use Quick Look."))
             }
             try check(request)
             let options: [CFString: Any] = [
@@ -185,11 +185,11 @@ final class InspectorPreviewService: @unchecked Sendable {
             ]
             guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary),
                   image.width <= limits.thumbnailDimension, image.height <= limits.thumbnailDimension else {
-                return .unavailable("Nie udało się przygotować miniatury obrazu.")
+                return .unavailable(String(localized: "Couldn’t prepare an image thumbnail."))
             }
             result = .image(image, width: width, height: height)
         } else if data.prefix(512).contains(0) {
-            result = .unavailable("Podgląd treści binarnej jest niedostępny. Użyj Quick Look.")
+            result = .unavailable(String(localized: "Binary content preview isn’t available. Use Quick Look."))
         } else {
             let lines = String(decoding: data, as: UTF8.self).components(separatedBy: .newlines)
             // A target beyond the bounded prefix falls back to the file head instead of an empty preview.
@@ -209,7 +209,7 @@ final class InspectorPreviewService: @unchecked Sendable {
               input.url.path.withCString({ lstat($0, &pathEntry) }) == 0,
               pathEntry.st_dev == initial.st_dev, pathEntry.st_ino == initial.st_ino,
               pathEntry.st_gen == initial.st_gen else {
-            return .unavailable("Plik zmienił się podczas przygotowywania podglądu. Użyj przycisku „Ponów podgląd”.")
+            return .unavailable(String(localized: "The file changed while the preview was being prepared. Use the “Retry Preview” button."))
         }
         return result
     }

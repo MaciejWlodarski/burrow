@@ -98,7 +98,7 @@ public struct FilePaneView: View {
                         .padding(.top, 2)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
-                        Text(pane.navigationFailureIsPermissionDenied ? "Brak dostępu do folderu" : "Nie można otworzyć folderu")
+                        Text(pane.navigationFailureIsPermissionDenied ? String(localized: "No access to folder") : String(localized: "Can't open folder"))
                             .font(FinderUI.bodyFont.weight(.semibold))
                         ScrollView(.vertical) {
                             Text(diagnostic)
@@ -109,7 +109,7 @@ public struct FilePaneView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .frame(maxHeight: 96)
-                        .accessibilityLabel("Szczegóły błędu otwierania folderu")
+                        .accessibilityLabel("Folder error details")
                         ViewThatFits(in: .horizontal) {
                             HStack(spacing: FinderUI.rowSpacing) {
                                 navigationFailureButtons(failureID: failureID)
@@ -132,13 +132,13 @@ public struct FilePaneView: View {
             if let diagnostic = pane.searchDiagnostic {
                 searchNotice(diagnostic)
             } else if pane.searchIsPartial {
-                searchNotice("Wyniki częściowe: nie przeszukano wszystkich plików.")
+                searchNotice(String(localized: "Partial results: not all files were searched."))
             }
 
             if pane.isSearching && !pane.displayedItems.isEmpty {
                 HStack(spacing: FinderUI.rowSpacing) {
                     ProgressView().controlSize(.small)
-                    Text("Aktualizowanie wyników…")
+                    Text("Updating results…")
                         .font(FinderUI.captionFont)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -237,7 +237,7 @@ public struct FilePaneView: View {
         VStack(spacing: FinderUI.chromeInset) {
             Image(systemName: "pause.circle").font(.largeTitle).accessibilityHidden(true)
             VStack(spacing: FinderUI.compactSpacing) {
-                Text("Zapisany widok jest wstrzymany").font(FinderUI.titleFont)
+                Text("Saved view is paused").font(FinderUI.titleFont)
                 Text(pane.currentURL.path).font(FinderUI.detailFont).foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .lineLimit(3).truncationMode(.middle).help(pane.currentURL.path)
@@ -245,24 +245,24 @@ public struct FilePaneView: View {
             if case .unavailable(let reason) = pane.sessionAvailability {
                 Text(reason).font(FinderUI.detailFont).foregroundStyle(.secondary)
             } else {
-                Text("Folder nie został jeszcze odczytany. Wznowienie otworzy tę lokalizację i uruchomi zapisane wyszukiwanie lub analizę, jeśli były aktywne.")
+                Text("The folder hasn't been read yet. Resuming will open this location and restart the saved search or analysis if they were active.")
                     .font(FinderUI.detailFont).foregroundStyle(.secondary)
             }
             if !pane.searchQuery.isEmpty {
-                Text("Wyszukiwanie: \(pane.searchQuery)").font(FinderUI.detailFont).lineLimit(3)
+                Text("Search: \(pane.searchQuery)").font(FinderUI.detailFont).lineLimit(3)
             }
             if pane.sessionAvailability == .loading {
-                ProgressView("Otwieranie zapisanego widoku…")
-                Button("Anuluj") { pane.cancelSessionRestoration() }
+                ProgressView("Opening saved view…")
+                Button("Cancel") { pane.cancelSessionRestoration() }
             } else {
-                Button("Wznów zapisany widok") {
+                Button("Resume Saved View") {
                     activatePane()
                     Task {
                         guard appState.activeTab.id == pane.id else { return }
                         await pane.resumeSession()
                     }
                 }.buttonStyle(.borderedProminent)
-                Button("Wybierz inną lokalizację…") {
+                Button("Choose Another Location…") {
                     activatePane()
                     let context = pane.activationContext
                     let panel = NSOpenPanel()
@@ -294,17 +294,17 @@ public struct FilePaneView: View {
             let showKind = geometry.size.width >= 700
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    sortableHeaderButton(title: "Nazwa", field: .name)
+                    sortableHeaderButton(title: String(localized: "Name"), field: .name)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    sortableHeaderButton(title: "Rozmiar", field: .size)
+                    sortableHeaderButton(title: String(localized: "Size"), field: .size)
                         .frame(width: 85, alignment: .trailing)
                         .padding(.trailing, 14)
                     if showDate {
-                        sortableHeaderButton(title: "Zmodyfikowano", field: .dateModified)
+                        sortableHeaderButton(title: String(localized: "Modified"), field: .dateModified)
                             .frame(width: 145, alignment: .leading)
                     }
                     if showKind {
-                        sortableHeaderButton(title: "Rodzaj", field: .kind)
+                        sortableHeaderButton(title: String(localized: "Kind"), field: .kind)
                             .frame(width: 110, alignment: .leading)
                     }
                 }
@@ -355,9 +355,9 @@ public struct FilePaneView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Sortuj według: \(title)")
-        .accessibilityLabel("Sortuj według: \(title)")
-        .accessibilityValue(pane.sortField == field ? (pane.sortAscending ? "Rosnąco" : "Malejąco") : "Nieaktywne sortowanie")
+        .help("Sort by: \(title)")
+        .accessibilityLabel("Sort by: \(title)")
+        .accessibilityValue(pane.sortField == field ? (pane.sortAscending ? String(localized: "Ascending") : String(localized: "Descending")) : String(localized: "Not sorted"))
     }
 
     private func fileListRow(item: FileItem, index: Int, showDate: Bool, showKind: Bool) -> some View {
@@ -387,8 +387,8 @@ public struct FilePaneView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help(pane.isExpanded(item.path) ? "Zwiń folder" : "Rozwiń folder")
-                        .accessibilityLabel("\(pane.isExpanded(item.path) ? "Zwiń" : "Rozwiń") folder \(item.name)")
+                        .help(pane.isExpanded(item.path) ? String(localized: "Collapse folder") : String(localized: "Expand folder"))
+                        .accessibilityLabel(pane.isExpanded(item.path) ? String(localized: "Collapse folder \(item.name)") : String(localized: "Expand folder \(item.name)"))
                     } else {
                         Spacer()
                             .frame(width: 14)
@@ -531,8 +531,8 @@ public struct FilePaneView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(item.name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityAction(named: Text("Zaznacz")) { handleSelectionClick(item: item) }
-        .accessibilityAction(named: Text("Otwórz")) { openOrEnterItem(item) }
+        .accessibilityAction(named: Text("Select")) { handleSelectionClick(item: item) }
+        .accessibilityAction(named: Text("Open")) { openOrEnterItem(item) }
     }
 
     // MARK: - 2. Native Icon Grid View with Rubber-Band Marquee Selection & Drag/Drop
@@ -645,8 +645,8 @@ public struct FilePaneView: View {
                         .help(item.path)
                         .accessibilityElement(children: .combine)
                         .accessibilityAddTraits(isSelected ? .isSelected : [])
-                        .accessibilityAction(named: Text("Zaznacz")) { handleSelectionClick(item: item) }
-                        .accessibilityAction(named: Text("Otwórz")) { openOrEnterItem(item) }
+                        .accessibilityAction(named: Text("Select")) { handleSelectionClick(item: item) }
+                        .accessibilityAction(named: Text("Open")) { openOrEnterItem(item) }
                     }
                 }
                 .padding(FinderUI.sectionSpacing)
@@ -725,7 +725,7 @@ public struct FilePaneView: View {
     @ViewBuilder
     private func navigationFailureButtons(failureID: UUID) -> some View {
         if !pane.navigationFailureIsPermissionDenied {
-            Button("Spróbuj ponownie") {
+            Button("Try Again") {
                 FinderPaneActionRouting.performIfCurrent(appState: appState, pane: pane, paneSide: paneSide) {
                     pane.retryNavigation(expectedFailureID: failureID)
                 }
@@ -733,15 +733,15 @@ public struct FilePaneView: View {
             .fixedSize()
         } else {
             // Denied folders (Desktop, Documents, external disks) are granted in Privacy & Security.
-            Button("Otwórz ustawienia prywatności…") {
+            Button("Open Privacy Settings…") {
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
                     NSWorkspace.shared.open(url)
                 }
             }
             .fixedSize()
-            .help("Nadaj aplikacji Burrow dostęp w Ustawieniach systemowych › Prywatność i ochrona")
+            .help("Give Burrow access in System Settings › Privacy & Security")
         }
-        Button("Zamknij komunikat") {
+        Button("Dismiss") {
             FinderPaneActionRouting.performIfCurrent(appState: appState, pane: pane, paneSide: paneSide) {
                 pane.dismissNavigationFailure(expectedFailureID: failureID)
             }
@@ -756,11 +756,11 @@ public struct FilePaneView: View {
             Image(systemName: "trash.fill")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
-            Text("Kosz systemowy · Elementy: \(pane.displayedItems.count)")
+            Text("System Trash · Items: \(pane.displayedItems.count)")
                 .font(FinderUI.detailFont.weight(.semibold))
             Spacer()
             if !pane.displayedItems.isEmpty {
-                Button("Opróżnij Kosz…", role: .destructive) {
+                Button("Empty Trash…", role: .destructive) {
                     fileOps.emptySystemTrash()
                     pane.reloadDirectory()
                 }
@@ -791,10 +791,10 @@ public struct FilePaneView: View {
         VStack(spacing: FinderUI.rowSpacing) {
             ProgressView()
                 .controlSize(.regular)
-                .accessibilityLabel("Wyszukiwanie plików")
-            Text("Wyszukiwanie…")
+                .accessibilityLabel("Searching files")
+            Text("Searching…")
                 .font(FinderUI.titleFont)
-            Text("Wyniki pojawią się po zakończeniu wyszukiwania.")
+            Text("Results will appear when the search finishes.")
                 .font(FinderUI.detailFont)
                 .foregroundStyle(.secondary)
         }
@@ -809,17 +809,17 @@ public struct FilePaneView: View {
                 .font(.system(size: 36, weight: .light))
                 .foregroundStyle(.tertiary)
                 .accessibilityHidden(true)
-            Text(!hasSearchQuery ? "Brak widocznych elementów" : (pane.searchDiagnostic != nil || pane.searchIsPartial ? "Brak wyników w sprawdzonym zakresie" : "Brak pasujących plików"))
+            Text(!hasSearchQuery ? String(localized: "No visible items") : (pane.searchDiagnostic != nil || pane.searchIsPartial ? String(localized: "No results in the searched scope") : String(localized: "No matching files")))
                 .font(FinderUI.titleFont)
-            Text(!hasSearchQuery ? "Przeciągnij tutaj pliki, utwórz folder lub sprawdź ustawienie ukrytych plików."
-                 : "Zmień zapytanie, usuń filtry lub poszerz zakres wyszukiwania.")
+            Text(!hasSearchQuery ? String(localized: "Drag files here, create a folder, or check the hidden files setting.")
+                 : String(localized: "Change the query, remove filters, or widen the search scope."))
                 .font(FinderUI.detailFont)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 300)
             if !hasSearchQuery {
-                Button("Nowy folder…") { activatePane(); appState.showNewFolderSheet = true }
+                Button("New Folder…") { activatePane(); appState.showNewFolderSheet = true }
             } else {
-                Button("Wyczyść wyszukiwanie") { pane.clearSearch() }
+                Button("Clear Search") { pane.clearSearch() }
             }
         }
         .multilineTextAlignment(.center)
@@ -900,7 +900,7 @@ public struct FilePaneView: View {
         Button {
             openOrEnterItem(item)
         } label: {
-            Label(item.isDirectory ? "Otwórz folder" : "Otwórz", systemImage: "arrow.up.forward.app")
+            Label(item.isDirectory ? String(localized: "Open Folder") : String(localized: "Open"), systemImage: "arrow.up.forward.app")
         }
 
         if !item.isDirectory {
@@ -913,7 +913,7 @@ public struct FilePaneView: View {
             pane.select(item)
             appState.toggleQuickLook()
         } label: {
-            Label("Quick Look (Spacja)", systemImage: "eye")
+            Label("Quick Look (Space)", systemImage: "eye")
         }
 
         if !pane.searchQuery.isEmpty {
@@ -926,14 +926,14 @@ public struct FilePaneView: View {
                     }
                 }
             } label: {
-                Label("Pokaż w folderze nadrzędnym", systemImage: "folder.fill.badge.person.crop")
+                Label("Show in Enclosing Folder", systemImage: "folder.fill.badge.person.crop")
             }
         }
 
         Divider()
 
         // Native macOS Color Tags Menu
-        Menu("Tagi macOS") {
+        Menu("macOS Tags") {
             ForEach(FinderTagColor.allCases) { tagColor in
                 let hasTag = item.tags.contains(tagColor)
                 Button {
@@ -948,7 +948,7 @@ public struct FilePaneView: View {
             }
             if !item.tags.isEmpty {
                 Divider()
-                Button("Usuń wszystkie tagi", role: .destructive) {
+                Button("Remove All Tags", role: .destructive) {
                     fileOps.clearTags(for: targetItems())
                     pane.reloadDirectory()
                 }
@@ -958,7 +958,7 @@ public struct FilePaneView: View {
         Button {
             fileOps.showShareSheet(for: targetItems())
         } label: {
-            Label("Udostępnij (AirDrop, Wiadomości...)", systemImage: "square.and.arrow.up")
+            Label("Share (AirDrop, Messages…)", systemImage: "square.and.arrow.up")
         }
 
         Divider()
@@ -966,20 +966,20 @@ public struct FilePaneView: View {
         Button {
             fileOps.cutItems(targetItems())
         } label: {
-            Label("Wytnij (⌘X)", systemImage: "scissors")
+            Label("Cut (⌘X)", systemImage: "scissors")
         }
 
         Button {
             fileOps.copyItems(targetItems())
         } label: {
-            Label("Kopiuj (⌘C)", systemImage: "doc.on.doc")
+            Label("Copy (⌘C)", systemImage: "doc.on.doc")
         }
 
         Button {
             fileOps.paste(into: pane.currentURL)
             pane.reloadDirectory()
         } label: {
-            Label("Wklej tutaj (⌘V)", systemImage: "doc.on.clipboard")
+            Label("Paste Here (⌘V)", systemImage: "doc.on.clipboard")
         }
 
         Divider()
@@ -990,20 +990,20 @@ public struct FilePaneView: View {
             guard !pane.actionItems(for: item).isEmpty else { return }
             pane.renamingItemPath = item.path
         } label: {
-            Label("Zmień nazwę…", systemImage: "pencil")
+            Label("Rename…", systemImage: "pencil")
         }
 
         Button {
             fileOps.duplicateItems(targetItems())
             pane.reloadDirectory()
         } label: {
-            Label("Duplikuj (⌘D)", systemImage: "plus.square.on.square")
+            Label("Duplicate (⌘D)", systemImage: "plus.square.on.square")
         }
 
         Button {
             fileOps.compressItems(targetItems(), in: pane.currentURL)
         } label: {
-            Label("Kompresuj do ZIP", systemImage: "doc.zipper")
+            Label("Compress to ZIP", systemImage: "doc.zipper")
         }
 
         if item.isExtractableArchive {
@@ -1012,9 +1012,9 @@ public struct FilePaneView: View {
                 fileOps.extractArchive(item)
             } label: {
                 if item.fileExtension.lowercased() == "dmg" {
-                    Label("Zamontuj obraz dysku", systemImage: "externaldrive.fill")
+                    Label("Mount Disk Image", systemImage: "externaldrive.fill")
                 } else {
-                    Label("Rozpakuj archiwum tutaj", systemImage: "archivebox.fill")
+                    Label("Extract Archive Here", systemImage: "archivebox.fill")
                 }
             }
         }
@@ -1024,21 +1024,21 @@ public struct FilePaneView: View {
         Button {
             fileOps.copyPaths(targetItems())
         } label: {
-            Label("Kopiuj pełną ścieżkę (⌥⌘C)", systemImage: "link")
+            Label("Copy Full Path (⌥⌘C)", systemImage: "link")
         }
 
         Button {
             guard !pane.actionItems(for: item).isEmpty else { return }
             fileOps.openInTerminal(at: item.url)
         } label: {
-            Label("Otwórz w Terminalu", systemImage: "terminal")
+            Label("Open in Terminal", systemImage: "terminal")
         }
 
         Button {
             guard !pane.actionItems(for: item).isEmpty else { return }
             fileOps.openInCodeEditor(at: item.url)
         } label: {
-            Label("Otwórz w edytorze kodu", systemImage: "chevron.left.forwardslash.chevron.right")
+            Label("Open in Code Editor", systemImage: "chevron.left.forwardslash.chevron.right")
         }
 
         if item.isDirectory {
@@ -1046,14 +1046,14 @@ public struct FilePaneView: View {
                 guard !pane.actionItems(for: item).isEmpty else { return }
                 appState.addBookmark(for: item.url)
             } label: {
-                Label("Przypnij do paska bocznego", systemImage: "bookmark")
+                Label("Pin to Sidebar", systemImage: "bookmark")
             }
         }
 
         Button {
             fileOps.revealInAppleFinder(targetItems())
         } label: {
-            Label("Pokaż w klasycznym Finderze", systemImage: "macwindow")
+            Label("Show in Classic Finder", systemImage: "macwindow")
         }
 
         Divider()
@@ -1062,7 +1062,7 @@ public struct FilePaneView: View {
             fileOps.moveToTrash(targetItems())
             pane.reloadDirectory()
         } label: {
-            Label("Przenieś do Kosza", systemImage: "trash")
+            Label("Move to Trash", systemImage: "trash")
         }
     }
 
@@ -1072,14 +1072,14 @@ public struct FilePaneView: View {
             activatePane()
             appState.showNewFolderSheet = true
         } label: {
-            Label("Nowy folder (⇧⌘N)…", systemImage: "folder.badge.plus")
+            Label("New Folder (⇧⌘N)…", systemImage: "folder.badge.plus")
         }
 
         Button {
             activatePane()
             appState.showNewFileSheet = true
         } label: {
-            Label("Nowy plik (⌥⌘N)…", systemImage: "doc.badge.plus")
+            Label("New File (⌥⌘N)…", systemImage: "doc.badge.plus")
         }
 
         Divider()
@@ -1088,7 +1088,7 @@ public struct FilePaneView: View {
             fileOps.paste(into: pane.currentURL)
             pane.reloadDirectory()
         } label: {
-            Label("Wklej tutaj (⌘V)", systemImage: "doc.on.clipboard")
+            Label("Paste Here (⌘V)", systemImage: "doc.on.clipboard")
         }
 
         if fileOps.canUndo {
@@ -1102,7 +1102,7 @@ public struct FilePaneView: View {
         Button {
             pane.reloadDirectory()
         } label: {
-            Label("Odśwież widok", systemImage: "arrow.clockwise")
+            Label("Refresh View", systemImage: "arrow.clockwise")
         }
 
         Divider()
@@ -1110,13 +1110,13 @@ public struct FilePaneView: View {
         Button {
             performPaneAction { appState.showTerminalDrawer.toggle() }
         } label: {
-            Label("Wbudowany panel Terminala (Ctrl+`)", systemImage: "terminal.fill")
+            Label("Built-in Terminal Panel (Ctrl+`)", systemImage: "terminal.fill")
         }
 
         Button {
             fileOps.openInTerminal(at: pane.currentURL)
         } label: {
-            Label("Otwórz bieżący folder w Terminalu", systemImage: "terminal")
+            Label("Open Current Folder in Terminal", systemImage: "terminal")
         }
     }
 }
@@ -1154,10 +1154,10 @@ private struct MillerColumnSingleListView: View {
             Divider()
             if pane.sortField == .size && items.contains(where: { $0.isDirectory && folderSizes.size(for: $0.path) == nil }) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Niepełne sortowanie: nieznane i częściowe rozmiary na końcu grupy.")
+                    Text("Incomplete sorting: unknown and partial sizes are at the end of the group.")
                     if items.contains(where: { $0.isDirectory && folderSizes.status(for: $0.path) == .deferred }) {
-                        Text("Limit aktywnych folderów. Zawęź widok lub zamknij inne widoki.")
-                        Button("Ponów rozmiary") { updateFolderSizeDemand() }
+                        Text("Active folder limit reached. Narrow the view or close other views.")
+                        Button("Retry Sizes") { updateFolderSizeDemand() }
                     }
                 }
                 .font(FinderUI.captionFont)
@@ -1227,7 +1227,7 @@ private struct MillerColumnSingleListView: View {
                         Image(systemName: "folder")
                             .font(.title2)
                             .accessibilityHidden(true)
-                        Text("Brak widocznych elementów")
+                        Text("No visible items")
                             .font(FinderUI.detailFont)
                     }
                     .foregroundStyle(.secondary)
@@ -1278,14 +1278,14 @@ private struct FolderSizeLabel: View {
     var body: some View {
         HStack(spacing: 0) {
             if cache.status(for: path) == .deferred {
-                Button("Odroczono ↻") { request() }
+                Button("Deferred ↻") { request() }
                     .buttonStyle(.plain)
-                    .help("Limit aktywnych folderów. Zawęź widok lub zamknij inne widoki, a następnie kliknij, aby ponowić.")
+                    .help("Active folder limit reached. Narrow the view or close other views, then click to retry.")
             } else {
                 Text(cache.statusText(for: path))
                     .help(cache.size(for: path) == nil
-                        ? "W kolejce, w trakcie skanu lub dolne oszacowanie (limit / nieodczytane katalogi)."
-                        : "Pełny rozmiar folderu")
+                        ? String(localized: "Queued, scanning, or a lower-bound estimate (limit / unread directories).")
+                        : String(localized: "Full folder size"))
             }
         }
         .onAppear { request() }

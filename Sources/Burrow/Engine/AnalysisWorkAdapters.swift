@@ -51,11 +51,11 @@ enum AnalysisWorkAdapters {
         }
         let complete = scan.isComplete && failedHashes == 0
         var messages: [String] = []
-        if scan.reachedEntryLimit { messages.append("Wyniki częściowe: osiągnięto limit 60 000 wpisów.") }
-        if scan.skippedDirectoryCount > 0 { messages.append("Pominięte katalogi: \(scan.skippedDirectoryCount).") }
-        if scan.unreadableDirectoryCount > 0 { messages.append("Nieodczytane katalogi: \(scan.unreadableDirectoryCount).") }
-        if failedHashes > 0 { messages.append("Pliki zmienione lub nieodczytane: \(failedHashes).") }
-        if !complete && messages.isEmpty { messages.append("Skan niepełny; suma jest dolnym oszacowaniem.") }
+        if scan.reachedEntryLimit { messages.append(String(localized: "Partial results: the limit of 60,000 entries was reached.")) }
+        if scan.skippedDirectoryCount > 0 { messages.append(String(localized: "Skipped directories: \(scan.skippedDirectoryCount).")) }
+        if scan.unreadableDirectoryCount > 0 { messages.append(String(localized: "Unreadable directories: \(scan.unreadableDirectoryCount).")) }
+        if failedHashes > 0 { messages.append(String(localized: "Changed or unreadable files: \(failedHashes).")) }
+        if !complete && messages.isEmpty { messages.append(String(localized: "Incomplete scan; the total is a lower bound.")) }
         let elapsed = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
         guard !token.isCancelled else { return nil }
         return AnalysisScanResult(files: files, groups: groups,

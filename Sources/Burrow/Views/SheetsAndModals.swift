@@ -53,7 +53,7 @@ final class QuickSearchModel: ObservableObject {
                 guard let self, current.canPublish(active: self.token, rootPath: rootPath) else { return }
                 self.results = bundle.items
                 self.elapsedMs = bundle.elapsedMilliseconds
-                self.diagnostic = bundle.diagnostic ?? (bundle.isPartial ? "Wyniki częściowe." : nil)
+                self.diagnostic = bundle.diagnostic ?? (bundle.isPartial ? String(localized: "Partial results.") : nil)
                 self.isSearching = false
             }
         }
@@ -106,11 +106,11 @@ public struct QuickFSearchSpotlightModal: View {
                     .foregroundStyle(Color.accentColor)
                     .accessibilityHidden(true)
 
-                TextField("Szukaj w indeksie plików…", text: $queryText)
+                TextField("Search the file index…", text: $queryText)
                     .textFieldStyle(.plain)
                     .font(.title3)
-                    .accessibilityLabel("Szybkie wyszukiwanie w indeksie plików")
-                    .help("Wpisz nazwę lub filtr, np. ext:swift, grep:tekst, size:>10mb, tag:red")
+                    .accessibilityLabel("Quick search in the file index")
+                    .help("Enter a name or filter, e.g. ext:swift, grep:text, size:>10mb, tag:red")
                     .focused($isFocused)
                     .onChange(of: queryText) { _, newValue in
                         runSpotlightQuery(newValue)
@@ -128,7 +128,7 @@ public struct QuickFSearchSpotlightModal: View {
                 if search.isSearching {
                     ProgressView()
                         .controlSize(.small)
-                        .accessibilityLabel("Wyszukiwanie")
+                        .accessibilityLabel("Searching")
                 } else if hasQuery {
                     HStack(spacing: FinderUI.compactSpacing) {
                         Image(systemName: "bolt.fill")
@@ -143,7 +143,7 @@ public struct QuickFSearchSpotlightModal: View {
                     .background(Color.accentColor.opacity(0.15), in: Capsule())
                 }
 
-                Button("Zamknij") {
+                Button("Close") {
                     appState.showQuickFSearchModal = false
                 }
                 .buttonStyle(.bordered)
@@ -161,9 +161,7 @@ public struct QuickFSearchSpotlightModal: View {
                         .font(.system(size: 28))
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
-                    Text(search.isSearching ? "Wyszukiwanie…" : (!hasQuery
-                         ? "Wpisz zapytanie, aby przeszukać indeks. Pliki: \(appState.indexedFileCount.formatted())"
-                         : (search.diagnostic == nil ? "Brak pasujących wyników" : "Brak wyników w sprawdzonym zakresie")))
+                    Text(emptyStateMessage)
                         .font(FinderUI.detailFont)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -224,14 +222,14 @@ public struct QuickFSearchSpotlightModal: View {
 
                                     Spacer()
 
-                                    Button("Pokaż w karcie") {
+                                    Button("Show in Tab") {
                                         selectedIndex = idx
                                         activateSelectedResult(revealInFolder: true)
                                     }
                                     .buttonStyle(.bordered)
                                     .controlSize(.small)
-                                    .accessibilityLabel("Pokaż \(item.name) w karcie")
-                                    .help("Pokaż w karcie: \(item.path)")
+                                    .accessibilityLabel("Show \(item.name) in tab")
+                                    .help("Show in tab: \(item.path)")
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
@@ -264,11 +262,11 @@ public struct QuickFSearchSpotlightModal: View {
             Divider()
 
             HStack {
-                Text(search.diagnostic ?? "↑↓ wybór · Return lub dwuklik: przejdź · Esc: zamknij")
+                Text(search.diagnostic ?? String(localized: "↑↓ select · Return or double-click: go · Esc: close"))
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text("W indeksie: \(appState.indexedFileCount.formatted())")
+                Text("In index: \(appState.indexedFileCount.formatted())")
                     .font(FinderUI.captionFont.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -281,6 +279,16 @@ public struct QuickFSearchSpotlightModal: View {
         .onDisappear { search.cancel() }
         .onChange(of: activeTab.currentURL.path) { _, _ in runSpotlightQuery(queryText) }
         .onChange(of: activeTab.showHiddenFiles) { _, _ in runSpotlightQuery(queryText) }
+    }
+
+    private var emptyStateMessage: String {
+        if search.isSearching { return String(localized: "Searching…") }
+        if !hasQuery {
+            return String(localized: "Type a query to search the index. Files: \(appState.indexedFileCount.formatted())")
+        }
+        return search.diagnostic == nil
+            ? String(localized: "No matching results")
+            : String(localized: "No results in the checked scope")
     }
 
     private func quickSampleButton(_ sample: String) -> some View {
@@ -347,14 +355,14 @@ public struct NewFileSheetView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(Color.accentColor)
                     .accessibilityHidden(true)
-                Text("Utwórz nowy plik")
+                Text("Create New File")
                     .font(FinderUI.titleFont)
                 Spacer()
             }
 
-            Picker("Szablon pliku", selection: $selectedTemplate) {
+            Picker("File Template", selection: $selectedTemplate) {
                 ForEach(NewFileTemplate.allCases) { tpl in
-                    Text(tpl.rawValue).tag(tpl)
+                    Text(tpl.displayName).tag(tpl)
                 }
             }
             .onChange(of: selectedTemplate) { _, newValue in
@@ -363,9 +371,9 @@ public struct NewFileSheetView: View {
             }
 
             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                Text("Nazwa pliku")
+                Text("File Name")
                     .font(FinderUI.detailFont)
-                TextField("Nazwa pliku", text: $filename)
+                TextField("File Name", text: $filename)
                     .textFieldStyle(.roundedBorder)
                     .focused($isNameFocused)
                     .onSubmit(createAndClose)
@@ -373,16 +381,16 @@ public struct NewFileSheetView: View {
             }
 
             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                Text("Początkowa zawartość (opcjonalnie)")
+                Text("Initial content (optional)")
                     .font(FinderUI.detailFont)
                 TextEditor(text: $customContent)
                     .font(.system(.body, design: .monospaced))
-                    .accessibilityLabel("Początkowa zawartość pliku")
+                    .accessibilityLabel("Initial file content")
                     .frame(height: 110)
                     .overlay(RoundedRectangle(cornerRadius: FinderUI.cornerRadius).stroke(Color(nsColor: .separatorColor)))
             }
 
-            Text("Lokalizacja: \(activeTab.currentURL.path)")
+            Text("Location: \(activeTab.currentURL.path)")
                 .font(FinderUI.captionFont)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -398,11 +406,11 @@ public struct NewFileSheetView: View {
 
             HStack {
                 Spacer()
-                Button("Anuluj") {
+                Button("Cancel") {
                     appState.showNewFileSheet = false
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("Utwórz plik", action: createAndClose)
+                Button("Create File", action: createAndClose)
                     .keyboardShortcut(.defaultAction)
                     .disabled(filename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -425,7 +433,7 @@ public struct NewFileSheetView: View {
             activeTab.selectedPaths = [created.path]
             appState.showNewFileSheet = false
         } else {
-            errorMessage = FileOperationsManager.shared.lastStatusMessage ?? "Nie udało się utworzyć pliku."
+            errorMessage = FileOperationsManager.shared.lastStatusMessage ?? String(localized: "Couldn't create the file.")
             isNameFocused = true
         }
     }
@@ -437,7 +445,7 @@ public struct NewFolderSheetView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var activeTab: PaneTabState
 
-    @ViewState private var folderName: String = "Nowy folder"
+    @ViewState private var folderName: String = String(localized: "New Folder")
     @ViewState private var errorMessage: String?
     @FocusState private var isNameFocused: Bool
 
@@ -453,22 +461,22 @@ public struct NewFolderSheetView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(Color.accentColor)
                     .accessibilityHidden(true)
-                Text("Utwórz nowy folder")
+                Text("Create New Folder")
                     .font(FinderUI.titleFont)
                 Spacer()
             }
 
             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                Text("Nazwa folderu")
+                Text("Folder Name")
                     .font(FinderUI.detailFont)
-                TextField("Nazwa folderu", text: $folderName)
+                TextField("Folder Name", text: $folderName)
                     .textFieldStyle(.roundedBorder)
                     .focused($isNameFocused)
                     .onSubmit(createAndClose)
                     .onChange(of: folderName) { _, _ in errorMessage = nil }
             }
 
-            Text("Lokalizacja: \(activeTab.currentURL.path)")
+            Text("Location: \(activeTab.currentURL.path)")
                 .font(FinderUI.captionFont)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -484,11 +492,11 @@ public struct NewFolderSheetView: View {
 
             HStack {
                 Spacer()
-                Button("Anuluj") {
+                Button("Cancel") {
                     appState.showNewFolderSheet = false
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("Utwórz") {
+                Button("Create") {
                     createAndClose()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -509,7 +517,7 @@ public struct NewFolderSheetView: View {
             activeTab.selectedPaths = [created.path]
             appState.showNewFolderSheet = false
         } else {
-            errorMessage = FileOperationsManager.shared.lastStatusMessage ?? "Nie udało się utworzyć folderu."
+            errorMessage = FileOperationsManager.shared.lastStatusMessage ?? String(localized: "Couldn't create the folder.")
             isNameFocused = true
         }
     }
@@ -518,14 +526,20 @@ public struct NewFolderSheetView: View {
 // MARK: - 4. Dual-Pane Folder Compare & Sync Sheet
 
 public struct FolderCompareEntry: Identifiable, Sendable {
-    public enum Status: String, Sendable {
-        case onlyLeft = "Tylko w lewym"
-        case onlyRight = "Tylko w prawym"
-        case modified = "Różna treść lub czas"
-        case identical = "Zgodna treść i czas"
-        case notCompared = "Podfolder: nieporównany"
-        case typeConflict = "Różny typ: sprawdź ręcznie"
-        case unreadable = "Nieodczytany / zmieniony"
+    public enum Status: Sendable {
+        case onlyLeft, onlyRight, modified, identical, notCompared, typeConflict, unreadable
+
+        public var displayName: String {
+            switch self {
+            case .onlyLeft: return String(localized: "Only in left")
+            case .onlyRight: return String(localized: "Only in right")
+            case .modified: return String(localized: "Different content or time")
+            case .identical: return String(localized: "Same content and time")
+            case .notCompared: return String(localized: "Subfolder: not compared")
+            case .typeConflict: return String(localized: "Different type: check manually")
+            case .unreadable: return String(localized: "Unreadable / changed")
+            }
+        }
     }
     public var id: String { name }
     public let name: String
@@ -573,12 +587,12 @@ enum FolderComparison {
         let leftRead = BulkCrawler.readDirectoryResult(at: left.path, includeHidden: includeHidden,
             maxEntries: budget, isCancelled: { token.isCancelled })
         guard leftRead.isComplete else {
-            return ([], "Porównanie niepełne: błąd odczytu lub limit \(budget) elementów. Kopiowanie wyłączone.")
+            return ([], String(localized: "Comparison incomplete: read error or limit of \(budget) items. Copying disabled."))
         }
         let rightRead = BulkCrawler.readDirectoryResult(at: right.path, includeHidden: includeHidden,
             maxEntries: budget - leftRead.entries.count, isCancelled: { token.isCancelled })
         guard leftRead.isComplete && rightRead.isComplete else {
-            return ([], "Porównanie niepełne: błąd odczytu lub limit \(budget) elementów. Kopiowanie wyłączone.")
+            return ([], String(localized: "Comparison incomplete: read error or limit of \(budget) items. Copying disabled."))
         }
         let leftMap = Dictionary(uniqueKeysWithValues: leftRead.entries.map { ($0.name, $0.toFileItem(loadTags: false)) })
         let rightMap = Dictionary(uniqueKeysWithValues: rightRead.entries.map { ($0.name, $0.toFileItem(loadTags: false)) })
@@ -726,22 +740,22 @@ private struct FolderComparisonContentView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(Color.accentColor)
                     .accessibilityHidden(true)
-                Text("Porównaj zawartość katalogów")
+                Text("Compare Folder Contents")
                     .font(FinderUI.titleFont)
                 Spacer()
-                Toggle("Ukryj identyczne", isOn: $hideIdentical)
+                Toggle("Hide Identical", isOn: $hideIdentical)
                     .font(FinderUI.detailFont)
                     .fixedSize()
             }
 
             HStack(spacing: 12) {
-                Label("Lewy: \(leftURL.path)", systemImage: "folder.fill")
+                Label("Left: \(leftURL.path)", systemImage: "folder.fill")
                     .font(FinderUI.detailFont)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(leftURL.path)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Label("Prawy: \(rightURL.path)", systemImage: "folder.fill")
+                Label("Right: \(rightURL.path)", systemImage: "folder.fill")
                     .font(FinderUI.detailFont)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -752,7 +766,7 @@ private struct FolderComparisonContentView: View {
 
             Divider()
 
-            Text(compareDiagnostic ?? (isComparing ? (compareWorkState == .queued ? "Porównanie w kolejce…" : "Porównywanie treści plików…") : "Porównanie treści i czasu plików, bez rekurencji. Wspólne podfoldery i konflikty typów wymagają osobnego porównania. Kopiowanie nie usuwa pozycji docelowych."))
+            Text(compareStatusText)
                 .font(FinderUI.detailFont)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -765,10 +779,10 @@ private struct FolderComparisonContentView: View {
                                 .foregroundStyle(entry.leftItem == nil ? .tertiary : .primary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                                .help(entry.leftItem?.path ?? "Brak w lewym katalogu")
+                                .help(entry.leftItem?.path ?? String(localized: "Not in the left folder"))
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                            Text(entry.status.rawValue)
+                            Text(entry.status.displayName)
                                 .font(FinderUI.captionFont.weight(.medium))
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 2)
@@ -780,7 +794,7 @@ private struct FolderComparisonContentView: View {
                                 .foregroundStyle(entry.rightItem == nil ? .tertiary : .primary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                                .help(entry.rightItem?.path ?? "Brak w prawym katalogu")
+                                .help(entry.rightItem?.path ?? String(localized: "Not in the right folder"))
                                 .frame(maxWidth: .infinity, alignment: .trailing)
                         }
                         .padding(.horizontal, 10)
@@ -794,9 +808,9 @@ private struct FolderComparisonContentView: View {
                 if isComparing {
                     ProgressView()
                         .controlSize(.small)
-                        .accessibilityLabel("Porównywanie katalogów")
+                        .accessibilityLabel("Comparing folders")
                 } else if compareDiagnostic == nil && filteredEntries.isEmpty {
-                    Text(entries.isEmpty ? "Brak elementów do porównania" : "Brak różnic w porównanych plikach")
+                    Text(entries.isEmpty ? String(localized: "No items to compare") : String(localized: "No differences in the compared files"))
                         .font(FinderUI.detailFont)
                         .foregroundStyle(.secondary)
                 }
@@ -804,35 +818,35 @@ private struct FolderComparisonContentView: View {
 
             HStack {
                 if isComparing {
-                    Button("Anuluj porównanie") {
+                    Button("Cancel Comparison") {
                         compareToken?.cancel()
                         compareTask?.cancel()
                         isComparing = false
                         comparedContext = nil
-                        compareDiagnostic = "Anulowano. Trwający odczyt systemowy może jeszcze kończyć pracę."
+                        compareDiagnostic = String(localized: "Canceled. A system read in progress may still be finishing.")
                     }
                 } else if compareDiagnostic != nil {
-                    Button("Ponów porównanie") { computeDiff() }
+                    Button("Compare Again") { computeDiff() }
                 }
                 Spacer()
             }
             HStack {
-                Text("Kopiuj różnice:")
+                Text("Copy differences:")
                     .font(FinderUI.detailFont)
-                Button("Lewy → Prawy") { copyDifferences(leftToRight: true) }
+                Button("Left → Right") { copyDifferences(leftToRight: true) }
                     .buttonStyle(.bordered)
-                    .accessibilityLabel("Kopiuj różnice z lewego katalogu do prawego")
-                    .help("Kopiuj różniące się elementy z lewego katalogu do prawego. Istniejące pliki wymagają rozstrzygnięcia konfliktu.")
+                    .accessibilityLabel("Copy differences from the left folder to the right")
+                    .help("Copy differing items from the left folder to the right. Existing files require conflict resolution.")
                     .disabled(isComparing || compareDiagnostic != nil || comparedContext != comparisonContext || fileOps.isBusy || FolderComparison.copyCandidates(entries, leftToRight: true).isEmpty)
-                Button("Prawy → Lewy") { copyDifferences(leftToRight: false) }
+                Button("Right → Left") { copyDifferences(leftToRight: false) }
                     .buttonStyle(.bordered)
-                    .accessibilityLabel("Kopiuj różnice z prawego katalogu do lewego")
-                    .help("Kopiuj różniące się elementy z prawego katalogu do lewego. Istniejące pliki wymagają rozstrzygnięcia konfliktu.")
+                    .accessibilityLabel("Copy differences from the right folder to the left")
+                    .help("Copy differing items from the right folder to the left. Existing files require conflict resolution.")
                     .disabled(isComparing || compareDiagnostic != nil || comparedContext != comparisonContext || fileOps.isBusy || FolderComparison.copyCandidates(entries, leftToRight: false).isEmpty)
 
                 Spacer()
 
-                Button("Zamknij") {
+                Button("Close") {
                     cancelOwnedConflict()
                     appState.showCompareSheet = false
                 }
@@ -851,6 +865,16 @@ private struct FolderComparisonContentView: View {
             compareTask?.cancel()
         }
         .sheet(item: ownedConflict) { ConflictResolutionSheetView(conflict: $0) }
+    }
+
+    private var compareStatusText: String {
+        if let compareDiagnostic { return compareDiagnostic }
+        if isComparing {
+            return compareWorkState == .queued
+                ? String(localized: "Comparison queued…")
+                : String(localized: "Comparing file contents…")
+        }
+        return String(localized: "Compares file contents and modification times, non-recursively. Common subfolders and type conflicts need a separate comparison. Copying doesn't delete items at the destination.")
     }
 
     private func statusColor(_ status: FolderCompareEntry.Status) -> Color {
@@ -886,11 +910,11 @@ private struct FolderComparisonContentView: View {
                 if state == .deferred {
                     token.cancel()
                     self.isComparing = false
-                    self.compareDiagnostic = "Odroczono: analiza jest zajęta. Ponów porównanie. Kopiowanie wyłączone."
+                    self.compareDiagnostic = String(localized: "Deferred: analysis is busy. Compare again. Copying disabled.")
                 } else if state == .cancelled {
                     self.isComparing = false
                     self.comparedContext = nil
-                    self.compareDiagnostic = "Anulowano porównanie. Kopiowanie wyłączone."
+                    self.compareDiagnostic = String(localized: "Comparison canceled. Copying disabled.")
                 }
             }, completion: { result in
                 guard token.canPublish(active: self.compareToken, rootPath: self.leftPane.currentURL.path),
@@ -942,9 +966,9 @@ public struct ConflictResolutionSheetView: View {
                     .foregroundStyle(.orange)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                    Text("Wykryto konflikt nazw plików (\(conflict.conflictingNames.count))")
+                    Text("File name conflict detected (\(conflict.conflictingNames.count))")
                         .font(FinderUI.titleFont)
-                    Text("W folderze docelowym '\(conflict.destinationDirectory.lastPathComponent)' istnieją już pliki o tych samych nazwach:")
+                    Text("The destination folder '\(conflict.destinationDirectory.lastPathComponent)' already contains files with the same names:")
                         .font(FinderUI.detailFont)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -974,30 +998,30 @@ public struct ConflictResolutionSheetView: View {
             .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
 
             HStack(spacing: 10) {
-                Button("Anuluj") {
+                Button("Cancel") {
                     fileOps.cancelPendingTransferRequest(conflict.id)
                 }
                 .keyboardShortcut(.cancelAction)
 
                 Spacer()
 
-                Button("Pomiń istniejące") {
+                Button("Skip Existing") {
                     resolveWith(.skip)
                 }
                 .buttonStyle(.bordered)
                 .disabled(fileOps.isBusy)
 
-                Button("Zastąp istniejące", role: .destructive) {
+                Button("Replace Existing", role: .destructive) {
                     resolveWith(.overwrite)
                 }
                 .buttonStyle(.bordered)
                 .disabled(fileOps.isBusy)
 
-                Button("Zachowaj oba") {
+                Button("Keep Both") {
                     resolveWith(.keepBoth)
                 }
                 .keyboardShortcut(.defaultAction)
-                .help("Zachowaj istniejące pliki i dopisz licznik do nazw kopiowanych lub przenoszonych elementów")
+                .help("Keep existing files and append a counter to the names of copied or moved items")
                 .disabled(fileOps.isBusy)
             }
         }
@@ -1054,11 +1078,14 @@ public struct FSearchSettingsSheetView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(Color.accentColor)
                     .accessibilityHidden(true)
-                Text("Ustawienia Burrow")
+                Text("Burrow Settings")
                     .font(FinderUI.titleFont)
                 Spacer()
             }
 
+            Divider()
+
+            LanguageSettingsSection()
             Divider()
 
             DefaultFileViewerSettingsSection()
@@ -1068,39 +1095,39 @@ public struct FSearchSettingsSheetView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                Toggle("Zapisuj i przywracaj sesję", isOn: Binding(
+                Toggle("Save and restore session", isOn: Binding(
                     get: { appState.restoreSessionEnabled },
                     set: { appState.setSessionRestorationEnabled($0) }
                 ))
-                Text("Zmiany sesji obowiązują od razu, niezależnie od przycisków na dole. Lokalnie zapisywane są ścieżki, kolejność kart, oba panele, widoki i tekst wyszukiwania. Zaznaczenia, schowek, cofanie i operacje nie są przywracane. Foldery otwierają się od razu; wstrzymane do chwili wybrania „Wznów” zostają tylko karty na niepodłączonym dysku i zapisane mapy dysku.")
+                Text("Session changes take effect immediately, regardless of the buttons at the bottom. Paths, tab order, both panes, views, and search text are saved locally. Selections, the clipboard, undo, and operations are not restored. Folders open right away; only tabs on a disconnected disk and saved disk maps are held until you choose “Resume”.")
                     .font(FinderUI.captionFont).foregroundStyle(.secondary)
-                Text("Wyłączenie zatrzymuje zapis i przywracanie, ale zachowuje poprzedni zapis. Włączenie zapisuje bieżącą sesję. Wyczyszczenie usuwa zapis i wyłącza tę opcję; otwarte karty i inteligentne foldery pozostają bez zmian.")
+                Text("Turning this off stops saving and restoring but keeps the previous save. Turning it on saves the current session. Clearing deletes the save and turns this option off; open tabs and smart folders stay unchanged.")
                     .font(FinderUI.captionFont).foregroundStyle(.secondary)
                 if let notice = appState.sessionPersistenceNotice {
                     Text(notice).font(FinderUI.captionFont).foregroundStyle(.orange)
                 }
-                Button("Wyczyść zapis sesji i wyłącz przywracanie", role: .destructive) {
+                Button("Clear Saved Session and Turn Off Restoration", role: .destructive) {
                     confirmingSessionClear = true
                 }.buttonStyle(.bordered)
-                .confirmationDialog("Usunąć zapis sesji?", isPresented: $confirmingSessionClear) {
-                    Button("Wyczyść i wyłącz przywracanie", role: .destructive) { appState.clearSavedSession() }
-                    Button("Anuluj", role: .cancel) {}
+                .confirmationDialog("Delete the saved session?", isPresented: $confirmingSessionClear) {
+                    Button("Clear and Turn Off Restoration", role: .destructive) { appState.clearSavedSession() }
+                    Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("Zapisanej sesji nie będzie można odzyskać. Otwarte karty pozostaną bez zmian.")
+                    Text("The saved session can't be recovered. Open tabs will stay unchanged.")
                 }
             }
             Divider()
 
             if let notice = FSearchIndex.shared.indexingPreferencesNotice {
                 Text(notice).font(FinderUI.detailFont).foregroundStyle(.orange)
-                Toggle("Napraw: zastąp ustawienia poniższymi i zachowaj kopię oryginału", isOn: $repairIndexSettings)
+                Toggle("Repair: replace settings with those below and keep a copy of the original", isOn: $repairIndexSettings)
             }
             if let indexSettingsError {
                 Text(indexSettingsError).font(FinderUI.detailFont).foregroundStyle(.red)
             }
             // Indexed Roots
             VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
-                Text("Indeksowane katalogi")
+                Text("Indexed Folders")
                     .font(FinderUI.bodyFont.weight(.medium))
 
                 ScrollView {
@@ -1123,8 +1150,8 @@ public struct FSearchSettingsSheetView: View {
                                         .foregroundStyle(.red)
                                 }
                                 .buttonStyle(.borderless)
-                                .accessibilityLabel("Usuń \(root) z indeksowanych katalogów")
-                                .help("Usuń z indeksu; pliki pozostaną na dysku")
+                                .accessibilityLabel("Remove \(root) from indexed folders")
+                                .help("Remove from the index; files stay on disk")
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -1135,19 +1162,19 @@ public struct FSearchSettingsSheetView: View {
                 .frame(height: 115)
                 .overlay {
                     if roots.isEmpty {
-                        Text("Dodaj katalog, aby uwzględnić jego pliki w indeksie.")
+                        Text("Add a folder to include its files in the index.")
                             .font(FinderUI.detailFont)
                             .foregroundStyle(.secondary)
                     }
                 }
 
                 HStack(spacing: FinderUI.rowSpacing) {
-                    TextField("Ścieżka folderu, np. ~/Work", text: $newRootPath)
+                    TextField("Folder path, e.g. ~/Work", text: $newRootPath)
                         .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Nowy indeksowany katalog")
+                        .accessibilityLabel("New indexed folder")
                         .onSubmit(addRoot)
                         .onChange(of: newRootPath) { _, _ in rootPathError = nil }
-                    Button("Dodaj", action: addRoot)
+                    Button("Add", action: addRoot)
                         .buttonStyle(.bordered)
                         .disabled(newRootPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -1163,34 +1190,34 @@ public struct FSearchSettingsSheetView: View {
             Divider()
 
             // Exclusions & MMap Cache
-            Toggle("Pomijaj ciężkie katalogi deweloperskie i pamięć podręczną", isOn: $skipHeavyDirs)
+            Toggle("Skip heavy developer folders and caches", isOn: $skipHeavyDirs)
                 .font(FinderUI.bodyFont)
 
             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                Text("Ignorowane nazwy katalogów (oddzielone przecinkami)")
+                Text("Ignored folder names (comma-separated)")
                     .font(FinderUI.detailFont)
                     .foregroundStyle(.secondary)
                 TextField("node_modules, .git, .build...", text: $skippedDirsText)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
-                    .accessibilityLabel("Ignorowane nazwy katalogów")
+                    .accessibilityLabel("Ignored folder names")
             }
 
-            Toggle("Zapisuj indeks na dysku, aby przyspieszyć uruchamianie", isOn: $useMMapCache)
+            Toggle("Save the index to disk to speed up launch", isOn: $useMMapCache)
                 .font(FinderUI.bodyFont)
-                .help("Korzystaj z trwałej pamięci podręcznej indeksu mmap")
+                .help("Use the persistent mmap index cache")
 
-            Picker("Domyślna akcja przy konflikcie plików", selection: $conflictPolicy) {
+            Picker("Default action on file conflict", selection: $conflictPolicy) {
                 ForEach(FileConflictPolicy.allCases) { p in
-                    Text(p.rawValue).tag(p)
+                    Text(p.displayName).tag(p)
                 }
             }
             .font(FinderUI.bodyFont)
 
             // Engine Diagnostics Footer
             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                Text("Plików w indeksie: \(appState.indexedFileCount.formatted()) · Filtry Blooma: \(FSearchIndex.shared.trigramCacheCount)")
-                Text("Pamięć podręczna: \((FSearchIndex.shared.cacheFilePath as NSString).lastPathComponent)")
+                Text("Files in index: \(appState.indexedFileCount.formatted()) · Bloom filters: \(FSearchIndex.shared.trigramCacheCount)")
+                Text("Cache: \((FSearchIndex.shared.cacheFilePath as NSString).lastPathComponent)")
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(FSearchIndex.shared.cacheFilePath)
@@ -1218,11 +1245,11 @@ public struct FSearchSettingsSheetView: View {
     private var settingsActions: some View {
             HStack {
                 Spacer()
-                Button("Anuluj") {
+                Button("Cancel") {
                     appState.showSettingsSheet = false
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("Zapisz i przebuduj indeks") {
+                Button("Save and Rebuild Index") {
                     let parsedSkip = Set(
                         skippedDirsText
                             .split(separator: ",")
@@ -1237,7 +1264,7 @@ public struct FSearchSettingsSheetView: View {
                         fileOps.defaultConflictPolicy = conflictPolicy
                         appState.showSettingsSheet = false
                     } catch {
-                        indexSettingsError = "Nie zapisano ustawień indeksu. Sprawdź wartości lub jawnie potwierdź naprawę."
+                        indexSettingsError = String(localized: "Index settings were not saved. Check the values or explicitly confirm the repair.")
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -1249,11 +1276,11 @@ public struct FSearchSettingsSheetView: View {
         let expandedPath = (newRootPath as NSString).expandingTildeInPath
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: expandedPath, isDirectory: &isDirectory), isDirectory.boolValue else {
-            rootPathError = "Nie znaleziono folderu pod podaną ścieżką."
+            rootPathError = String(localized: "No folder found at the given path.")
             return
         }
         guard !roots.contains(expandedPath) else {
-            rootPathError = "Ta ścieżka jest już na liście indeksowanych katalogów."
+            rootPathError = String(localized: "This path is already in the list of indexed folders.")
             return
         }
         roots.append(expandedPath)
@@ -1263,6 +1290,51 @@ public struct FSearchSettingsSheetView: View {
 }
 
 /// Lets the user hand folder opening and "Show in Finder" over to Burrow.
+/// The app follows the system language unless one is chosen here. macOS reads
+/// the choice at launch, so it applies after Burrow restarts.
+struct LanguageSettingsSection: View {
+    enum Choice: String, CaseIterable, Identifiable {
+        case system, en, pl
+        var id: String { rawValue }
+    }
+
+    private static let key = "AppleLanguages"
+    @ViewState private var choice: Choice = {
+        guard let languages = UserDefaults.standard.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?[key] as? [String],
+              let first = languages.first else { return .system }
+        return Choice(rawValue: String(first.prefix(2))) ?? .system
+    }()
+    @ViewState private var changed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
+            Picker("Language", selection: $choice) {
+                Text("System Default").tag(Choice.system)
+                Text(verbatim: "English").tag(Choice.en)
+                Text(verbatim: "Polski").tag(Choice.pl)
+            }
+            .fixedSize()
+            .onChange(of: choice) { _, value in
+                if value == .system {
+                    UserDefaults.standard.removeObject(forKey: Self.key)
+                } else {
+                    UserDefaults.standard.set([value.rawValue], forKey: Self.key)
+                }
+                changed = true
+            }
+            Group {
+                if changed {
+                    Text("Restart Burrow to apply the new language.")
+                } else {
+                    Text("Burrow uses the language of macOS unless you choose one here.")
+                }
+            }
+            .font(FinderUI.captionFont)
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
 struct DefaultFileViewerSettingsSection: View {
     @ViewState private var isDefault = DefaultFileViewer.isDefault
     @ViewState private var isWorking = false
@@ -1271,20 +1343,20 @@ struct DefaultFileViewerSettingsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
             HStack(spacing: 8) {
-                Label(isDefault ? "Burrow jest domyślną przeglądarką plików" : "Domyślną przeglądarką plików jest Finder",
+                Label(isDefault ? String(localized: "Burrow is the default file browser") : String(localized: "Finder is the default file browser"),
                       systemImage: isDefault ? "checkmark.circle.fill" : "folder")
                     .foregroundStyle(isDefault ? Color.green : Color.primary)
                 Spacer()
                 if isDefault {
-                    Button("Przywróć Finder") { apply(makeDefault: false) }
+                    Button("Restore Finder") { apply(makeDefault: false) }
                         .disabled(isWorking)
                 } else {
-                    Button("Ustaw jako domyślną") { apply(makeDefault: true) }
+                    Button("Make Default") { apply(makeDefault: true) }
                         .buttonStyle(.borderedProminent)
                         .disabled(isWorking)
                 }
             }
-            Text("Foldery otwierane z Docka, Spotlighta, Terminala (open) i innych aplikacji oraz polecenia „Pokaż w Finderze” trafią do Burrow. Biurko, Kosz w Docku i okna samego Findera nadal należą do Findera. Uruchomione aplikacje mogą potrzebować ponownego uruchomienia, aby zauważyć zmianę.")
+            Text("Folders opened from the Dock, Spotlight, Terminal (open), and other apps, as well as “Show in Finder” commands, will go to Burrow. The Desktop, the Trash in the Dock, and Finder's own windows still belong to Finder. Running apps may need to be restarted to notice the change.")
                 .font(FinderUI.captionFont).foregroundStyle(.secondary)
             if let errorMessage {
                 Text(errorMessage).font(FinderUI.captionFont).foregroundStyle(.orange)
@@ -1324,29 +1396,29 @@ struct FolderSortSettingsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-            Text("Sortowanie folderów")
+            Text("Folder Sorting")
                 .font(FinderUI.bodyFont.weight(.medium))
             HStack(spacing: FinderUI.rowSpacing) {
-                Picker("Domyślnie sortuj według", selection: binding(\.field)) {
+                Picker("Sort by default", selection: binding(\.field)) {
                     ForEach(SortField.allCases) { field in
                         Text(field.displayName).tag(field)
                     }
                 }
                 .fixedSize()
-                Picker("Kierunek", selection: binding(\.ascending)) {
-                    Text("Rosnąco").tag(true)
-                    Text("Malejąco").tag(false)
+                Picker("Direction", selection: binding(\.ascending)) {
+                    Text("Ascending").tag(true)
+                    Text("Descending").tag(false)
                 }
                 .labelsHidden()
                 .fixedSize()
             }
-            Toggle("Foldery na górze", isOn: binding(\.foldersOnTop))
-            Text("Zmiana sortowania w kolumnach lub w menu Sortuj dotyczy tylko bieżącego folderu i jest zapamiętywana. Pozostałe foldery używają ustawienia domyślnego.")
+            Toggle("Folders on Top", isOn: binding(\.foldersOnTop))
+            Text("Changing the sort order with the columns or the Sort menu applies only to the current folder and is remembered. Other folders use the default setting.")
                 .font(FinderUI.captionFont).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if !preferences.folderSorts.isEmpty {
-                Text("Foldery z własnym sortowaniem")
+                Text("Folders with custom sorting")
                     .font(FinderUI.detailFont.weight(.medium))
                     .padding(.top, 4)
                 ScrollView {
@@ -1372,8 +1444,8 @@ struct FolderSortSettingsSection: View {
                                     Image(systemName: "minus.circle.fill").foregroundStyle(.red)
                                 }
                                 .buttonStyle(.borderless)
-                                .help("Przywróć domyślne sortowanie dla tego folderu")
-                                .accessibilityLabel("Przywróć domyślne sortowanie dla \(path)")
+                                .help("Restore the default sorting for this folder")
+                                .accessibilityLabel("Restore the default sorting for \(path)")
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -1382,7 +1454,7 @@ struct FolderSortSettingsSection: View {
                     }
                 }
                 .frame(maxHeight: 130)
-                Button("Przywróć domyślne we wszystkich folderach") { preferences.resetAllFolders() }
+                Button("Restore Defaults in All Folders") { preferences.resetAllFolders() }
                     .buttonStyle(.bordered)
             }
         }

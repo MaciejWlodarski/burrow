@@ -22,7 +22,7 @@ struct RenameItemSheet: View {
                     .resizable().frame(width: 40, height: 40)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                    Text("Zmień nazwę").font(FinderUI.titleFont)
+                    Text("Rename").font(FinderUI.titleFont)
                     Text(item.name)
                         .font(FinderUI.detailFont)
                         .foregroundStyle(.secondary)
@@ -32,11 +32,11 @@ struct RenameItemSheet: View {
                 }
             }
             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                Text("Nowa nazwa")
+                Text("New name")
                     .font(FinderUI.detailFont)
-                TextField("Nazwa", text: $draft)
+                TextField("Name", text: $draft)
                     .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("Nowa nazwa")
+                    .accessibilityLabel("New name")
                     .focused($isNameFocused)
                     .onSubmit(rename)
                     .onChange(of: draft) { _, _ in errorMessage = nil }
@@ -49,8 +49,8 @@ struct RenameItemSheet: View {
             }
             HStack {
                 Spacer()
-                Button("Anuluj") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Zmień nazwę", action: rename)
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Rename", action: rename)
                     .keyboardShortcut(.defaultAction)
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft == item.name)
             }
@@ -66,7 +66,7 @@ struct RenameItemSheet: View {
         // Return bypasses the disabled button, so validate the same trimmed value here.
         let name = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            errorMessage = "Nazwa nie może być pusta."
+            errorMessage = String(localized: "The name can't be empty.")
             isNameFocused = true
             return
         }
@@ -78,7 +78,7 @@ struct RenameItemSheet: View {
             pane.selectionCursorPath = url.path
             dismiss()
         } else {
-            errorMessage = FileOperationsManager.shared.lastStatusMessage ?? "Nie udało się zmienić nazwy."
+            errorMessage = FileOperationsManager.shared.lastStatusMessage ?? String(localized: "Couldn't rename the item.")
             isNameFocused = true
         }
     }

@@ -15,9 +15,9 @@ public struct FolderSort: Codable, Equatable, Sendable {
         self.foldersOnTop = foldersOnTop
     }
 
-    /// e.g. "Data modyfikacji, malejąco".
+    /// e.g. "Date Modified, descending".
     public var summary: String {
-        field.displayName + (ascending ? ", rosnąco" : ", malejąco") + (foldersOnTop ? "" : ", foldery wśród plików")
+        field.displayName + (ascending ? String(localized: ", ascending") : String(localized: ", descending")) + (foldersOnTop ? "" : String(localized: ", folders mixed with files"))
     }
 }
 

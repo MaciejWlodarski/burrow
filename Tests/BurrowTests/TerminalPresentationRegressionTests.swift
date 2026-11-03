@@ -86,7 +86,7 @@ struct TerminalPresentationRegressionTests {
                 tiny.append(text: "message \(index)", isError: true)
                 try checkBounds(tiny)
             }
-            tiny.append(text: "[Polecenie przerwane]", isError: true)
+            tiny.append(text: "[Command canceled]", isError: true)
             try expect(tiny.lines.last?.isError == true, "Notice provenance must survive")
             try checkBounds(tiny)
         }
@@ -154,7 +154,7 @@ struct TerminalPresentationRegressionTests {
                 fixtureDiagnostic("resolvedTarget", target.resolvingSymlinksInPath().path),
                 fixtureDiagnostic("expectedPhysicalOutput", expectedOutput),
                 fixtureDiagnostic("rawOutput", result.output),
-                "status=\(result.status) cancelled=\(result.wasCancelled) truncated=\(result.wasTruncated)"
+                "status=\(result.status) canceled=\(result.wasCancelled) truncated=\(result.wasTruncated)"
             ].joined(separator: "; ")
             try expect(result.output == expectedOutput, "zsh and classifier disagree; " + evidence)
             try expect(result.output != siblingOutput, "Physical oracle accepted a same-name sibling; " + evidence)

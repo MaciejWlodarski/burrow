@@ -44,9 +44,9 @@ struct FinderSelectionSummary: Equatable {
     }
 
     var countDescription: String {
-        if isSearching { return "Wyszukiwanie…" }
-        if selectedCount > 0 { return "Zaznaczono \(selectedCount.formatted()) z \(totalCount.formatted())" }
-        if isAnalysis { return "Elementy analizy: \(totalCount.formatted())" }
-        return "Elementy: \(totalCount.formatted())"
+        if isSearching { return String(localized: "Searching…") }
+        if selectedCount > 0 { return String(localized: "\(selectedCount.formatted()) of \(totalCount.formatted()) selected") }
+        if isAnalysis { return String(localized: "Analysis items: \(totalCount.formatted())") }
+        return String(localized: "Items: \(totalCount.formatted())")
     }
 }

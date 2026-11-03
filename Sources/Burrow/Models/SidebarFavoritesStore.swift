@@ -71,7 +71,7 @@ import Foundation
         return archive.items
     }
     private func protect() {
-        notice = "Nie można zmienić ulubionych: zapis jest uszkodzony, nieobsługiwany lub zmienił się poza aplikacją. Zachowano poprzednie dane."
+        notice = String(localized: "Cannot change Favorites: the saved data is damaged, unsupported, or was changed outside the app. The previous data was kept.")
     }
     @discardableResult private func save(_ entries: [Entry]) -> Bool {
         guard notice == nil, Self.valid(entries),

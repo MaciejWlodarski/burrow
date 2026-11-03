@@ -4,10 +4,10 @@ import Foundation
 /// transactional pane navigator remains the sole authority for directory access.
 enum FolderAddress {
     static func resolve(_ input: String, relativeTo current: URL, home: URL) throws -> URL {
-        guard !input.isEmpty else { throw Failure("Wpisz ścieżkę folderu.") }
+        guard !input.isEmpty else { throw Failure(String(localized: "Enter a folder path.")) }
         guard input.utf8.count <= 16_384,
               !input.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-            throw Failure("Ścieżka jest zbyt długa lub zawiera znaki sterujące.")
+            throw Failure(String(localized: "The path is too long or contains control characters."))
         }
         if input.lowercased().hasPrefix("file:") {
             // Validate original bytes before Foundation can normalize a URL or
@@ -20,18 +20,18 @@ enum FolderAddress {
                   parts.host == nil || parts.host == "" || parts.host?.lowercased() == "localhost",
                   parts.percentEncodedPath.hasPrefix("/"),
                   let url = parts.url, url.isFileURL else {
-                throw Failure("Użyj lokalnej ścieżki lub adresu file:/// bez danych logowania, parametrów i fragmentu.")
+                throw Failure(String(localized: "Use a local path or a file:/// address without credentials, query parameters, or a fragment."))
             }
             let path = try decodeFileURLComponent(parts.percentEncodedPath)
             return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
         }
         guard !input.contains("://") else {
-            throw Failure("Wpisz ścieżkę lokalną. Dla udziału sieciowego użyj jego zamontowanego folderu w /Volumes.")
+            throw Failure(String(localized: "Enter a local path. For a network share, use its mounted folder in /Volumes."))
         }
         let path: String
         if input == "~" { path = home.path }
         else if input.hasPrefix("~/") { path = home.appendingPathComponent(String(input.dropFirst(2))).path }
-        else if input.hasPrefix("~") { throw Failure("Użyj ~ lub ~/folder dla własnego folderu domowego.") }
+        else if input.hasPrefix("~") { throw Failure(String(localized: "Use ~ or ~/folder for your own home folder.")) }
         else { path = input }
         return URL(fileURLWithPath: path, isDirectory: true, relativeTo: current).standardizedFileURL
     }
@@ -48,7 +48,7 @@ enum FolderAddress {
             if input[index] == 0x25 {
                 guard index + 2 < input.count,
                       let high = hexDigit(input[index + 1]), let low = hexDigit(input[index + 2]) else {
-                    throw Failure("Adres file:/// zawiera nieprawidłowe kodowanie procentowe.")
+                    throw Failure(String(localized: "The file:/// address contains invalid percent-encoding."))
                 }
                 decoded.append(high * 16 + low)
                 index += 3
@@ -59,7 +59,7 @@ enum FolderAddress {
         }
         guard let result = String(bytes: decoded, encoding: .utf8),
               !result.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-            throw Failure("Adres file:/// zawiera znaki sterujące lub nieprawidłowe kodowanie UTF-8.")
+            throw Failure(String(localized: "The file:/// address contains control characters or invalid UTF-8 encoding."))
         }
         return result
     }

@@ -163,8 +163,8 @@ public struct EmbeddedTerminalDrawerView: View {
                                     .buttonStyle(.plain)
                                     .accessibilityAddTraits(workspace.selectedID == tab.id ? .isSelected : [])
                                     Button { workspace.close(tab.id) } label: { Image(systemName: "xmark").frame(width: 24, height: 24) }
-                                        .buttonStyle(.plain).help("Zamknij kartę i przerwij jej polecenie")
-                                        .accessibilityLabel("Zamknij terminal \(tab.ordinal)")
+                                        .buttonStyle(.plain).help("Close the tab and cancel its command")
+                                        .accessibilityLabel("Close Terminal \(tab.ordinal)")
                                 }
                                 .background(workspace.selectedID == tab.id ? Color.accentColor.opacity(0.14) : Color.clear,
                                             in: RoundedRectangle(cornerRadius: 6))
@@ -181,11 +181,11 @@ public struct EmbeddedTerminalDrawerView: View {
                 }
                 Button { _ = workspace.add(directory: activeTab.currentURL) } label: { Image(systemName: "plus").frame(width: 26, height: 26) }
                     .buttonStyle(.plain).disabled(workspace.tabs.count >= TerminalWorkspace.tabLimit)
-                    .help("Nowa karta terminala w folderze aktywnego panelu")
-                    .accessibilityLabel("Nowa karta terminala")
+                    .help("New terminal tab in the active pane’s folder")
+                    .accessibilityLabel("New Terminal Tab")
                 Button { appState.showTerminalDrawer = false } label: { Image(systemName: "chevron.down").frame(width: 26, height: 26) }
-                    .buttonStyle(.plain).help("Ukryj terminal (Ctrl+`)")
-                    .accessibilityLabel("Ukryj terminal")
+                    .buttonStyle(.plain).help("Hide Terminal (Ctrl+`)")
+                    .accessibilityLabel("Hide Terminal")
             }
             .padding(.horizontal, FinderUI.panelInset).padding(.vertical, 4)
             .background(Color(nsColor: .windowBackgroundColor))
@@ -194,8 +194,8 @@ public struct EmbeddedTerminalDrawerView: View {
                 TerminalTabContent(appState: appState, terminal: tab).id(tab.id)
             } else {
                 VStack(spacing: 12) {
-                    Text("Brak kart terminala").foregroundStyle(.secondary)
-                    Button("Nowa karta") { _ = workspace.add(directory: activeTab.currentURL) }
+                    Text("No terminal tabs").foregroundStyle(.secondary)
+                    Button("New Tab") { _ = workspace.add(directory: activeTab.currentURL) }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -224,14 +224,14 @@ private struct TerminalTabContent: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                     .help(terminal.directory.path)
-                    .accessibilityLabel("Bieżący folder: \(terminal.directory.path)")
+                    .accessibilityLabel("Current folder: \(terminal.directory.path)")
 
-                terminalIconButton("Wyczyść wyjście terminala", icon: "trash") {
+                terminalIconButton("Clear Terminal Output", icon: "trash") {
                     terminal.clear()
                 }
                 .disabled(outputLines.isEmpty)
 
-                terminalIconButton("Otwórz folder w zewnętrznym terminalu", icon: "arrow.up.forward.app") {
+                terminalIconButton("Open Folder in External Terminal", icon: "arrow.up.forward.app") {
                     FileOperationsManager.shared.openInTerminal(at: terminal.directory)
                 }
 
@@ -246,7 +246,7 @@ private struct TerminalTabContent: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
                         if outputLines.isEmpty {
-                            Text(isRunning ? "Polecenie jest wykonywane…" : "Brak wyjścia. Wpisz polecenie poniżej.")
+                            Text(isRunning ? String(localized: "Running command…") : String(localized: "No output. Enter a command below."))
                                 .font(FinderUI.detailFont)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -287,13 +287,13 @@ private struct TerminalTabContent: View {
                     .help(terminal.directory.path)
                     .accessibilityHidden(true)
 
-                TextField("Wpisz polecenie zsh…", text: $terminal.commandInput)
+                TextField("Enter a zsh command…", text: $terminal.commandInput)
                     .textFieldStyle(.plain)
                     .font(FinderUI.bodyFont.monospaced())
                     .focused($isInputFocused)
                     .disabled(isRunning)
-                    .accessibilityLabel("Polecenie terminala")
-                    .help("Naciśnij Return, aby uruchomić polecenie w bieżącym folderze. Polecenia interaktywne wymagają zewnętrznego terminala.")
+                    .accessibilityLabel("Terminal command")
+                    .help("Press Return to run the command in the current folder. Interactive commands require an external terminal.")
                     .onSubmit {
                         let cmd = terminal.commandInput
                         guard !isRunning, !cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -304,11 +304,11 @@ private struct TerminalTabContent: View {
                 if isRunning {
                     ProgressView()
                         .controlSize(.small)
-                        .accessibilityLabel("Wykonywanie polecenia")
-                    Button("Przerwij") { terminal.cancel() }
+                        .accessibilityLabel("Running command")
+                    Button("Cancel") { terminal.cancel() }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .help("Przerwij bieżące polecenie")
+                        .help("Cancel the current command")
                 }
             }
             .padding(.horizontal, FinderUI.panelInset)
@@ -319,7 +319,7 @@ private struct TerminalTabContent: View {
 
     }
 
-    private func terminalIconButton(_ label: String, icon: String, action: @escaping () -> Void) -> some View {
+    private func terminalIconButton(_ label: LocalizedStringKey, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(FinderUI.detailFont)

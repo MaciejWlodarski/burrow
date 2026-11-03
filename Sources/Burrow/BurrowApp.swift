@@ -20,7 +20,7 @@ struct BurrowApp: App {
         .commands {
             // App Settings (Cmd+,)
             CommandGroup(replacing: .appSettings) {
-                Button("Ustawienia…") {
+                Button("Settings…") {
                     appState.showSettingsSheet = true
                 }
                 .keyboardShortcut(",", modifiers: [.command])
@@ -28,28 +28,28 @@ struct BurrowApp: App {
 
             // File Menu Additions
             CommandGroup(replacing: .newItem) {
-                Button("Nowa karta") {
+                Button("New Tab") {
                     appState.addNewTab()
                 }
                 .keyboardShortcut("t", modifiers: [.command])
 
-                Button("Otwórz ponownie zamkniętą kartę") { appState.reopenClosedTab() }
+                Button("Reopen Closed Tab") { appState.reopenClosedTab() }
                     .keyboardShortcut("t", modifiers: [.command, .shift])
                     .disabled(appState.recentlyClosedTabs.isEmpty)
 
-                Button("Nowy folder…") {
+                Button("New Folder…") {
                     appState.showNewFolderSheet = true
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
 
-                Button("Nowy plik…") {
+                Button("New File…") {
                     appState.showNewFileSheet = true
                 }
                 .keyboardShortcut("n", modifiers: [.command, .option])
 
                 Divider()
 
-                Button("Zamknij kartę") {
+                Button("Close Tab") {
                     if appState.isDualPane && appState.activePaneSide == .right {
                         appState.toggleDualPane()
                     } else if appState.tabs.count > 1 {
@@ -82,37 +82,37 @@ struct BurrowApp: App {
             CommandGroup(replacing: .pasteboard) {
                 Divider()
 
-                Button("Wytnij pliki") {
+                Button("Cut Files") {
                     if !routeTextAction(#selector(NSText.cut(_:))), canUseFileCommands { fileOps.cutItems(appState.activeTab.selectedItems) }
                 }
                 .keyboardShortcut("x", modifiers: [.command])
 
-                Button("Kopiuj pliki") {
+                Button("Copy Files") {
                     if !routeTextAction(#selector(NSText.copy(_:))), canUseFileCommands { fileOps.copyItems(appState.activeTab.selectedItems) }
                 }
                 .keyboardShortcut("c", modifiers: [.command])
 
-                Button("Wklej / Przenieś tutaj") {
+                Button("Paste or Move Here") {
                     if !routeTextAction(#selector(NSText.paste(_:))), canUseFileCommands {
                         fileOps.paste(into: appState.activeTab.currentURL)
                     }
                 }
                 .keyboardShortcut("v", modifiers: [.command])
 
-                Button("Przenieś tutaj") {
+                Button("Move Here") {
                     if canUseFileCommands { fileOps.paste(into: appState.activeTab.currentURL, forceMove: true) }
                 }
                 .keyboardShortcut("v", modifiers: [.command, .option])
                 .disabled(!canUseFileCommands)
 
-                Button("Zaznacz wszystko") {
+                Button("Select All") {
                     if !routeTextAction(#selector(NSText.selectAll(_:))), canUseFileCommands { appState.activeTab.selectAll() }
                 }
                 .keyboardShortcut("a", modifiers: [.command])
 
                 Divider()
 
-                Button("Kopiuj pełną ścieżkę") {
+                Button("Copy Full Path") {
                     let sel = appState.activeTab.selectedItems
                     if sel.isEmpty {
                         NSPasteboard.general.clearContents()
@@ -123,7 +123,7 @@ struct BurrowApp: App {
                 }
                 .keyboardShortcut("c", modifiers: [.command, .option])
 
-                Button("Duplikuj zaznaczone") {
+                Button("Duplicate Selected") {
                     guard canUseFileCommands else { return }
                     // Duplication runs detached; reload the originating pane once copies exist.
                     let pane = appState.activeTab
@@ -132,7 +132,7 @@ struct BurrowApp: App {
                 .keyboardShortcut("d", modifiers: [.command])
                 .disabled(!canUseFileCommands || appState.activeTab.selectedItems.isEmpty || fileOps.isBusy)
 
-                Button("Przenieś do Kosza") {
+                Button("Move to Trash") {
                     if routeTextAction(#selector(NSResponder.deleteToBeginningOfLine(_:))) { return }
                     guard canUseFileCommands else { return }
                     fileOps.moveToTrash(appState.activeTab.selectedItems)
@@ -142,7 +142,7 @@ struct BurrowApp: App {
                 .disabled(!isEditingText && (!canUseFileCommands || appState.activeTab.selectedItems.isEmpty || fileOps.isBusy))
 
                 // emptySystemTrash asks for confirmation before deleting anything.
-                Button("Opróżnij Kosz…") {
+                Button("Empty Trash…") {
                     guard canUseFileCommands else { return }
                     fileOps.emptySystemTrash { appState.activeTab.reloadDirectory() }
                 }
@@ -151,51 +151,51 @@ struct BurrowApp: App {
             }
 
             // fsearch & Navigation Menu
-            CommandMenu("Przejdź") {
-                Button("Szukaj plików i folderów") {
+            CommandMenu("Go") {
+                Button("Search Files and Folders") {
                     appState.focusSearchFieldTrigger += 1
                 }
                 .keyboardShortcut("f", modifiers: [.command])
 
-                Button("Szybkie wyszukiwanie…") {
+                Button("Quick Search…") {
                     appState.showQuickFSearchModal.toggle()
                 }
                 .keyboardShortcut("p", modifiers: [.command])
 
                 Divider()
 
-                Button("Edytuj pasek ścieżki") {
+                Button("Edit Path Bar") {
                     appState.activeTab.requestPathEditing()
                 }
                 .keyboardShortcut("l", modifiers: [.command])
 
-                Button("Idź do folderu…") { appState.activeTab.requestPathEditing() }
+                Button("Go to Folder…") { appState.activeTab.requestPathEditing() }
                     .keyboardShortcut("g", modifiers: [.command, .shift])
-                Button("Folder domowy") {
+                Button("Home") {
                     appState.activeTab.navigate(to: FileManager.default.homeDirectoryForCurrentUser)
                 }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
-                Button("Odśwież") { appState.activeTab.refresh() }
+                Button("Refresh") { appState.activeTab.refresh() }
                     .keyboardShortcut("r", modifiers: [.command])
 
-                Button("Wstecz") {
+                Button("Back") {
                     appState.activeTab.goBack()
                 }
                 .keyboardShortcut("[", modifiers: [.command])
                 .disabled(appState.activeTab.historyBack.isEmpty)
 
-                Button("Dalej") {
+                Button("Forward") {
                     appState.activeTab.goForward()
                 }
                 .keyboardShortcut("]", modifiers: [.command])
                 .disabled(appState.activeTab.historyForward.isEmpty)
 
-                Button("Folder nadrzędny") {
+                Button("Enclosing Folder") {
                     appState.activeTab.goUp()
                 }
                 .keyboardShortcut(.upArrow, modifiers: [.command])
 
-                Button("Otwórz zaznaczony element") {
+                Button("Open Selected Item") {
                     if let item = appState.activeTab.primarySelectedItem {
                         if item.isDirectory && item.fileExtension.lowercased() != "app" {
                             appState.activeTab.navigate(to: item.url)
@@ -209,7 +209,7 @@ struct BurrowApp: App {
 
                 Divider()
 
-                Button("Przebuduj indeks plików") {
+                Button("Rebuild File Index") {
                     FSearchIndex.shared.startIndexing()
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
@@ -217,62 +217,62 @@ struct BurrowApp: App {
 
             // View Menu Additions
             CommandGroup(after: .toolbar) {
-                Button(appState.showSidebar ? "Ukryj pasek boczny" : "Pokaż pasek boczny") { appState.showSidebar.toggle() }
+                Button(appState.showSidebar ? String(localized: "Hide Sidebar") : String(localized: "Show Sidebar")) { appState.showSidebar.toggle() }
                     .keyboardShortcut("s", modifiers: [.command, .control])
                 Divider()
-                Button("Widok listy") {
+                Button("as List") {
                     appState.activeTab.viewMode = .list
                 }
                 .keyboardShortcut("1", modifiers: [.command])
 
-                Button("Widok ikon") {
+                Button("as Icons") {
                     appState.activeTab.viewMode = .icons
                 }
                 .keyboardShortcut("2", modifiers: [.command])
 
-                Button("Widok kolumn") {
+                Button("as Columns") {
                     appState.activeTab.viewMode = .columns
                 }
                 .keyboardShortcut("3", modifiers: [.command])
 
-                Button("Mapa dysku") {
+                Button("Disk Map") {
                     appState.activeTab.viewMode = .wiztree
                 }
                 .keyboardShortcut("4", modifiers: [.command])
 
                 Divider()
 
-                Button("Przełącz widok dwupanelowy") {
+                Button("Toggle Dual Pane") {
                     appState.toggleDualPane()
                 }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
 
-                Button("Pokaż/ukryj terminal") {
+                Button("Show/Hide Terminal") {
                     appState.showTerminalDrawer.toggle()
                 }
                 .keyboardShortcut("`", modifiers: [.control])
 
-                Button("Pokaż/ukryj pliki ukryte") {
+                Button("Show/Hide Hidden Files") {
                     appState.activeTab.showHiddenFiles.toggle()
                     appState.activeTab.refresh()
                 }
                 .keyboardShortcut(".", modifiers: [.command, .shift])
 
-                Button("Pokaż/ukryj inspektor") {
+                Button("Show/Hide Inspector") {
                     appState.showInspector.toggle()
                 }
                 .keyboardShortcut("i", modifiers: [.command])
 
-                Button("Szybki podgląd (Quick Look)") {
+                Button("Quick Look") {
                     appState.toggleQuickLook()
                 }
                 .keyboardShortcut("y", modifiers: [.command])
             }
             CommandGroup(after: .windowArrangement) {
-                Button("Następna karta") { appState.selectAdjacentTab(offset: 1) }
+                Button("Show Next Tab") { appState.selectAdjacentTab(offset: 1) }
                     .keyboardShortcut("]", modifiers: [.command, .shift])
                     .disabled(appState.tabs.count < 2)
-                Button("Poprzednia karta") { appState.selectAdjacentTab(offset: -1) }
+                Button("Show Previous Tab") { appState.selectAdjacentTab(offset: -1) }
                     .keyboardShortcut("[", modifiers: [.command, .shift])
                     .disabled(appState.tabs.count < 2)
             }
@@ -425,8 +425,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showQuitFailure() {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Nie można jeszcze zamknąć aplikacji"
-        alert.informativeText = "Nie potwierdzono zakończenia wszystkich poleceń terminala w ciągu 5 sekund. Anulowano zamykanie aplikacji. Przerywanie poleceń trwa nadal; możesz ponownie wybrać Zakończ. Wymuszenie zamknięcia nie gwarantuje zakończenia procesów."
+        alert.messageText = String(localized: "Burrow can’t quit yet")
+        alert.informativeText = String(localized: "Terminal commands did not confirm they had stopped within 5 seconds. Quitting was canceled. Command cancellation is still in progress; you can choose Quit again. Forcing quit does not guarantee that the processes end.")
         let button = alert.addButton(withTitle: "OK")
         button.target = self
         button.action = #selector(dismissQuitFailure(_:))

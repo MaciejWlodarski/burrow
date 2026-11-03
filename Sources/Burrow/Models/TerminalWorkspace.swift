@@ -48,7 +48,7 @@ final class TerminalTab: ObservableObject, Identifiable {
         self.ordinal = ordinal
         self.lifecycle = lifecycle
         self.reconcile = reconcile
-        transcript.append(text: "Zsh • każda komenda uruchamia osobny proces. Samodzielne cd zmienia folder tej karty. Polecenia interaktywne wymagają zewnętrznego terminala.")
+        transcript.append(text: String(localized: "Zsh • each command runs in a separate process. A standalone cd changes the folder of this tab. Interactive commands require an external terminal."))
     }
     static func shellQuote(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'" }
     #if BURROW_TESTING
@@ -83,16 +83,16 @@ final class TerminalTab: ObservableObject, Identifiable {
                     self.transcript.append(text: "→ \(target.path)")
                 }
                 self.transcript.appendOutput(value.output)
-                if value.wasTruncated { self.transcript.append(text: "[Wyjście ograniczone do 1 MiB; dalsze dane odczytano i pominięto.]") }
+                if value.wasTruncated { self.transcript.append(text: String(localized: "[Output limited to 1 MiB; further data was read and discarded.]")) }
                 if value.wasCancelled || value.status != 0 {
-                    self.transcript.append(text: value.wasCancelled ? "[Polecenie przerwane]" : "[Polecenie zakończone błędem: \(value.status)]", isError: true)
+                    self.transcript.append(text: value.wasCancelled ? String(localized: "[Command canceled]") : String(localized: "[Command failed with status \(value.status)]"), isError: true)
                 }
-            case .failure(let error): self.transcript.append(text: "Błąd wykonania: \(error.localizedDescription)", isError: true)
+            case .failure(let error): self.transcript.append(text: String(localized: "Execution error: \(error.localizedDescription)"), isError: true)
             }
             self.session = nil; self.token = nil; self.isRunning = false
         }) else {
             token = nil
-            transcript.append(text: "[Nie uruchomiono polecenia: trwa zamykanie aplikacji lub osiągnięto limit aktywnych procesów.]", isError: true)
+            transcript.append(text: String(localized: "[Command not started: the app is quitting or the limit of active processes was reached.]"), isError: true)
             return
         }
         session = worker; isRunning = true

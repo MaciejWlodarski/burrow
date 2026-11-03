@@ -30,10 +30,10 @@ enum FileChecksumFailure: Error, LocalizedError, Sendable {
 
     var errorDescription: String? {
         switch self {
-        case .cancelled: return "Anulowano obliczanie sum kontrolnych."
-        case .notRegular: return "Sumy kontrolne są dostępne tylko dla zwykłych plików, nie dowiązań ani urządzeń."
-        case .changed: return "Plik zmienił się podczas obliczania. Spróbuj ponownie."
-        case .io(let reason): return "Nie udało się odczytać pliku: \(reason)"
+        case .cancelled: return String(localized: "Checksum calculation canceled.")
+        case .notRegular: return String(localized: "Checksums are available only for regular files, not symbolic links or devices.")
+        case .changed: return String(localized: "The file changed during calculation. Try again.")
+        case .io(let reason): return String(localized: "Couldn’t read the file: \(reason)")
         }
     }
 }

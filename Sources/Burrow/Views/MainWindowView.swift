@@ -150,21 +150,21 @@ public struct MainWindowView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .accessibilityLabel("Nowa karta")
-            .help("Nowa karta (⌘T)")
+            .accessibilityLabel("New Tab")
+            .help("New Tab (⌘T)")
 
             if appState.isDualPane {
                 Menu {
-                    Button("Kopiuj zaznaczone do drugiego panelu", systemImage: "doc.on.doc") {
+                    Button("Copy Selection to Other Pane", systemImage: "doc.on.doc") {
                         let destination = appState.activePaneSide == .left ? appState.rightPane : appState.leftTab
                         fileOps.performTransfer(sourceURLs: appState.activeTab.selectedItems.map(\.url), into: destination.currentURL, isMove: false)
                     }
                     .disabled(appState.activeTab.selectedItems.isEmpty || fileOps.isBusy)
-                    Button("Porównaj foldery…", systemImage: "arrow.left.arrow.right") { appState.showCompareSheet = true }
+                    Button("Compare Folders…", systemImage: "arrow.left.arrow.right") { appState.showCompareSheet = true }
                     Divider()
-                    Button("Zamknij drugi panel") { appState.toggleDualPane() }
+                    Button("Close Other Pane") { appState.toggleDualPane() }
                 } label: {
-                    Text(appState.activePaneSide == .left ? "Lewy panel" : "Prawy panel")
+                    Text(appState.activePaneSide == .left ? String(localized: "Left Pane") : String(localized: "Right Pane"))
                         .font(.system(size: 11, weight: .medium))
                 }
                 .fixedSize()
@@ -215,8 +215,8 @@ private struct FinderTabView: View {
             .opacity(appState.tabs.count > 1 ? 1 : 0)
             .accessibilityHidden(appState.tabs.count == 1)
             .disabled(appState.tabs.count == 1)
-            .accessibilityLabel("Zamknij kartę \(tab.title)")
-            .help("Zamknij kartę \(tab.title)")
+            .accessibilityLabel("Close tab \(tab.title)")
+            .help("Close tab \(tab.title)")
         }
         .font(.system(size: 12, weight: isSelected ? .medium : .regular))
         .padding(.horizontal, 10)
@@ -225,11 +225,11 @@ private struct FinderTabView: View {
         .onHover { isHovered = $0 }
         .help(tab.currentURL.path)
         .contextMenu {
-            Button("Powiel kartę") { appState.addNewTab(at: tab.currentURL) }
-            Button("Zamknij kartę") { appState.closeTab(tab.id) }.disabled(appState.tabs.count == 1)
-            Button("Zamknij pozostałe karty") { appState.closeOtherTabs(keeping: tab.id) }.disabled(appState.tabs.count == 1)
+            Button("Duplicate Tab") { appState.addNewTab(at: tab.currentURL) }
+            Button("Close Tab") { appState.closeTab(tab.id) }.disabled(appState.tabs.count == 1)
+            Button("Close Other Tabs") { appState.closeOtherTabs(keeping: tab.id) }.disabled(appState.tabs.count == 1)
             Divider()
-            Button("Otwórz ponownie zamkniętą kartę") { appState.reopenClosedTab() }
+            Button("Reopen Closed Tab") { appState.reopenClosedTab() }
                 .disabled(appState.recentlyClosedTabs.isEmpty)
         }
     }
@@ -248,13 +248,15 @@ private struct FinderStatusBar: View {
     }
 
     private var selectionDescription: String {
-        if activeTab.isSessionPaused { return "Zapisany widok · wstrzymany" }
+        if activeTab.isSessionPaused { return String(localized: "Saved view · paused") }
         let items = activeTab.selectedItems
         let summary = FinderSelectionSummary(pane: activeTab)
         guard !items.isEmpty, !summary.isSearching else { return summary.countDescription }
         let knownBytes = items.reduce(Int64(0)) { $0 + ($1.isDirectory ? (folderSizes.result(for: $1.path)?.bytes ?? 0) : $1.size) }
         let unknownFolders = items.contains { $0.isDirectory && folderSizes.size(for: $0.path) == nil }
-        return "\(summary.countDescription) · \(unknownFolders ? "co najmniej " : "")\(FormatHelpers.formatBytes(knownBytes))"
+        let count = summary.countDescription
+        let size = FormatHelpers.formatBytes(knownBytes)
+        return unknownFolders ? String(localized: "\(count) · at least \(size)") : String(localized: "\(count) · \(size)")
     }
 
     var body: some View {
@@ -262,7 +264,7 @@ private struct FinderStatusBar: View {
             Text(selectionDescription).lineLimit(1).layoutPriority(1).help(selectionDescription)
             if let transfer = fileOps.activeTransfer {
                 ProgressView(value: transfer.fraction).frame(width: 70)
-                    .accessibilityLabel("Postęp operacji plikowej")
+                    .accessibilityLabel("File operation progress")
                 Text(transfer.currentFile).lineLimit(1).truncationMode(.middle).help(transfer.currentFile)
                 if transfer.isCancellable {
                     Button { fileOps.cancelActiveTransfer() } label: {
@@ -270,8 +272,8 @@ private struct FinderStatusBar: View {
                             .frame(width: 24, height: 24)
                     }
                         .buttonStyle(.plain)
-                        .help("Przerwij po bieżącym pliku")
-                        .accessibilityLabel("Przerwij operację plikową")
+                        .help("Stop after the current file")
+                        .accessibilityLabel("Cancel file operation")
                 }
             } else if let message = fileOps.lastStatusMessage {
                 Text(message).lineLimit(1).truncationMode(.middle).help(message).textSelection(.enabled)
@@ -282,16 +284,16 @@ private struct FinderStatusBar: View {
                 Slider(value: $appState.iconGridSize, in: 44...136)
                     .frame(width: 90)
                     .controlSize(.mini)
-                    .accessibilityLabel("Rozmiar ikon")
+                    .accessibilityLabel("Icon size")
             }
             if appState.isIndexing {
-                ProgressView().controlSize(.small).accessibilityLabel("Indeksowanie plików")
-                Text("Indeksowanie…")
+                ProgressView().controlSize(.small).accessibilityLabel("Indexing files")
+                Text("Indexing…")
             } else if !activeTab.isSearching && !activeTab.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(FormatHelpers.formatLatency(activeTab.lastSearchLatencyMs)).monospacedDigit()
-                    .help("Czas wyszukiwania · \(appState.indexedFileCount.formatted()) plików w indeksie")
+                    .help("Search time · \(appState.indexedFileCount.formatted()) files in index")
             } else if let availableBytes {
-                Text("\(FormatHelpers.formatBytes(availableBytes)) wolne").monospacedDigit()
+                Text("\(FormatHelpers.formatBytes(availableBytes)) free").monospacedDigit()
             }
         }
         .font(FinderUI.captionFont)

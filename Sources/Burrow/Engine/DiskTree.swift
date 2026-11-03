@@ -31,7 +31,7 @@ public final class DiskTree: @unchecked Sendable {
         static let removed: UInt8 = 32
     }
 
-    public static let syntheticName = "<Niezeskanowane / systemowe>"
+    public static let syntheticName = String(localized: "<Unscanned / system>")
     private static let categories = FileKindCategory.allCases
 
     public let rootPath: String

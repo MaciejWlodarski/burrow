@@ -136,7 +136,7 @@ struct TerminalWorkspaceRegressionTests {
         tab.execute("cd " + TerminalTab.shellQuote(root.appendingPathComponent("missing").path))
         try await wait { !tab.isRunning }
         try check(tab.directory.path == destination.path, "Invalid target from renamed cwd preserves tab directory")
-        try check(tab.transcript.lines.contains { $0.isError && $0.text.contains("błędem") }, "Invalid target is validated by builtin cd, not spawn cwd")
+        try check(tab.transcript.lines.contains { $0.isError && $0.text.contains("failed with status") }, "Invalid target is validated by builtin cd, not spawn cwd")
         let regularFile = root.appendingPathComponent("file")
         try Data("not a directory".utf8).write(to: regularFile)
         tab.execute("cd " + TerminalTab.shellQuote(regularFile.path))
@@ -166,7 +166,7 @@ struct TerminalWorkspaceRegressionTests {
         held.removeFirst()()
         try await wait { !pending.isRunning }
         try check(pending.directory.path == root.path && queued.activeCount == 0, "Cancellation before spawn cannot commit cd")
-        try check(pending.transcript.lines.contains { $0.isError && $0.text.contains("przerwane") }, "Cancelled cd reports cancellation")
+        try check(pending.transcript.lines.contains { $0.isError && $0.text.contains("canceled") }, "Canceled cd reports cancellation")
 
         pending.execute("cd " + TerminalTab.shellQuote(renamed.path))
         // Complete physical work, then close before the main-loop completion.

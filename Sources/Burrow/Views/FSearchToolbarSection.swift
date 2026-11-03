@@ -20,19 +20,19 @@ public struct FSearchToolbarSection: View {
                 searchField
 
                 Menu {
-                    Picker("Zakres wyszukiwania", selection: $activeTab.searchScope) {
+                    Picker("Search Scope", selection: $activeTab.searchScope) {
                         ForEach(SearchScopeMode.allCases) { mode in
                             Label(scopeLabel(mode), systemImage: mode.iconName).tag(mode)
                         }
                     }
                     Divider()
-                    Toggle("Toleruj literówki", isOn: $activeTab.fuzzyEnabled)
+                    Toggle("Tolerate Typos", isOn: $activeTab.fuzzyEnabled)
                 } label: {
                     Label(scopeLabel(activeTab.searchScope), systemImage: activeTab.searchScope.iconName)
                         .font(FinderUI.detailFont)
                 }
                 .fixedSize()
-                .help("Wybierz, gdzie szukać plików")
+                .help("Choose where to search for files")
                 .onChange(of: activeTab.searchScope) { _, _ in activeTab.triggerSearch() }
                 .onChange(of: activeTab.fuzzyEnabled) { _, _ in activeTab.triggerSearch() }
 
@@ -52,28 +52,28 @@ public struct FSearchToolbarSection: View {
                 Button {
                     appState.showSidebar.toggle()
                 } label: {
-                    Label("Pasek boczny", systemImage: "sidebar.left")
+                    Label("Sidebar", systemImage: "sidebar.left")
                 }
-                .help("Pokaż lub ukryj pasek boczny (⌃⌘S)")
-                .accessibilityValue(appState.showSidebar ? "Widoczny" : "Ukryty")
+                .help("Show or hide the sidebar (⌃⌘S)")
+                .accessibilityValue(appState.showSidebar ? String(localized: "Visible") : String(localized: "Hidden"))
             }
             ToolbarItemGroup(placement: .navigation) {
                 Button { activeTab.goBack() } label: {
-                    Label("Wstecz", systemImage: "chevron.left")
+                    Label("Back", systemImage: "chevron.left")
                 }
                 .disabled(activeTab.historyBack.isEmpty)
-                .help("Wstecz (⌘[)")
+                .help("Back (⌘[)")
                 Button { activeTab.goForward() } label: {
-                    Label("Dalej", systemImage: "chevron.right")
+                    Label("Forward", systemImage: "chevron.right")
                 }
                 .disabled(activeTab.historyForward.isEmpty)
-                .help("Dalej (⌘])")
+                .help("Forward (⌘])")
             }
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 7) {
                     Image(systemName: activeTab.searchQuery.isEmpty ? "folder.fill" : "magnifyingglass")
                         .foregroundStyle(activeTab.searchQuery.isEmpty ? Color.accentColor : .secondary)
-                    Text(activeTab.searchQuery.isEmpty ? activeTab.title : "Wyniki wyszukiwania")
+                    Text(activeTab.searchQuery.isEmpty ? activeTab.title : String(localized: "Search Results"))
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -86,7 +86,7 @@ public struct FSearchToolbarSection: View {
                 .help(activeTab.currentURL.path)
             }
             ToolbarItem {
-                Picker("Widok", selection: $activeTab.viewMode) {
+                Picker("View", selection: $activeTab.viewMode) {
                     ForEach(FinderViewMode.allCases) { mode in
                         Label(mode.displayName, systemImage: mode.iconName).tag(mode)
                     }
@@ -98,11 +98,11 @@ public struct FSearchToolbarSection: View {
                 // intrinsic width follows the running macOS control metrics.
                 .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, FinderUI.compactSpacing)
-                .help("Lista ⌘1 · Ikony ⌘2 · Kolumny ⌘3 · Mapa dysku ⌘4")
+                .help("List ⌘1 · Icons ⌘2 · Columns ⌘3 · Disk Map ⌘4")
             }
             ToolbarItem {
                 Menu {
-                    Picker("Sortuj według", selection: Binding(
+                    Picker("Sort By", selection: Binding(
                         get: { activeTab.sortField },
                         set: { field in var sort = activeTab.currentSort; sort.field = field; activeTab.setSort(sort) }
                     )) {
@@ -111,91 +111,91 @@ public struct FSearchToolbarSection: View {
                         }
                     }
                     Divider()
-                    Toggle("Rosnąco", isOn: Binding(
+                    Toggle("Ascending", isOn: Binding(
                         get: { activeTab.sortAscending },
                         set: { value in var sort = activeTab.currentSort; sort.ascending = value; activeTab.setSort(sort) }
                     ))
-                    Toggle("Foldery na górze", isOn: Binding(
+                    Toggle("Folders on Top", isOn: Binding(
                         get: { activeTab.foldersOnTop },
                         set: { value in var sort = activeTab.currentSort; sort.foldersOnTop = value; activeTab.setSort(sort) }
                     ))
                     Divider()
                     Section(folderSorts.hasCustomSort(for: activeTab.currentURL)
-                            ? "Ten folder ma własne sortowanie" : "Ten folder używa sortowania domyślnego") {
-                        Button("Przywróć domyślne dla tego folderu") {
+                            ? String(localized: "This folder has its own sort order") : String(localized: "This folder uses the default sort order")) {
+                        Button("Restore Default for This Folder") {
                             folderSorts.resetSort(for: activeTab.currentURL)
                         }
                         .disabled(!folderSorts.hasCustomSort(for: activeTab.currentURL))
-                        Button("Ustaw jako domyślne dla wszystkich folderów") {
+                        Button("Set as Default for All Folders") {
                             folderSorts.setDefaultSort(activeTab.currentSort)
                             folderSorts.resetSort(for: activeTab.currentURL)
                         }
                         .disabled(activeTab.currentSort == folderSorts.defaultSort)
                     }
                 } label: {
-                    Label("Sortuj", systemImage: "arrow.up.arrow.down")
+                    Label("Sort", systemImage: "arrow.up.arrow.down")
                 }
-                .help("Sortowanie i kolejność folderów")
+                .help("Sorting and folder order")
             }
             ToolbarItem {
                 Button {
                     fileOps.showShareSheet(for: activeTab.selectedItems)
                 } label: {
-                    Label("Udostępnij", systemImage: "square.and.arrow.up")
+                    Label("Share", systemImage: "square.and.arrow.up")
                 }
                 .disabled(activeTab.selectedItems.isEmpty)
-                .help("Udostępnij zaznaczone pliki")
+                .help("Share the selected files")
             }
             ToolbarItem {
                 Menu {
-                    Button("Nowy folder…", systemImage: "folder.badge.plus") { appState.showNewFolderSheet = true }
-                    Button("Nowy plik…", systemImage: "doc.badge.plus") { appState.showNewFileSheet = true }
+                    Button("New Folder…", systemImage: "folder.badge.plus") { appState.showNewFolderSheet = true }
+                    Button("New File…", systemImage: "doc.badge.plus") { appState.showNewFileSheet = true }
                     Divider()
-                    Button("Odśwież", systemImage: "arrow.clockwise") { activeTab.refresh() }
-                    Toggle("Pokaż ukryte pliki", isOn: Binding(
+                    Button("Refresh", systemImage: "arrow.clockwise") { activeTab.refresh() }
+                    Toggle("Show Hidden Files", isOn: Binding(
                         get: { activeTab.showHiddenFiles },
                         set: { value in
                             activeTab.showHiddenFiles = value
                             activeTab.refresh()
                         }
                     ))
-                    Button("Dodaj folder do ulubionych", systemImage: "star") {
+                    Button("Add Folder to Favorites", systemImage: "star") {
                         appState.addBookmark(for: activeTab.currentURL)
                     }
                     Divider()
-                    Button("Otwórz w Finderze", systemImage: "macwindow") {
+                    Button("Open in Finder", systemImage: "macwindow") {
                         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: activeTab.currentURL.path)
                     }
                     Toggle("Terminal", isOn: $appState.showTerminalDrawer)
-                    Button("Szybkie wyszukiwanie…", systemImage: "magnifyingglass") {
+                    Button("Quick Search…", systemImage: "magnifyingglass") {
                         appState.showQuickFSearchModal = true
                     }
                     Divider()
-                    Button("Ustawienia…", systemImage: "gearshape") { appState.showSettingsSheet = true }
+                    Button("Settings…", systemImage: "gearshape") { appState.showSettingsSheet = true }
                 } label: {
-                    Label("Więcej czynności", systemImage: "ellipsis.circle")
+                    Label("More Actions", systemImage: "ellipsis.circle")
                 }
-                .help("Nowy folder, ukryte pliki i inne czynności")
+                .help("New folder, hidden files and other actions")
             }
             ToolbarItemGroup {
                 Button { appState.showTerminalDrawer.toggle() } label: {
                     Label("Terminal", systemImage: "terminal")
                 }
                 .tint(appState.showTerminalDrawer ? .accentColor : .secondary)
-                .help("Pokaż lub ukryj terminal (Ctrl+`)")
-                .accessibilityValue(appState.showTerminalDrawer ? "Widoczny" : "Ukryty")
+                .help("Show or hide the terminal (Ctrl+`)")
+                .accessibilityValue(appState.showTerminalDrawer ? String(localized: "Visible") : String(localized: "Hidden"))
                 Button { appState.toggleDualPane() } label: {
-                    Label("Dwa panele", systemImage: "rectangle.split.2x1")
+                    Label("Two Panes", systemImage: "rectangle.split.2x1")
                 }
                 .tint(appState.isDualPane ? .accentColor : .secondary)
-                .help("Widok dwupanelowy (⇧⌘D)")
-                .accessibilityValue(appState.isDualPane ? "Włączony" : "Wyłączony")
+                .help("Two-pane view (⇧⌘D)")
+                .accessibilityValue(appState.isDualPane ? String(localized: "On") : String(localized: "Off"))
                 Button { appState.showInspector.toggle() } label: {
-                    Label("Inspektor", systemImage: "sidebar.right")
+                    Label("Inspector", systemImage: "sidebar.right")
                 }
                 .tint(appState.showInspector ? .accentColor : .secondary)
-                .help("Pokaż lub ukryj inspektor (⌘I)")
-                .accessibilityValue(appState.showInspector ? "Widoczny" : "Ukryty")
+                .help("Show or hide the inspector (⌘I)")
+                .accessibilityValue(appState.showInspector ? String(localized: "Visible") : String(localized: "Hidden"))
             }
         }
         .onChange(of: appState.focusSearchFieldTrigger) { _, _ in isSearchFocused = true }
@@ -205,7 +205,7 @@ public struct FSearchToolbarSection: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Szukaj plików i folderów", text: $activeTab.searchQuery)
+            TextField("Search files and folders", text: $activeTab.searchQuery)
                 .textFieldStyle(.plain)
                 .focused($isSearchFocused)
                 .onChange(of: activeTab.searchQuery) { _, _ in activeTab.triggerSearch() }
@@ -213,16 +213,16 @@ public struct FSearchToolbarSection: View {
                     activeTab.clearSearch()
                     isSearchFocused = false
                 }
-                .accessibilityLabel("Szukaj plików i folderów")
+                .accessibilityLabel("Search files and folders")
             if activeTab.isSearching {
                 ProgressView().controlSize(.small)
-                    .accessibilityLabel("Wyszukiwanie plików")
+                    .accessibilityLabel("Searching files")
             } else if !activeTab.searchQuery.isEmpty {
                 Button { activeTab.clearSearch() } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).frame(width: 24, height: 24)
                 }
-                .help("Wyczyść wyszukiwanie (Esc)")
-                .accessibilityLabel("Wyczyść wyszukiwanie")
+                .help("Clear search (Esc)")
+                .accessibilityLabel("Clear search")
             } else if !isSearchFocused {
                 Text("⌘F").font(FinderUI.captionFont).foregroundStyle(.tertiary)
             }
@@ -240,25 +240,25 @@ public struct FSearchToolbarSection: View {
 
     private var filterMenu: some View {
         Menu {
-            Section("Rodzaj pliku") {
-                filter("Foldery", "folder", "type:dir")
-                filter("Dokumenty", "doc.text", "type:doc")
-                filter("Obrazy", "photo", "type:image")
-                filter("Wideo", "film", "type:video")
-                filter("Kod źródłowy", "chevron.left.forwardslash.chevron.right", "type:code")
-                filter("Archiwa", "doc.zipper", "type:archive")
+            Section("File Kind") {
+                filter("Folders", "folder", "type:dir")
+                filter("Documents", "doc.text", "type:doc")
+                filter("Images", "photo", "type:image")
+                filter("Video", "film", "type:video")
+                filter("Source Code", "chevron.left.forwardslash.chevron.right", "type:code")
+                filter("Archives", "doc.zipper", "type:archive")
             }
-            Section("Szybkie filtry") {
-                filter("Większe niż 10 MB", "internaldrive", "size:>10mb")
-                filter("Zmienione w ostatnim tygodniu", "clock", "mtime:<7d")
-                filter("Zmodyfikowane w Git", "point.3.connected.trianglepath.dotted", "git:modified")
+            Section("Quick Filters") {
+                filter("Larger Than 10 MB", "internaldrive", "size:>10mb")
+                filter("Changed in the Last Week", "clock", "mtime:<7d")
+                filter("Modified in Git", "point.3.connected.trianglepath.dotted", "git:modified")
             }
             Divider()
-            Button("Składnia wyszukiwania…", systemImage: "questionmark.circle") {
+            Button("Search Syntax…", systemImage: "questionmark.circle") {
                 appState.showFSearchHelpPopover = true
             }
         } label: {
-            Label("Filtry", systemImage: "line.3.horizontal.decrease.circle")
+            Label("Filters", systemImage: "line.3.horizontal.decrease.circle")
                 .font(FinderUI.detailFont)
         }
         .fixedSize()
@@ -267,7 +267,7 @@ public struct FSearchToolbarSection: View {
         }
     }
 
-    private func filter(_ title: String, _ icon: String, _ token: String) -> some View {
+    private func filter(_ title: LocalizedStringKey, _ icon: String, _ token: String) -> some View {
         Button {
             activeTab.appendSearchOperator(token)
         } label: {
@@ -278,7 +278,7 @@ public struct FSearchToolbarSection: View {
     private var activeFilters: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                Text("Filtry:").foregroundStyle(.secondary)
+                Text("Filters:").foregroundStyle(.secondary)
                 ForEach(activeTab.activeFilterPills) { pill in
                     Button { activeTab.removeFilterPill(pill) } label: {
                         HStack(spacing: 5) {
@@ -292,8 +292,8 @@ public struct FSearchToolbarSection: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.accentColor)
-                    .help("Usuń filtr \(pill.rawToken)")
-                    .accessibilityLabel("Usuń filtr \(pill.rawToken)")
+                    .help("Remove filter \(pill.rawToken)")
+                    .accessibilityLabel("Remove filter \(pill.rawToken)")
                 }
             }
             .font(FinderUI.captionFont)
@@ -304,9 +304,9 @@ public struct FSearchToolbarSection: View {
 
     private func scopeLabel(_ scope: SearchScopeMode) -> String {
         switch scope {
-        case .currentFolder: return "Ten folder"
-        case .recursiveFolder: return "Z podfolderami"
-        case .wholeIndex: return "Indeks plików"
+        case .currentFolder: return String(localized: "This Folder")
+        case .recursiveFolder: return String(localized: "With Subfolders")
+        case .wholeIndex: return String(localized: "File Index")
         }
     }
 }
@@ -315,19 +315,19 @@ public struct FSearchSyntaxCheatsheetView: View {
     @ObservedObject var activeTab: PaneTabState
 
     private let examples: [(String, String)] = [
-        ("ext:swift,rs", "Tylko pliki z rozszerzeniem .swift lub .rs"),
-        ("type:code", "Kategoria pliku (code, dir, file, image, video, audio, doc, archive)"),
-        ("size:>5mb", "Rozmiar pliku (>5mb, <100kb, 1mb..50mb)"),
-        ("mtime:<7d", "Zmodyfikowane w ciągu 7 dni (<24h, <30m, >30d)"),
-        ("grep:getattrlistbulk", "Przeszukiwanie treści z filtrem Blooma trigramów i podglądem linii"),
-        ("git:modified", "Pliki zmodyfikowane w repozytorium Git (modified, staged, untracked)"),
-        ("tag:red", "Pliki z kolorowym tagiem macOS (red, orange, yellow, green, blue, purple, gray)"),
-        ("regex:^Package.*\\.swift$", "Wyrażenie regularne na nazwie pliku"),
-        ("in:Sources", "Ścieżka nadrzędna zawiera 'Sources'"),
-        ("^main", "Nazwa zaczyna się od 'main'"),
-        (".json$", "Nazwa kończy się na '.json'"),
-        ("!test", "Wyklucz pliki zawierające 'test'"),
-        ("fserach", "Fuzzy + 1-literówka dla słów 5+ znaków (znajdzie 'fsearch')")
+        ("ext:swift,rs", String(localized: "Only files with the .swift or .rs extension")),
+        ("type:code", String(localized: "File category (code, dir, file, image, video, audio, doc, archive)")),
+        ("size:>5mb", String(localized: "File size (>5mb, <100kb, 1mb..50mb)")),
+        ("mtime:<7d", String(localized: "Modified within 7 days (<24h, <30m, >30d)")),
+        ("grep:getattrlistbulk", String(localized: "Content search using a trigram Bloom filter, with line previews")),
+        ("git:modified", String(localized: "Files modified in the Git repository (modified, staged, untracked)")),
+        ("tag:red", String(localized: "Files with a macOS color tag (red, orange, yellow, green, blue, purple, gray)")),
+        ("regex:^Package.*\\.swift$", String(localized: "Regular expression on the file name")),
+        ("in:Sources", String(localized: "Parent path contains 'Sources'")),
+        ("^main", String(localized: "Name starts with 'main'")),
+        (".json$", String(localized: "Name ends with '.json'")),
+        ("!test", String(localized: "Exclude files containing 'test'")),
+        ("fserach", String(localized: "Fuzzy + 1 typo for words of 5+ characters (finds 'fsearch')"))
     ]
 
     public var body: some View {
@@ -335,10 +335,10 @@ public struct FSearchSyntaxCheatsheetView: View {
             HStack {
                 Image(systemName: "bolt.horizontal.circle.fill")
                     .foregroundStyle(Color.accentColor)
-                Text("Składnia wyszukiwania")
+                Text("Search Syntax")
                     .font(FinderUI.titleFont)
                 Spacer()
-                Text("Kliknij, aby wypróbować")
+                Text("Click to try")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.secondary)
             }

@@ -275,7 +275,7 @@ struct FileDropLifecycleRegressionTests {
         let probe = Probe()
         let task = Task { try await FileDropLoader.urls(from: [probe.source()], timeoutNanoseconds: 2_000_000_000) }
         task.cancel()
-        do { _ = try await task.value; throw RegressionFailure(description: "Cancelled load unexpectedly succeeded") }
+        do { _ = try await task.value; throw RegressionFailure(description: "Canceled load unexpectedly succeeded") }
         catch FileDropLoadingError.cancelled { }
         try expect(probe.callbacks.isEmpty)
         do {

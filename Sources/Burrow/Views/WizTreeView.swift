@@ -104,9 +104,9 @@ enum DuplicateSafetyError: LocalizedError {
     case changed, unreadable, cancelled
     var errorDescription: String? {
         switch self {
-        case .changed: return "Plik lub zachowywany oryginał zmienił się. Nic więcej nie usunięto; wykonaj nowy skan."
-        case .unreadable: return "Nie można bezpiecznie odczytać pliku. Wykonaj nowy skan."
-        case .cancelled: return "Skanowanie anulowano."
+        case .changed: return String(localized: "A file or the original being kept has changed. Nothing more was removed; run a new scan.")
+        case .unreadable: return String(localized: "The file can't be read safely. Run a new scan.")
+        case .cancelled: return String(localized: "The scan was canceled.")
         }
     }
 }
@@ -220,9 +220,9 @@ enum DuplicateFileSafety {
 }
 
 public enum WizTreeSubMode: String, CaseIterable, Identifiable, Sendable {
-    case treemap = "WizTree Treemap & Drzewo"
-    case largestFiles = "Największe pliki"
-    case duplicates = "Duplikaty (SHA-256)"
+    case treemap = "treemap"
+    case largestFiles = "largestFiles"
+    case duplicates = "duplicates"
 
     public var id: String { rawValue }
 }
@@ -280,11 +280,11 @@ enum DiskMapPresentation {
 
     static func diagnostic(for tree: DiskTree) -> String? {
         var messages: [String] = []
-        if tree.reachedEntryLimit { messages.append("Wyniki częściowe: osiągnięto limit \(DiskScanner.defaultMaxEntries.formatted()) wpisów.") }
-        if tree.unreadableDirectoryCount > 0 { messages.append("Foldery bez dostępu: \(tree.unreadableDirectoryCount.formatted()).") }
-        if tree.datalessDirectoryCount > 0 { messages.append("Foldery iCloud bez lokalnej zawartości: \(tree.datalessDirectoryCount.formatted()).") }
-        if tree.skippedMountCount > 0 { messages.append("Pominięte inne dyski i montowania: \(tree.skippedMountCount.formatted()).") }
-        if tree.cloneSharedBytes > 0 { messages.append("Klony APFS policzone raz: \(FormatHelpers.formatBytes(tree.cloneSharedBytes)) nie liczono podwójnie.") }
+        if tree.reachedEntryLimit { messages.append(String(localized: "Partial results: reached the limit of \(DiskScanner.defaultMaxEntries.formatted()) entries.")) }
+        if tree.unreadableDirectoryCount > 0 { messages.append(String(localized: "Folders without access: \(tree.unreadableDirectoryCount.formatted()).")) }
+        if tree.datalessDirectoryCount > 0 { messages.append(String(localized: "iCloud folders without local content: \(tree.datalessDirectoryCount.formatted()).")) }
+        if tree.skippedMountCount > 0 { messages.append(String(localized: "Other disks and mounts skipped: \(tree.skippedMountCount.formatted()).")) }
+        if tree.cloneSharedBytes > 0 { messages.append(String(localized: "APFS clones counted once: \(FormatHelpers.formatBytes(tree.cloneSharedBytes)) was not counted twice.")) }
         return messages.isEmpty ? nil : messages.joined(separator: " ")
     }
 }
@@ -406,9 +406,7 @@ public struct WizTreeAnalyzerView: View {
             if let error = duplicateActionError {
                 analysisNotice(error, isError: true)
             }
-            Text(isMapMode
-                ? "Zakres: wszystkie pliki z ukrytymi, bez innych dysków i śledzenia dowiązań. Rozmiar: miejsce zajęte na dysku."
-                : "Zakres: \(pane.showHiddenFiles ? "z ukrytymi plikami" : "bez ukrytych plików"), bez śledzenia dowiązań. Limit: 60 000 wpisów.")
+            Text(scanScopeNote)
                 .font(FinderUI.captionFont)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -421,8 +419,8 @@ public struct WizTreeAnalyzerView: View {
                 VStack(spacing: FinderUI.rowSpacing) {
                     ProgressView()
                         .controlSize(.regular)
-                        .accessibilityLabel("Skanowanie folderu")
-                    Text(scanWorkState == .queued ? "Skan oczekuje na wolne miejsce…" : (subMode == .duplicates ? "Skanowanie i weryfikacja plików…" : "Skanowanie folderu…"))
+                        .accessibilityLabel("Scanning folder")
+                    Text(isScanningStatusTitle)
                         .font(FinderUI.titleFont)
                     Text(pane.currentURL.path)
                         .font(FinderUI.detailFont)
@@ -435,8 +433,8 @@ public struct WizTreeAnalyzerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if scanWorkState == .deferred || scanWorkState == .cancelled || scanWorkState == .cancelling {
                 analysisEmptyState(
-                    title: scanWorkState == .deferred ? "Analiza odroczona" : "Analiza anulowana",
-                    message: "Brak aktualnego wyniku. Użyj odświeżania, aby rozpocząć nowy skan.",
+                    title: scanWorkState == .deferred ? String(localized: "Analysis deferred") : String(localized: "Analysis canceled"),
+                    message: String(localized: "There is no current result. Use Refresh to start a new scan."),
                     systemImage: "pause.circle"
                 )
             } else {
@@ -446,16 +444,16 @@ public struct WizTreeAnalyzerView: View {
                         wizTreeSplitWorkspace(mapTree)
                     } else {
                         analysisEmptyState(
-                            title: scanIsComplete ? "Brak elementów do analizy" : "Brak danych w sprawdzonym zakresie",
-                            message: "Sprawdź zakres skanowania lub wybierz inny folder.",
+                            title: scanIsComplete ? String(localized: "No items to analyze") : String(localized: "No data in the checked scope"),
+                            message: String(localized: "Check the scan scope or choose another folder."),
                             systemImage: "chart.pie"
                         )
                     }
                 case .largestFiles:
                     if largestFiles.isEmpty {
                         analysisEmptyState(
-                            title: scanIsComplete ? "Brak plików do wyświetlenia" : "Brak plików w sprawdzonym zakresie",
-                            message: "Skan nie znalazł zwykłych plików. Dowiązania symboliczne nie są uwzględniane.",
+                            title: scanIsComplete ? String(localized: "No files to show") : String(localized: "No files in the checked scope"),
+                            message: String(localized: "The scan found no regular files. Symbolic links are not included."),
                             systemImage: "doc.text.magnifyingglass"
                         )
                     } else {
@@ -531,15 +529,15 @@ public struct WizTreeAnalyzerView: View {
             }
             if let scan = activeMapScan, mapTree != nil {
                 HStack {
-                    Text("Skan w tle: \(scan.rootPath) · elementy: \((mapStore.progress[scan.id]?.entries ?? 0).formatted())")
+                    Text("Background scan: \(scan.rootPath) · items: \((mapStore.progress[scan.id]?.entries ?? 0).formatted())")
                         .font(FinderUI.captionFont)
-                    Button("Anuluj skan") { mapStore.cancel(scan) }.controlSize(.small)
+                    Button("Cancel Scan") { mapStore.cancel(scan) }.controlSize(.small)
                 }
             } else if isScanning {
                 HStack {
-                    Text(scanWorkState == .queued ? "Skan w kolejce…" : "Skanowanie…")
+                    Text(scanWorkState == .queued ? String(localized: "Scan queued…") : String(localized: "Scanning…"))
                         .font(FinderUI.captionFont)
-                    Button("Anuluj skan") { cancelScan() }.controlSize(.small)
+                    Button("Cancel Scan") { cancelScan() }.controlSize(.small)
                 }
             }
             ViewThatFits(in: .horizontal) {
@@ -556,27 +554,43 @@ public struct WizTreeAnalyzerView: View {
     }
 
     private var analyzerTitle: some View {
-        Label("Analiza miejsca", systemImage: "square.grid.3x1.below.line.grid.1x2.fill")
+        Label("Disk Space Analysis", systemImage: "square.grid.3x1.below.line.grid.1x2.fill")
             .font(FinderUI.titleFont)
             .fixedSize()
     }
 
+    private var isScanningStatusTitle: String {
+        if scanWorkState == .queued { return String(localized: "Scan is waiting for a free slot…") }
+        return subMode == .duplicates
+            ? String(localized: "Scanning and verifying files…")
+            : String(localized: "Scanning folder…")
+    }
+
+    private var scanScopeNote: String {
+        if isMapMode {
+            return String(localized: "Scope: all files including hidden ones, without other disks or symlink following. Size: space allocated on disk.")
+        }
+        return pane.showHiddenFiles
+            ? String(localized: "Scope: including hidden files, without symlink following. Limit: 60,000 entries.")
+            : String(localized: "Scope: excluding hidden files, without symlink following. Limit: 60,000 entries.")
+    }
+
     private var analysisModePicker: some View {
-        Picker("Tryb analizy", selection: $subMode) {
+        Picker("Analysis mode", selection: $subMode) {
             ForEach(WizTreeSubMode.allCases) { mode in
                 Text(analysisModeTitle(mode)).tag(mode)
             }
         }
         .labelsHidden()
-        .accessibilityLabel("Tryb analizy miejsca")
-        .help("Wybierz mapę miejsca, największe pliki lub duplikaty")
+        .accessibilityLabel("Disk space analysis mode")
+        .help("Choose the space map, largest files, or duplicates")
     }
 
     private func analysisModeTitle(_ mode: WizTreeSubMode) -> String {
         switch mode {
-        case .treemap: return "Mapa i drzewo"
-        case .largestFiles: return "Największe pliki"
-        case .duplicates: return "Duplikaty"
+        case .treemap: return String(localized: "Map and Tree")
+        case .largestFiles: return String(localized: "Largest Files")
+        case .duplicates: return String(localized: "Duplicates")
         }
     }
 
@@ -586,40 +600,40 @@ public struct WizTreeAnalyzerView: View {
             .fontWeight(.semibold)
             .foregroundStyle(.primary)
             .fixedSize()
-        Text("Pliki: \(totalScannedFiles.formatted())")
+        Text("Files: \(totalScannedFiles.formatted())")
             .fixedSize()
         if scanDurationMs > 0 {
-            Text("Czas: \(scanDurationMs >= 1000 ? String(format: "%.1f s", scanDurationMs / 1000) : FormatHelpers.formatLatency(scanDurationMs))")
+            Text("Time: \(scanDurationMs >= 1000 ? String(format: "%.1f s", scanDurationMs / 1000) : FormatHelpers.formatLatency(scanDurationMs))")
                 .fixedSize()
         }
         if isMapMode, let free = mapTree?.volumeFreeBytes {
-            Text("Wolne: \(FormatHelpers.formatBytes(free))")
+            Text("Free: \(FormatHelpers.formatBytes(free))")
                 .fixedSize()
         }
         if isMapMode, let mapTree {
-            Text("Skan: \(mapTree.scannedAt.formatted(date: .omitted, time: .shortened))")
+            Text("Scanned: \(mapTree.scannedAt.formatted(date: .omitted, time: .shortened))")
                 .fixedSize()
         }
     }
 
     private var telemetryTotalTitle: String {
-        if isMapMode, let mapTree, mapTree.unaccountedBytes > 0, mapScope == DiskTree.rootID { return "Zajęte" }
-        return scanIsComplete ? "Łącznie" : "Co najmniej"
+        if isMapMode, let mapTree, mapTree.unaccountedBytes > 0, mapScope == DiskTree.rootID { return String(localized: "Used") }
+        return scanIsComplete ? String(localized: "Total") : String(localized: "At least")
     }
 
     private var wholeDiskButton: some View {
         Button {
             performPaneAction { showWholeDisk() }
         } label: {
-            Label("Cały dysk", systemImage: "internaldrive")
+            Label("Whole Disk", systemImage: "internaldrive")
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .help("Przeskanuj cały dysk zawierający ten folder")
+        .help("Scan the whole disk that contains this folder")
     }
 
     private var fullDiskAccessHint: some View {
-        Button("Otwórz ustawienia pełnego dostępu do dysku") {
+        Button("Open Full Disk Access Settings") {
             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
                 NSWorkspace.shared.open(url)
             }
@@ -628,7 +642,7 @@ public struct WizTreeAnalyzerView: View {
         .font(FinderUI.captionFont)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, FinderUI.sectionSpacing)
-        .help("Burrow liczy więcej folderów po nadaniu pełnego dostępu do dysku. Foldery dostępne tylko dla systemu pozostają w bloku „Niezeskanowane”.")
+        .help("Burrow can count more folders once Full Disk Access is granted. Folders only the system can access stay in the “Unscanned” block.")
     }
 
     private func mapScanProgress(_ scan: DiskMapStore.RunningScan) -> some View {
@@ -637,15 +651,15 @@ public struct WizTreeAnalyzerView: View {
             if let used = scan.usedBytesEstimate, used > 0 {
                 ProgressView(value: min(1, Double(progress?.bytes ?? 0) / Double(used)))
                     .frame(maxWidth: 360)
-                    .accessibilityLabel("Postęp skanowania dysku")
+                    .accessibilityLabel("Disk scan progress")
             } else {
                 ProgressView()
                     .controlSize(.regular)
-                    .accessibilityLabel("Skanowanie folderu")
+                    .accessibilityLabel("Scanning folder")
             }
-            Text("Skanowanie \(scan.rootPath)…")
+            Text("Scanning \(scan.rootPath)…")
                 .font(FinderUI.titleFont)
-            Text("Elementy: \((progress?.entries ?? 0).formatted()) · \(FormatHelpers.formatBytes(progress?.bytes ?? 0))")
+            Text("Items: \((progress?.entries ?? 0).formatted()) · \(FormatHelpers.formatBytes(progress?.bytes ?? 0))")
                 .font(FinderUI.detailFont)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
@@ -655,8 +669,8 @@ public struct WizTreeAnalyzerView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: 480)
-            Button("Anuluj skan") { cancelScan() }.controlSize(.small)
-            Text("Skan czeka, gdy macOS pyta o dostęp do chronionych folderów. Po nadaniu pełnego dostępu do dysku pytania nie pojawiają się.")
+            Button("Cancel Scan") { cancelScan() }.controlSize(.small)
+            Text("The scan waits while macOS asks for access to protected folders. Once Full Disk Access is granted, these prompts no longer appear.")
                 .font(FinderUI.captionFont)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 420)
@@ -670,13 +684,13 @@ public struct WizTreeAnalyzerView: View {
         Button {
             performPaneAction { isMapMode ? presentDiskMap(rescan: true) : runActiveScan(for: pane.currentURL) }
         } label: {
-            Label("Odśwież skan", systemImage: "arrow.clockwise")
+            Label("Refresh Scan", systemImage: "arrow.clockwise")
                 .labelStyle(.iconOnly)
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .help("Odśwież analizę miejsca")
-        .accessibilityLabel("Odśwież analizę miejsca")
+        .help("Refresh the disk space analysis")
+        .accessibilityLabel("Refresh the disk space analysis")
     }
 
     private func analysisNotice(_ message: String, isError: Bool = false) -> some View {
@@ -701,7 +715,7 @@ public struct WizTreeAnalyzerView: View {
                 .font(FinderUI.detailFont)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 360)
-            Button("Skanuj ponownie") { performPaneAction { runActiveScan(for: pane.currentURL) } }
+            Button("Scan Again") { performPaneAction { runActiveScan(for: pane.currentURL) } }
         }
         .multilineTextAlignment(.center)
         .padding(FinderUI.sheetPadding)
@@ -736,13 +750,13 @@ public struct WizTreeAnalyzerView: View {
                             Circle()
                                 .fill(cat.treemapColor)
                                 .frame(width: 8, height: 8)
-                            Text(cat.rawValue)
+                            Text(cat.displayName)
                                 .font(FinderUI.captionFont.weight(.semibold))
                             Text("\(FormatHelpers.formatBytes(bytes)) (\(String(format: "%.1f%%", pct)))")
                                 .font(FinderUI.captionFont)
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
-                            Text("Pliki: \(count)")
+                            Text("Files: \(count)")
                                 .font(FinderUI.captionFont)
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
@@ -791,7 +805,7 @@ public struct WizTreeAnalyzerView: View {
     private func diskTreeRow(_ row: DiskMapRow, tree: DiskTree, index: Int, availableWidth: CGFloat) -> some View {
         Group {
             if let hidden = row.hiddenChildren {
-                Text("… i jeszcze \(hidden.formatted()) mniejszych elementów")
+                Text("… and \(hidden.formatted()) more smaller items")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -824,7 +838,7 @@ public struct WizTreeAnalyzerView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(expandedNodes.contains(id) ? "Zwiń folder" : "Rozwiń folder")
+                    .accessibilityLabel(expandedNodes.contains(id) ? String(localized: "Collapse folder") : String(localized: "Expand folder"))
                 } else {
                     Color.clear.frame(width: 14, height: 14)
                 }
@@ -851,8 +865,8 @@ public struct WizTreeAnalyzerView: View {
                 Image(systemName: "lock.fill")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(secondary)
-                    .help("Brak dostępu do tego folderu")
-                    .accessibilityLabel("Brak dostępu")
+                    .help("No access to this folder")
+                    .accessibilityLabel("No access")
             }
 
             if availableWidth >= 650 {
@@ -881,7 +895,7 @@ public struct WizTreeAnalyzerView: View {
                 .foregroundStyle(foreground)
                 .frame(width: 90, alignment: .trailing)
             if availableWidth >= 760 {
-                Text("Pliki: \(tree.fileCount(id).formatted())")
+                Text("Files: \(tree.fileCount(id).formatted())")
                     .font(FinderUI.captionFont)
                     .monospacedDigit()
                     .foregroundStyle(secondary)
@@ -892,7 +906,7 @@ public struct WizTreeAnalyzerView: View {
         .padding(.vertical, 5)
         .background(isSelected ? selectionBackgroundColor : (index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.025)))
         .contentShape(Rectangle())
-        .help(synthetic ? "Miejsce zajęte przez system, migawki APFS, dane usuwalne i foldery bez dostępu" : tree.path(id))
+        .help(synthetic ? String(localized: "Space used by the system, APFS snapshots, purgeable data, and folders without access") : tree.path(id))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityAction { selectMapNode(id, in: tree, generation: generation) }
@@ -915,22 +929,22 @@ public struct WizTreeAnalyzerView: View {
                 Button {
                     openMapNode(parent, in: tree)
                 } label: {
-                    Label("W górę", systemImage: "arrow.up")
+                    Label("Up", systemImage: "arrow.up")
                 }
                 .buttonStyle(.borderless)
                 .font(FinderUI.captionFont)
-                .help("Pokaż folder nadrzędny na mapie")
+                .help("Show the parent folder on the map")
             }
             if let tile = hoveredTile {
                 let size = tile.isRemainder ? remainderSize(tile, in: tree) : tree.allocatedSize(tile.node)
                 Circle()
                     .fill(tree.category(tile.node).treemapColor)
                     .frame(width: 9, height: 9)
-                Text(tile.isRemainder ? "Mniejsze elementy" : tree.name(tile.node))
+                Text(tile.isRemainder ? String(localized: "Smaller items") : tree.name(tile.node))
                     .font(FinderUI.detailFont.weight(.semibold))
                     .lineLimit(1)
                 if let parent = tree.parent(tile.node) {
-                    Text("w \(tree.name(parent))/")
+                    Text("in \(tree.name(parent))/")
                         .font(FinderUI.captionFont)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -950,7 +964,7 @@ public struct WizTreeAnalyzerView: View {
                 Image(systemName: "hand.point.up.left.fill")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.secondary)
-                Text("Kliknij element, aby wskazać go w drzewie. Kliknij dwukrotnie folder, aby go powiększyć.")
+                Text("Click an item to locate it in the tree. Double-click a folder to zoom in.")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -992,7 +1006,7 @@ public struct WizTreeAnalyzerView: View {
                         .resizable()
                         .interpolation(.none)
                         .frame(width: geo.size.width, height: geo.size.height)
-                        .accessibilityLabel("Mapa zajętego miejsca")
+                        .accessibilityLabel("Used space map")
                 } else {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1059,13 +1073,13 @@ public struct WizTreeAnalyzerView: View {
                 Button {
                     openMapNode(id, in: tree)
                 } label: {
-                    Label("Otwórz folder w analizie", systemImage: "arrow.down.right.and.arrow.up.left")
+                    Label("Open Folder in Analysis", systemImage: "arrow.down.right.and.arrow.up.left")
                 }
             } else if let parent = tree.parent(id) {
                 Button {
                     openMapNode(parent, in: tree)
                 } label: {
-                    Label("Otwórz folder nadrzędny w analizie", systemImage: "arrow.down.right.and.arrow.up.left")
+                    Label("Open Parent Folder in Analysis", systemImage: "arrow.down.right.and.arrow.up.left")
                 }
             }
             Button {
@@ -1076,23 +1090,23 @@ public struct WizTreeAnalyzerView: View {
                     }
                 }
             } label: {
-                Label("Pokaż na liście plików", systemImage: "list.bullet")
+                Label("Show in File List", systemImage: "list.bullet")
             }
             Button {
                 performPaneAction { QuickLookCoordinator.shared.preview(ownerID: pane.id, urls: [item.url]) }
             } label: {
-                Label("Quick Look (Spacja)", systemImage: "eye")
+                Label("Quick Look (Space)", systemImage: "eye")
             }
             Button {
                 performPaneAction { FileOperationsManager.shared.openInTerminal(at: item.url) }
             } label: {
-                Label("Otwórz w Terminalu", systemImage: "terminal")
+                Label("Open in Terminal", systemImage: "terminal")
             }
             Divider()
             Button(role: .destructive) {
                 performPaneAction { trashAnalyzedItem(item, generation: generation) }
             } label: {
-                Label("Przenieś do Kosza", systemImage: "trash")
+                Label("Move to Trash", systemImage: "trash")
             }
         }
     }
@@ -1160,8 +1174,8 @@ public struct WizTreeAnalyzerView: View {
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.borderless)
-            .help("Przenieś do Kosza: \(item.name)")
-            .accessibilityLabel("Przenieś do Kosza: \(item.name)")
+            .help("Move to Trash: \(item.name)")
+            .accessibilityLabel("Move to Trash: \(item.name)")
         }
         .padding(.horizontal, FinderUI.sectionSpacing)
         .padding(.vertical, 6)
@@ -1171,7 +1185,7 @@ public struct WizTreeAnalyzerView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(item.name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityAction(named: Text("Zaznacz")) {
+        .accessibilityAction(named: Text("Select")) {
             selectAnalyzedItem(item, generation: generation)
         }
         .onTapGesture { selectAnalyzedItem(item, generation: generation) }
@@ -1183,8 +1197,8 @@ public struct WizTreeAnalyzerView: View {
         VStack(spacing: 0) {
             if duplicateGroups.isEmpty {
                 analysisEmptyState(
-                    title: scanIsComplete ? "Nie znaleziono duplikatów w przeskanowanym zakresie" : "Nie znaleziono duplikatów w częściowo sprawdzonym zakresie",
-                    message: "Porównano pełną treść plików metodą SHA-256, także pliki puste i duże. Dowiązania symboliczne nie są śledzone. Ukryte pliki zależą od ustawienia widoku.",
+                    title: scanIsComplete ? String(localized: "No duplicates found in the scanned scope") : String(localized: "No duplicates found in the partially checked scope"),
+                    message: String(localized: "The full contents of files were compared using SHA-256, including empty and large files. Symbolic links are not followed. Hidden files depend on the view setting."),
                     systemImage: scanIsComplete ? "checkmark.seal" : "exclamationmark.triangle"
                 )
             } else {
@@ -1209,52 +1223,52 @@ public struct WizTreeAnalyzerView: View {
             && fileOps.activeDuplicateCleanupID == cleanupID && fileOps.activeTransfer?.isCancellable == false)
         let totalWasted = groups.reduce(Int64(0)) { $0 + $1.wastedBytes }
         return VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
-            Text("Grupy duplikatów: \(duplicateGroups.count) · Nadmiarowe dane logiczne: \(FormatHelpers.formatBytes(totalWasted))")
+            Text("Duplicate groups: \(duplicateGroups.count) · Redundant logical data: \(FormatHelpers.formatBytes(totalWasted))")
                 .font(FinderUI.detailFont.weight(.semibold))
-            Button("Przenieś nadmiarowe kopie do Kosza", role: .destructive) {
+            Button("Move Redundant Copies to Trash", role: .destructive) {
                 performPaneAction { trashDuplicates(groups, generation: generation) }
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(isValidatingDuplicates || cleanupID != nil || fileOps.isBusy || !scanIsComplete)
-            .help("Zachowaj pierwszy plik z każdej grupy i zweryfikuj pozostałe przed przeniesieniem do Kosza")
+            .help("Keep the first file in each group and verify the rest before moving them to the Trash")
 
             if cleanupID != nil {
                 HStack {
                     ProgressView().controlSize(.small)
-                    Text(cleanupIsCancelling ? "Anulowanie po bieżącej operacji…" : "Przenoszenie duplikatów do Kosza…")
+                    Text(cleanupIsCancelling ? String(localized: "Cancelling after the current operation…") : String(localized: "Moving duplicates to the Trash…"))
                         .font(FinderUI.captionFont)
-                    Button("Anuluj dalsze kroki") {
+                    Button("Cancel Remaining Steps") {
                         guard let id = cleanupID else { return }
                         cleanupCancelRequested = true
                         FileOperationsManager.shared.cancelDuplicateCleanup(id)
                     }
                     .disabled(cleanupIsCancelling)
                 }
-                Text("Bieżąca operacja systemowa może jeszcze trwać. Już przeniesione pliki nie są automatycznie przywracane.")
+                Text("The current system operation may still be running. Files already moved are not restored automatically.")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.secondary)
             }
             if cleanupID == nil && fileOps.isBusy {
-                Text("Poczekaj na zakończenie bieżącej operacji plikowej.")
+                Text("Wait for the current file operation to finish.")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.secondary)
             }
             if !scanIsComplete {
-                Text("Usuwanie duplikatów jest wyłączone dla niepełnego skanu. Odśwież analizę i usuń przyczynę pominięć.")
+                Text("Removing duplicates is disabled for an incomplete scan. Refresh the analysis and fix the cause of the skipped items.")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(.orange)
             }
             if isValidatingDuplicates {
                 HStack(spacing: FinderUI.rowSpacing) {
                     ProgressView().controlSize(.small)
-                    Text(verificationWorkState == .queued ? "Weryfikacja w kolejce…" : "Weryfikowanie plików przed przeniesieniem…")
+                    Text(verificationWorkState == .queued ? String(localized: "Verification queued…") : String(localized: "Verifying files before moving…"))
                         .font(FinderUI.captionFont)
                 }
                 .accessibilityElement(children: .combine)
-                Button("Anuluj weryfikację") { cancelVerification() }.controlSize(.small)
+                Button("Cancel Verification") { cancelVerification() }.controlSize(.small)
             }
-            Text("W każdej grupie zostanie zachowany wskazany oryginał. Rozmiar logiczny nie oznacza gwarantowanego odzyskanego miejsca: dowiązania twarde, klony APFS i kompresja mogą współdzielić dane.")
+            Text("In each group the designated original is kept. Logical size does not guarantee reclaimed space: hard links, APFS clones, and compression can share data.")
                 .font(FinderUI.captionFont)
                 .foregroundStyle(.secondary)
         }
@@ -1266,9 +1280,9 @@ public struct WizTreeAnalyzerView: View {
 
     private func duplicateGroupCard(_ group: DuplicateFileGroup) -> some View {
         VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
-            Text("Kopie: \(group.files.count) · \(FormatHelpers.formatBytes(group.fileSize)) na plik")
+            Text("Copies: \(group.files.count) · \(FormatHelpers.formatBytes(group.fileSize)) per file")
                 .font(FinderUI.detailFont.weight(.semibold))
-            Text("Nadmiarowe dane logiczne: \(FormatHelpers.formatBytes(group.wastedBytes))")
+            Text("Redundant logical data: \(FormatHelpers.formatBytes(group.wastedBytes))")
                 .font(FinderUI.captionFont)
                 .foregroundStyle(.secondary)
             Text("SHA-256: \(group.sha256.prefix(16))…")
@@ -1296,17 +1310,17 @@ public struct WizTreeAnalyzerView: View {
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if isKeeper {
-                Label("Zachowywany oryginał", systemImage: "checkmark.shield")
+                Label("Original Kept", systemImage: "checkmark.shield")
                     .font(FinderUI.captionFont)
                     .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
             } else {
-                Button("Przenieś do Kosza", role: .destructive) {
+                Button("Move to Trash", role: .destructive) {
                     performPaneAction { trashDuplicates([group], generation: generation, onlyPath: file.path) }
                 }
                 .disabled(isValidatingDuplicates || cleanupID != nil || fileOps.isBusy || !scanIsComplete)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .accessibilityLabel("Przenieś do Kosza: \(file.name)")
+                .accessibilityLabel("Move to Trash: \(file.name)")
             }
         }
         .padding(FinderUI.compactSpacing)
@@ -1316,7 +1330,7 @@ public struct WizTreeAnalyzerView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(file.name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityAction(named: Text("Zaznacz")) {
+        .accessibilityAction(named: Text("Select")) {
             selectAnalyzedItem(file, generation: generation)
         }
         .onTapGesture { selectAnalyzedItem(file, generation: generation) }
@@ -1367,11 +1381,11 @@ public struct WizTreeAnalyzerView: View {
                 if state == .deferred {
                     token.cancel() // No result exists for this generation; it must authorize no action.
                     self.isScanning = false
-                    self.scanDiagnostic = "Odroczono: zajęte miejsca analizy. Użyj odświeżania, aby ponowić."
+                    self.scanDiagnostic = String(localized: "Deferred: analysis slots are busy. Use Refresh to try again.")
                 } else if state == .cancelled {
                     self.isScanning = false
                     self.scanIsComplete = false
-                    self.scanDiagnostic = "Anulowano analizę. Użyj odświeżania, aby ponowić."
+                    self.scanDiagnostic = String(localized: "Analysis canceled. Use Refresh to try again.")
                     self.pane.clearAnalysisSelection()
                 }
             }, completion: { result in
@@ -1404,7 +1418,7 @@ public struct WizTreeAnalyzerView: View {
         verificationToken = nil
         isScanning = false
         scanIsComplete = false
-        scanDiagnostic = "Anulowano skan. Trwający odczyt systemowy może jeszcze kończyć pracę."
+        scanDiagnostic = String(localized: "Scan canceled. A system read in progress may still be finishing.")
         pane.clearAnalysisSelection()
     }
 
@@ -1418,7 +1432,7 @@ public struct WizTreeAnalyzerView: View {
         verificationTask?.cancel()
         verificationToken = nil
         isValidatingDuplicates = false
-        duplicateActionError = "Anulowano weryfikację. Trwający odczyt systemowy może jeszcze kończyć pracę."
+        duplicateActionError = String(localized: "Verification canceled. A system read in progress may still be finishing.")
     }
 
     // MARK: - Disk map state
@@ -1635,10 +1649,10 @@ public struct WizTreeAnalyzerView: View {
                 self.verificationWorkState = state
                 if state == .deferred {
                     self.isValidatingDuplicates = false
-                    self.duplicateActionError = "Odroczono weryfikację: analiza jest zajęta. Ponów operację."
+                    self.duplicateActionError = String(localized: "Verification deferred: analysis is busy. Try the operation again.")
                 } else if state == .cancelled {
                     self.isValidatingDuplicates = false
-                    self.duplicateActionError = "Anulowano weryfikację."
+                    self.duplicateActionError = String(localized: "Verification canceled.")
                     self.verificationToken = nil
                 }
             }, completion: { result in
@@ -1668,7 +1682,7 @@ public struct WizTreeAnalyzerView: View {
                         })
                     if !accepted {
                         self.cleanupID = nil
-                        self.duplicateActionError = FileOperationsManager.shared.lastStatusMessage ?? "Nie rozpoczęto usuwania duplikatów."
+                        self.duplicateActionError = FileOperationsManager.shared.lastStatusMessage ?? String(localized: "Duplicate removal did not start.")
                     }
                 case .failed(let message):
                     self.duplicateActionError = message

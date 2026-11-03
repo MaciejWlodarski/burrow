@@ -480,7 +480,7 @@ struct FileOperationSafetyTests {
             try await idle(manager)
             try expect((try? f.text(target)) == "unrelated sentinel" && f.io.exists(retained))
             try expect(manager.undoStack.count == 1 && manager.redoStack.isEmpty)
-            try expect(manager.lastStatusMessage?.contains("tożsamości") == true)
+            try expect(manager.lastStatusMessage?.contains("identity") == true)
         }
     }
 
@@ -761,7 +761,7 @@ struct FileOperationSafetyTests {
             manager.performTransfer(sourceURLs: [folder], into: alias, isMove: isMove, explicitPolicy: .overwrite)
             try await idle(manager)
             try expect(!manager.isBusy && manager.pendingConflict == nil && manager.undoStack.isEmpty)
-            try expect(manager.lastStatusMessage == "Nie można umieścić folderu wewnątrz samego siebie")
+            try expect(manager.lastStatusMessage == "Cannot place a folder inside itself")
         }
         try expect((try? f.text(marker)) == "original")
         try expect((try? f.fm.contentsOfDirectory(atPath: nested.path)) == [])
@@ -1100,7 +1100,7 @@ struct FileOperationSafetyTests {
         let manager = f.manager()
         manager.compressItems(urls.map(f.item), in: f.sourceDirectory)
         try await idle(manager)
-        let archive = f.sourceDirectory.appendingPathComponent("Archiwum.zip")
+        let archive = f.sourceDirectory.appendingPathComponent("Archive.zip")
         try expect(f.io.exists(archive) && manager.undoStack.count == 1)
         let unpacked = f.root.appendingPathComponent("unpacked", isDirectory: true)
         try f.fm.createDirectory(at: unpacked, withIntermediateDirectories: false)

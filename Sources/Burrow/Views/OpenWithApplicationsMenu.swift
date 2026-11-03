@@ -36,7 +36,7 @@ struct OpenWithApplicationsMenu: View {
     @ObservedObject private var cache = ApplicationHandlersCache.shared
 
     var body: some View {
-        Menu("Otwórz w aplikacji…") {
+        Menu("Open With") {
             if let apps = cache.applications[item.path] {
                 ForEach(apps, id: \.path) { application in
                     Button(application.deletingPathExtension().lastPathComponent) {
@@ -44,18 +44,18 @@ struct OpenWithApplicationsMenu: View {
                     }
                 }
             } else {
-                Text("Wczytywanie aplikacji…")
+                Text("Loading Applications…")
             }
             Divider()
-            Button("Wybierz inną aplikację…", action: chooseApplication)
+            Button("Choose Another Application…", action: chooseApplication)
         }
         .task(id: item.path) { cache.request(for: item.url) }
     }
 
     private func chooseApplication() {
         let panel = NSOpenPanel()
-        panel.title = "Otwórz „\(item.name)” w aplikacji"
-        panel.prompt = "Otwórz"
+        panel.title = String(localized: "Open “\(item.name)” With Application")
+        panel.prompt = String(localized: "Open")
         panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
         panel.allowedContentTypes = [.application]
         panel.allowsMultipleSelection = false

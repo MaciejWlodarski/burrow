@@ -103,12 +103,12 @@ enum FileDropLoadingError: Error, LocalizedError, Sendable {
     case timedOut, cancelled, providerFailed, invalidPayload, tooManyProviders, empty
     var errorDescription: String? {
         switch self {
-        case .timedOut: return "Przekroczono czas odczytu przeciąganych plików. Nie rozpoczęto operacji. Spróbuj ponownie."
-        case .cancelled: return "Anulowano odczyt przeciąganych plików."
-        case .providerFailed: return "Nie udało się odczytać wszystkich przeciąganych plików. Nie rozpoczęto operacji."
-        case .invalidPayload: return "Źródło przeciągania nie przekazało prawidłowego adresu pliku. Nie rozpoczęto operacji."
-        case .tooManyProviders: return "Jednorazowo można przeciągnąć najwyżej 256 plików. Podziel wybór na mniejsze grupy."
-        case .empty: return "Źródło przeciągania nie zawiera adresów plików."
+        case .timedOut: return String(localized: "Reading the dragged files timed out. No operation was started. Try again.")
+        case .cancelled: return String(localized: "Reading the dragged files was canceled.")
+        case .providerFailed: return String(localized: "Couldn’t read all of the dragged files. No operation was started.")
+        case .invalidPayload: return String(localized: "The drag source didn’t provide a valid file address. No operation was started.")
+        case .tooManyProviders: return String(localized: "You can drag at most 256 files at a time. Split the selection into smaller groups.")
+        case .empty: return String(localized: "The drag source contains no file addresses.")
         }
     }
 }
@@ -362,19 +362,19 @@ struct FileDropLoadingStatusView: View {
         if controller.isLoading {
             HStack(spacing: FinderUI.rowSpacing) {
                 ProgressView().controlSize(.small)
-                Text("Odczytywanie przeciąganych plików…").font(FinderUI.captionFont)
+                Text("Reading dragged files…").font(FinderUI.captionFont)
                 Spacer(minLength: 0)
-                Button("Anuluj") { controller.cancel() }.controlSize(.small)
+                Button("Cancel") { controller.cancel() }.controlSize(.small)
             }
             .padding(FinderUI.rowSpacing)
-            .help("Cel operacji: \(controller.destinationPath)")
+            .help("Destination: \(controller.destinationPath)")
             .accessibilityElement(children: .contain)
         } else if let diagnostic = controller.diagnostic {
             HStack(alignment: .top, spacing: FinderUI.rowSpacing) {
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
                 Text(diagnostic).font(FinderUI.captionFont).textSelection(.enabled)
                 Spacer(minLength: 0)
-                Button("Zamknij") { controller.cancel() }.controlSize(.small)
+                Button("Close") { controller.cancel() }.controlSize(.small)
             }
             .padding(FinderUI.rowSpacing)
         }

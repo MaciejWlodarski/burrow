@@ -13,10 +13,10 @@ public enum FinderViewMode: String, CaseIterable, Identifiable {
 
     public var displayName: String {
         switch self {
-        case .list: return "Lista"
-        case .icons: return "Ikony"
-        case .columns: return "Kolumny"
-        case .wiztree: return "Mapa dysku"
+        case .list: return String(localized: "List")
+        case .icons: return String(localized: "Icons")
+        case .columns: return String(localized: "Columns")
+        case .wiztree: return String(localized: "Disk Map")
         }
     }
 
@@ -40,10 +40,10 @@ public enum SortField: String, CaseIterable, Identifiable, Codable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .name: return "Nazwa"
-        case .size: return "Rozmiar"
-        case .dateModified: return "Data modyfikacji"
-        case .kind: return "Rodzaj"
+        case .name: return String(localized: "Name")
+        case .size: return String(localized: "Size")
+        case .dateModified: return String(localized: "Date Modified")
+        case .kind: return String(localized: "Kind")
         }
     }
 }
@@ -312,7 +312,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
             try? await Task.sleep(nanoseconds: timeoutNanoseconds)
             guard !Task.isCancelled, let self, self.sessionWork === request else { return }
             request.cancel()
-            self.sessionAvailability = .unavailable("Folder nie odpowiedział na czas. Ścieżka została zachowana; nie oznacza to, że folder nie istnieje.")
+            self.sessionAvailability = .unavailable(String(localized: "The folder did not respond in time. The path was kept; this does not mean the folder does not exist."))
         }
         defer {
             timeout.cancel()
@@ -338,7 +338,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
             guard sessionWork === request, context == activationContext else { return false }
             if sessionAvailability == .loading {
                 sessionAvailability = request.isCancelled ? .paused : .unavailable((error as? FinderSessionReadError)?.errorDescription
-                    ?? "Folder jest niedostępny lub nie można odczytać jego zawartości. Ścieżka i ustawienia zostały zachowane.")
+                    ?? String(localized: "The folder is unavailable or its contents cannot be read. The path and settings were kept."))
             }
             return false
         }
@@ -446,9 +446,9 @@ public final class PaneTabState: ObservableObject, Identifiable {
             navigationFailureID = UUID()
             navigationFailureIsPermissionDenied = DirectoryNavigationFailure.isPermissionDenied(error)
             if navigationFailureIsPermissionDenied {
-                navigationDiagnostic = "macOS odmówił dostępu do folderu „\(standardized.path)”. Bieżąca lokalizacja i jej zawartość zostały zachowane. Wybierz inną lokalizację lub sprawdź uprawnienia do tego folderu."
+                navigationDiagnostic = String(localized: "macOS denied access to the folder “\(standardized.path)”. The current location and its contents were kept. Choose another location or check the permissions of this folder.")
             } else {
-                navigationDiagnostic = "Nie otwarto folderu „\(standardized.path)”: \(Self.sentence(error.localizedDescription)) Bieżąca lokalizacja i jej zawartość zostały zachowane."
+                navigationDiagnostic = String(localized: "Could not open the folder “\(standardized.path)”: \(Self.sentence(error.localizedDescription)) The current location and its contents were kept.")
             }
             return false
         }
@@ -558,7 +558,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
             failedNavigation = (currentURL, .direct(false, false), navigationRetryContext)
             navigationFailureID = UUID()
             navigationFailureIsPermissionDenied = DirectoryNavigationFailure.isPermissionDenied(error)
-            navigationDiagnostic = "Nie odświeżono folderu „\(currentURL.path)”: \(Self.sentence(error.localizedDescription)) Wybierz inną lokalizację lub ponów próbę."
+            navigationDiagnostic = String(localized: "Could not refresh the folder “\(currentURL.path)”: \(Self.sentence(error.localizedDescription)) Choose another location or try again.")
             return
         }
         if failedNavigation?.0 == currentURL { clearNavigationFailure() }

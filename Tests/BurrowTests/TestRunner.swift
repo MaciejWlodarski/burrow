@@ -30,7 +30,7 @@ func expect(_ condition: @autoclosure () -> Bool, file: StaticString = #filePath
             try tests.testHiddenFilesRefreshAndDescendingOrder()
             print("PASS hidden files and descending sort")
             try await tests.testClearingSearchRejectsPendingResults()
-            print("PASS cancelled search cannot replace directory")
+            print("PASS canceled search cannot replace directory")
             try await tests.testReloadRerunsActiveSearchAfterDeletion()
             print("PASS active search refresh after deletion")
             try await tests.testNavigationWithLocalQueryRefreshesBrowsingSnapshot()

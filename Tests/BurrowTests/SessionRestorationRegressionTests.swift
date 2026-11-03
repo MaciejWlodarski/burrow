@@ -142,7 +142,7 @@ struct SessionRestorationRegressionTests {
         let resumed = await pane.resumeSession()
         try expect(!resumed && pane.currentURL.path == file.path)
         guard case .unavailable(let reason) = pane.sessionAvailability else { throw RegressionFailure(description: "File replacement needs explicit failure") }
-        try expect(reason.contains("Nie otwarto"))
+        try expect(reason.contains("was not opened"))
     }
 
     @MainActor private func waitForWorker(_ entered: DispatchSemaphore) async throws {
@@ -181,7 +181,7 @@ struct SessionRestorationRegressionTests {
         }
         try expect(!result && pane.currentURL.path == "/Volumes/Slow")
         guard case .unavailable(let reason) = pane.sessionAvailability else { throw RegressionFailure(description: "Timeout must remain visible") }
-        try expect(reason.contains("nie oznacza"))
+        try expect(reason.contains("does not mean"))
     }
 
     @MainActor private func testAppCloseCancelsRestoration() async throws {

@@ -24,9 +24,9 @@ struct TerminalResizeHandle: View {
         .onHover { isHovered = $0 }
         .simultaneousGesture(TapGesture().onEnded { keyboardFocus.requestFocus() })
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Wysokość terminala")
-        .accessibilityValue("\(Int(height)) punktów")
-        .accessibilityHint("Przeciągnij w górę lub w dół. Po zaznaczeniu użyj strzałek, aby zmienić wysokość.")
+        .accessibilityLabel("Terminal height")
+        .accessibilityValue("\(Int(height)) points")
+        .accessibilityHint("Drag up or down. When focused, use the arrow keys to change the height.")
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment: onIncrease()
@@ -34,14 +34,14 @@ struct TerminalResizeHandle: View {
             @unknown default: break
             }
         }
-        .accessibilityAction(named: Text("Przywróć domyślną wysokość"), onReset)
+        .accessibilityAction(named: Text("Reset to default height"), onReset)
         .contextMenu {
-            Button("Powiększ terminal", action: onIncrease)
-            Button("Zmniejsz terminal", action: onDecrease)
+            Button("Increase Terminal Height", action: onIncrease)
+            Button("Decrease Terminal Height", action: onDecrease)
             Divider()
-            Button("Domyślna wysokość", action: onReset)
+            Button("Default Height", action: onReset)
         }
-        .help("Przeciągnij, aby zmienić wysokość terminala. Strzałki ↑/↓ zmieniają wysokość po zaznaczeniu separatora.")
+        .help("Drag to change the terminal height. The ↑/↓ arrow keys change the height when the divider is focused.")
     }
 }
 

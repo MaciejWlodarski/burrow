@@ -69,6 +69,9 @@ xcrun swiftc \
 codesign --force "${SIGN_ARGS[@]}" --identifier com.burrow.cli --timestamp=none "${CONTENTS_DIR}/Helpers/burrow"
 
 cp Resources/Info.plist "${CONTENTS_DIR}/Info.plist"
+for lproj in Resources/*.lproj(N); do
+    cp -R "${lproj}" "${RESOURCES_DIR}/"
+done
 xcrun swiftc \
     -module-cache-path "${MODULE_CACHE}" \
     -target "${TARGET_ARCH}-apple-macosx14.0" \

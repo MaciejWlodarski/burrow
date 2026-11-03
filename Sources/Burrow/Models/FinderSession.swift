@@ -113,7 +113,7 @@ final class FinderSessionStore {
         return FinderSessionLoad(snapshot: nil, canWrite: true, notice: nil)
     }
 
-    static let protectedNotice = "Zapis sesji zawiera nieobsługiwane lub uszkodzone dane. Nie zostanie nadpisany. Możesz wyczyścić tylko zapis sesji w ustawieniach."
+    static let protectedNotice = String(localized: "The saved session contains unsupported or damaged data. It will not be overwritten. You can clear only the saved session in Settings.")
 
     private struct Header: Decodable {
         let version: Int
@@ -178,10 +178,10 @@ enum FinderSessionReadError: LocalizedError {
     case notDirectory, permissionDenied, unavailable, incomplete
     var errorDescription: String? {
         switch self {
-        case .notDirectory: return "Pod zapisaną ścieżką nie ma folderu. Nie otwarto znajdującego się tam pliku. Wybierz inną lokalizację."
-        case .permissionDenied: return "Brak uprawnień do odczytu folderu. Ścieżka została zachowana; aplikacja nie zmieniła uprawnień."
-        case .unavailable: return "Lokalizacja jest obecnie nieosiągalna. Folder mógł zostać przeniesiony, usunięty lub znajdować się na odłączonym dysku. Ścieżka została zachowana."
-        case .incomplete: return "Nie udało się odczytać całej zawartości folderu. Widok pozostał wstrzymany; spróbuj ponownie."
+        case .notDirectory: return String(localized: "There is no folder at the saved path. The file located there was not opened. Choose another location.")
+        case .permissionDenied: return String(localized: "You do not have permission to read the folder. The path was kept; the app did not change any permissions.")
+        case .unavailable: return String(localized: "The location is currently unreachable. The folder may have been moved, deleted, or be on a disconnected disk. The path was kept.")
+        case .incomplete: return String(localized: "Could not read the entire contents of the folder. The view remains paused; try again.")
         }
     }
 }

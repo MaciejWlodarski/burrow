@@ -335,15 +335,15 @@ public final class AppState: ObservableObject {
         let home = Self.homeDirectoryURL.path
         // Pure initial configuration: never probe disks/cloud roots while restoring the sidebar.
         var candidates: [(String, String, String)] = [
-            ("Dom", "house.fill", home),
-            ("Biurko", "menubar.dock.rectangle", "\(home)/Desktop"),
-            ("Dokumenty", "doc.fill", "\(home)/Documents"),
-            ("Pobrane", "arrow.down.circle.fill", "\(home)/Downloads"),
+            (String(localized: "Home"), "house.fill", home),
+            (String(localized: "Desktop"), "menubar.dock.rectangle", "\(home)/Desktop"),
+            (String(localized: "Documents"), "doc.fill", "\(home)/Documents"),
+            (String(localized: "Downloads"), "arrow.down.circle.fill", "\(home)/Downloads"),
             ("iCloud Drive", "icloud.fill", "\(home)/Library/Mobile Documents/com~apple~CloudDocs"),
-            ("Kosz", "trash.fill", "\(home)/.Trash")
+            (String(localized: "Trash"), "trash.fill", "\(home)/.Trash")
         ]
         #if !BURROW_TESTING
-        candidates.append(("Aplikacje", "app.badge.fill", "/Applications"))
+        candidates.append((String(localized: "Applications"), "app.badge.fill", "/Applications"))
         #endif
         return candidates.map { SidebarFavoritesStore.Entry(path: $0.2, title: $0.0, iconName: $0.1) }
     }
@@ -364,7 +364,7 @@ public final class AppState: ObservableObject {
         if sessionStore.save(snapshot) {
             if sessionPersistenceNotice != nil { sessionPersistenceNotice = nil }
         } else if sessionPersistenceNotice == nil {
-            sessionPersistenceNotice = "Nie zapisano sesji. Poprzedni zapis został zachowany."
+            sessionPersistenceNotice = String(localized: "The session was not saved. The previous save was kept.")
         }
     }
 
@@ -382,7 +382,7 @@ public final class AppState: ObservableObject {
 
     private func finishFavoritesMutation(_ succeeded: Bool) {
         if !succeeded {
-            FileOperationsManager.shared.lastStatusMessage = "Nie potwierdzono zapisu zmiany ulubionych."
+            FileOperationsManager.shared.lastStatusMessage = String(localized: "The change to Favorites could not be confirmed as saved.")
         }
         updatePinnedFolderRows()
     }
@@ -393,7 +393,7 @@ public final class AppState: ObservableObject {
         // Only a new, explicitly requested target is probed; restored favorites never are.
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
-            FileOperationsManager.shared.lastStatusMessage = "Nie dodano ulubionego: folder jest niedostępny."
+            FileOperationsManager.shared.lastStatusMessage = String(localized: "Favorite not added: the folder is unavailable.")
             return
         }
         finishFavoritesMutation(sidebarFavoritesStore.add(url.path))
@@ -435,7 +435,7 @@ public final class AppState: ObservableObject {
     public func ejectVolume(_ vol: VolumeInfoItem) {
         let path = vol.url.path
         guard ejectingVolumePaths.insert(path).inserted else { return }
-        FileOperationsManager.shared.lastStatusMessage = "Wysuwanie woluminu \(vol.name)…"
+        FileOperationsManager.shared.lastStatusMessage = String(localized: "Ejecting volume \(vol.name)…")
         // Unmounting a busy or unresponsive (network) volume can block for a long time; keep it off the main actor.
         Task.detached(priority: .userInitiated) { [weak self] in
             let failure: String?
@@ -452,10 +452,10 @@ public final class AppState: ObservableObject {
     private func finishEject(_ vol: VolumeInfoItem, path: String, failure: String?) {
         ejectingVolumePaths.remove(path)
         if let failure {
-            FileOperationsManager.shared.lastStatusMessage = "Nie można wysunąć \(vol.name): \(failure)"
+            FileOperationsManager.shared.lastStatusMessage = String(localized: "Could not eject \(vol.name): \(failure)")
         } else {
             refreshMountedVolumes()
-            FileOperationsManager.shared.lastStatusMessage = "Wysunięto wolumin \(vol.name)"
+            FileOperationsManager.shared.lastStatusMessage = String(localized: "Ejected volume \(vol.name)")
         }
     }
 

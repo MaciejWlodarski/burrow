@@ -88,9 +88,9 @@ public struct TerminalOutputLine: Identifiable {
 /// All limits include display markers. Strings are built into new, bounded
 /// storage, never retained as slices of the original command/session output.
 struct TerminalTranscript {
-    static let evictionMarker = "[Starsze wpisy usunięto z bufora.]"
-    static let truncationMarker = " [Wpis skrócony.]"
-    static let appendMarker = "[Dalsze wyjście pominięto w widoku.]"
+    static let evictionMarker = String(localized: "[Older entries were removed from the buffer.]")
+    static let truncationMarker = String(localized: " [Entry truncated.]")
+    static let appendMarker = String(localized: "[Further output omitted from the view.]")
     let byteLimit: Int
     let rowLimit: Int
     let entryByteLimit: Int
