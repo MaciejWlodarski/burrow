@@ -364,12 +364,20 @@ public final class FolderSizeCache: ObservableObject {
         skipping skippedPaths: Set<String> = [],
         skipDirectory: ((String) -> Bool)? = nil,
         isCancelled: @Sendable () -> Bool = { false }) -> FolderSizeResult {
+        // Like the disk map: other disks mounted inside are not part of the
+        // folder, and a file with several hard links is counted once.
         let crawl = BulkCrawler.crawlTreeResult(roots: [rootPath], skipHeavyDevDirs: false, skippedPaths: skippedPaths,
-                                                skipDirectory: skipDirectory, maxEntries: maxEntries,
-                                                includeHidden: true, isCancelled: isCancelled)
+                                                skipDirectory: skipDirectory,
+                                                excludedPaths: DiskScanBoundary.make(root: rootPath).excluded,
+                                                maxEntries: maxEntries, includeHidden: true, isCancelled: isCancelled)
         var total: Int64 = 0
         var overflowed = false
+        var hardLinks = Set<FolderSizeHardLink>()
         for entry in crawl.entries where !entry.isDirectory || entry.isSymlink {
+            if entry.hardLinkID != 0,
+               !hardLinks.insert(FolderSizeHardLink(device: entry.hardLinkDevice, file: entry.hardLinkID)).inserted {
+                continue
+            }
             let (sum, overflow) = total.addingReportingOverflow(max(0, entry.size))
             if overflow { total = .max; overflowed = true; break }
             total = sum
@@ -379,4 +387,9 @@ public final class FolderSizeCache: ObservableObject {
             unreadableDirectoryCount: crawl.unreadableDirectoryCount,
             privacySkippedPaths: Array(crawl.privacySkippedPaths.prefix(50)))
     }
+}
+
+private struct FolderSizeHardLink: Hashable {
+    let device: Int32
+    let file: UInt64
 }

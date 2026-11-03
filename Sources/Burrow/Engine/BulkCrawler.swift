@@ -16,6 +16,10 @@ public struct IndexedFileEntry: Sendable {
     public let isHidden: Bool
     /// Content stored only in the cloud (iCloud Drive or a File Provider app).
     public let isDataless: Bool
+    /// File identity of a file with several hard links, so sizes count it once;
+    /// zero for everything else.
+    public var hardLinkID: UInt64 = 0
+    public var hardLinkDevice: Int32 = 0
 
     public init(
         name: String,
@@ -136,8 +140,9 @@ public enum BulkCrawler {
         var attrList = attrlist()
         attrList.bitmapcount = UInt16(ATTR_BIT_MAP_COUNT)
         attrList.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS) | attrgroup_t(ATTR_CMN_NAME) |
-            attrgroup_t(ATTR_CMN_OBJTYPE) | attrgroup_t(ATTR_CMN_MODTIME) | attrgroup_t(ATTR_CMN_FLAGS)
-        attrList.fileattr = attrgroup_t(ATTR_FILE_TOTALSIZE)
+            attrgroup_t(ATTR_CMN_DEVID) | attrgroup_t(ATTR_CMN_OBJTYPE) | attrgroup_t(ATTR_CMN_MODTIME) |
+            attrgroup_t(ATTR_CMN_FLAGS) | attrgroup_t(ATTR_CMN_FILEID)
+        attrList.fileattr = attrgroup_t(ATTR_FILE_LINKCOUNT) | attrgroup_t(ATTR_FILE_TOTALSIZE)
         let bufSize = 128 * 1024
         let rawBuf = UnsafeMutableRawPointer.allocate(byteCount: bufSize, alignment: 8)
         defer { rawBuf.deallocate() }
@@ -185,6 +190,13 @@ public enum BulkCrawler {
                     name = String(bytes: bytes.dropLast(), encoding: .utf8)
                     offset += MemoryLayout<attrreference_t>.size
                 }
+                // Attributes follow in bit order: name, device, type, mtime, flags, file id.
+                var device: Int32 = 0
+                if (returned.commonattr & attrgroup_t(ATTR_CMN_DEVID)) != 0 {
+                    guard offset + 4 <= entryLength else { return DirectoryReadResult(entries: results, isComplete: false, errorCode: EIO) }
+                    device = entryPtr.advanced(by: offset).loadUnaligned(as: Int32.self)
+                    offset += 4
+                }
                 var objType: UInt32 = 0
                 if (returned.commonattr & attrgroup_t(ATTR_CMN_OBJTYPE)) != 0 {
                     guard offset + 4 <= entryLength else { return DirectoryReadResult(entries: results, isComplete: false, errorCode: EIO) }
@@ -203,6 +215,18 @@ public enum BulkCrawler {
                     fileFlags = entryPtr.advanced(by: offset).loadUnaligned(as: UInt32.self)
                     offset += 4
                 }
+                var fileID: UInt64 = 0
+                if (returned.commonattr & attrgroup_t(ATTR_CMN_FILEID)) != 0 {
+                    guard offset + 8 <= entryLength else { return DirectoryReadResult(entries: results, isComplete: false, errorCode: EIO) }
+                    fileID = entryPtr.advanced(by: offset).loadUnaligned(as: UInt64.self)
+                    offset += 8
+                }
+                var linkCount: UInt32 = 1
+                if (returned.fileattr & attrgroup_t(ATTR_FILE_LINKCOUNT)) != 0 {
+                    guard offset + 4 <= entryLength else { return DirectoryReadResult(entries: results, isComplete: false, errorCode: EIO) }
+                    linkCount = entryPtr.advanced(by: offset).loadUnaligned(as: UInt32.self)
+                    offset += 4
+                }
                 var size: Int64 = 0
                 if (returned.fileattr & attrgroup_t(ATTR_FILE_TOTALSIZE)) != 0 {
                     guard offset + 8 <= entryLength else { return DirectoryReadResult(entries: results, isComplete: false, errorCode: EIO) }
@@ -213,11 +237,16 @@ public enum BulkCrawler {
                     guard results.count < maxEntries else { return DirectoryReadResult(entries: results, isComplete: false, errorCode: nil) }
                     let ext = (name as NSString).pathExtension.lowercased()
                     let lower = Array(ParsedFSearchQuery.normalizedNameSearchText(name).utf8)
-                    results.append(IndexedFileEntry(name: name, lowerNameUTF8: lower, parentPath: parent,
+                    var entry = IndexedFileEntry(name: name, lowerNameUTF8: lower, parentPath: parent,
                         ext: ext, charMask: ParsedFSearchQuery.computeAsciiBitmask(lower), size: objType == 2 ? 0 : size,
                         mtimeEpoch: Int64(mtime.tv_sec), isDirectory: objType == 2, isSymlink: objType == 5,
                         isHidden: name.hasPrefix("."), mtimeNanoseconds: Int64(mtime.tv_nsec),
-                        isDataless: fileFlags & UInt32(SF_DATALESS) != 0))
+                        isDataless: fileFlags & UInt32(SF_DATALESS) != 0)
+                    if objType == 1 && linkCount > 1 && fileID != 0 {
+                        entry.hardLinkID = fileID
+                        entry.hardLinkDevice = device
+                    }
+                    results.append(entry)
                 }
                 entryOffset += entryLength
             }
@@ -233,6 +262,7 @@ public enum BulkCrawler {
         customSkippedDirs: Set<String>? = nil,
         skippedPaths: Set<String> = [],
         skipDirectory: ((String) -> Bool)? = nil,
+        excludedPaths: Set<String> = [],
         maxEntries: Int = 600_000,
         includeHidden: Bool = true,
         isCancelled: @Sendable () -> Bool = { false },
@@ -292,6 +322,8 @@ public enum BulkCrawler {
             if !read.isComplete && read.errorCode == nil && !isCancelled() { reachedLimit = true }
             for item in read.entries where item.isDirectory && !item.isSymlink {
                 if item.isDataless { cloudOnlyCount += 1; continue }
+                // Other disks mounted inside are not part of this folder.
+                if excludedPaths.contains(item.fullPath) { continue }
                 if skippedPaths.contains(item.fullPath) || skipDirectory?(item.fullPath) == true {
                     skippedCount += 1; privacySkipped.append(item.fullPath); continue
                 }

@@ -167,6 +167,7 @@ struct FolderSizeLifecycleRegressionTests {
         try testPrivacyRulesForProtectedFolders()
         try await testProtectedFolderWaitsForRequestAndParentSkipsIt()
         try await testMediaLibrariesAndListingConsent()
+        try testHardLinksCountOnceAndOtherDisksAreLeftOut()
         print("PASS 25 folder-size lifecycle checks: ownership, bounded admission, cancellation, invalidation, LRU, demand and lexical keys")
     }
 
@@ -1064,5 +1065,36 @@ struct FolderSizeLifecycleRegressionTests {
         cache.noteListed(desktop.appendingPathComponent("Sub").path)
         try await waitFor("opened Desktop sized automatically") { cache.size(for: desktop.path) == 50 }
         print("PASS media libraries wait to be included; opening Desktop allows its size")
+    }
+
+    /// A file with several hard links occupies its space once, and a disk
+    /// mounted inside a folder is not part of it.
+    private func testHardLinksCountOnceAndOtherDisksAreLeftOut() throws {
+        let fm = FileManager.default
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BURROW_TEST_ROOT"]!)
+            .appendingPathComponent("folder-size-links-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let a = root.appendingPathComponent("a", isDirectory: true)
+        let b = root.appendingPathComponent("b", isDirectory: true)
+        let mounted = root.appendingPathComponent("Mounted", isDirectory: true)
+        for folder in [a, b, mounted] { try fm.createDirectory(at: folder, withIntermediateDirectories: true) }
+        let original = a.appendingPathComponent("big.bin")
+        try Data(count: 4_000).write(to: original)
+        try fm.linkItem(at: original, to: b.appendingPathComponent("same.bin"))
+        try Data(count: 100).write(to: b.appendingPathComponent("own.bin"))
+        try Data(count: 9_000).write(to: mounted.appendingPathComponent("disk.bin"))
+
+        let linked = BulkCrawler.readDirectoryResult(at: b.path).entries.first { $0.name == "same.bin" }!
+        try expect(linked.hardLinkID != 0 && linked.size == 4_000)
+        try expect(BulkCrawler.readDirectoryResult(at: b.path).entries.first { $0.name == "own.bin" }!.hardLinkID == 0)
+
+        let total = FolderSizeCache.calculateFolderSize(at: root.path, maxEntries: 1_000)
+        try expect(total.bytes == 4_000 + 100 + 9_000 && total.isComplete)
+        // Each folder alone still holds the whole file.
+        try expect(FolderSizeCache.calculateFolderSize(at: b.path, maxEntries: 1_000).bytes == 4_100)
+
+        let crawl = BulkCrawler.crawlTreeResult(roots: [root.path], excludedPaths: [mounted.path])
+        try expect(crawl.isComplete && !crawl.entries.contains { $0.name == "disk.bin" })
+        print("PASS hard links count once; disks mounted inside are left out")
     }
 }

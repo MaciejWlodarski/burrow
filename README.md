@@ -183,7 +183,7 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 
 - [ ] Duplicate search built on the disk-map scan, without the current 60,000-entry cap.
 - [ ] Per-folder view mode and columns, like per-folder sorting.
-- [ ] Count hard links once in folder sizes and search crawls, and keep those crawls on one disk, as the disk map already does.
+- [ ] Count hard links once in search size totals and keep search crawls on one disk, as folder sizes and the disk map already do.
 - [ ] Move Trash and navigation work off the main thread; independent state for multiple windows.
 - [ ] A full terminal emulator in the command drawer (it runs `zsh -c` today).
 
