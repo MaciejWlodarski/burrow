@@ -295,7 +295,16 @@ public final class PaneTabState: ObservableObject, Identifiable {
         if sessionAvailability == .loading { sessionAvailability = .paused }
     }
 
-    /// User-triggered only. Reuses the saved-search queue (two bounded workers),
+    /// Whether a restored pane may open without the user pressing Resume.
+    /// Reading the mount table does no I/O on the folder itself.
+    nonisolated static func resumesAutomatically(path: String, viewMode: FinderViewMode,
+                                                 volumeRoot: (String) -> String = DiskScanBoundary.volumeRoot(of:)) -> Bool {
+        guard viewMode != .wiztree else { return false }
+        if path.hasPrefix("/Volumes/") && volumeRoot(path) == "/" { return false }
+        return true
+    }
+
+    /// Opened by the user or automatically at launch. Reuses the saved-search queue (two bounded workers),
     /// never adds roots to the index, and commits only the captured view context.
     @discardableResult
     func resumeSession(timeoutNanoseconds: UInt64 = 8_000_000_000,

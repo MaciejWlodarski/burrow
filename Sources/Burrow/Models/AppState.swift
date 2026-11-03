@@ -236,6 +236,15 @@ public final class AppState: ObservableObject {
         sessionObservationReady = true
         observeSessionPanes()
         appSessionObserver = objectWillChange.sink { [weak self] _ in self?.scheduleSessionSave() }
+        // Restored folders open right away off the main thread, with the
+        // resume timeout. Folders on a volume that is not mounted and saved
+        // disk maps (a whole-disk scan) stay paused until the user resumes.
+        if snapshot != nil {
+            for pane in restoredTabs + [rightPane]
+            where pane.wasRestoredFromSession && PaneTabState.resumesAutomatically(path: pane.currentURL.path, viewMode: pane.viewMode) {
+                Task { @MainActor in await pane.resumeSession() }
+            }
+        }
     }
 
     private var indexLifecycle = IndexingLifecycleState()

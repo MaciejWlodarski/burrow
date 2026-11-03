@@ -1072,7 +1072,7 @@ public struct FSearchSettingsSheetView: View {
                     get: { appState.restoreSessionEnabled },
                     set: { appState.setSessionRestorationEnabled($0) }
                 ))
-                Text("Zmiany sesji obowiązują od razu, niezależnie od przycisków na dole. Lokalnie zapisywane są ścieżki, kolejność kart, oba panele, widoki i tekst wyszukiwania. Zaznaczenia, schowek, cofanie i operacje nie są przywracane. Foldery wracają wstrzymane do chwili wybrania „Wznów”.")
+                Text("Zmiany sesji obowiązują od razu, niezależnie od przycisków na dole. Lokalnie zapisywane są ścieżki, kolejność kart, oba panele, widoki i tekst wyszukiwania. Zaznaczenia, schowek, cofanie i operacje nie są przywracane. Foldery otwierają się od razu; wstrzymane do chwili wybrania „Wznów” zostają tylko karty na niepodłączonym dysku i zapisane mapy dysku.")
                     .font(FinderUI.captionFont).foregroundStyle(.secondary)
                 Text("Wyłączenie zatrzymuje zapis i przywracanie, ale zachowuje poprzedni zapis. Włączenie zapisuje bieżącą sesję. Wyczyszczenie usuwa zapis i wyłącza tę opcję; otwarte karty i inteligentne foldery pozostają bez zmian.")
                     .font(FinderUI.captionFont).foregroundStyle(.secondary)

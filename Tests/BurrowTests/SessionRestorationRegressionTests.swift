@@ -19,7 +19,8 @@ struct SessionRestorationRegressionTests {
         try await testClearBeatsPendingAppDebounce()
         try await testGlobalSearchPreservesPausedBrowsing()
         try testSuccessfulSaveClearsTransientNotice()
-        print("17 session restoration regression groups passed")
+        try testAutomaticResumeRules()
+        print("18 session restoration regression groups passed")
     }
 
     private func withStore(_ body: (UserDefaults, FinderSessionStore) throws -> Void) throws {
@@ -329,4 +330,16 @@ struct SessionRestorationRegressionTests {
         try expect(app.sessionPersistenceNotice == nil)
     }
 
+
+    /// Local folders and mounted volumes reopen at launch; a missing volume or
+    /// a saved disk map waits for Resume.
+    private func testAutomaticResumeRules() throws {
+        let mounted: (String) -> String = { $0.hasPrefix("/Volumes/_WIZUALIZACJE") ? "/Volumes/_WIZUALIZACJE" : "/" }
+        try expect(PaneTabState.resumesAutomatically(path: "/Users/test/Downloads", viewMode: .list, volumeRoot: mounted))
+        try expect(PaneTabState.resumesAutomatically(path: "/Volumes/_WIZUALIZACJE/_ARCHIWUM", viewMode: .columns, volumeRoot: mounted))
+        try expect(!PaneTabState.resumesAutomatically(path: "/Volumes/Odłączony/Projekty", viewMode: .list, volumeRoot: mounted))
+        try expect(!PaneTabState.resumesAutomatically(path: "/Users/test", viewMode: .wiztree, volumeRoot: mounted))
+        try expect(PaneTabState.resumesAutomatically(path: "/tmp", viewMode: .icons))
+        try expect(!PaneTabState.resumesAutomatically(path: "/Volumes/burrow-missing-\(UUID().uuidString)/a", viewMode: .list))
+    }
 }
