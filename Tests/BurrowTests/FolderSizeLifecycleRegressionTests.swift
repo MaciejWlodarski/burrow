@@ -164,6 +164,8 @@ struct FolderSizeLifecycleRegressionTests {
         try testNormalizedKeyPreservesSymlinkParentSpelling()
         try await testReacquiredCachedDemandRevalidatesWithoutErasingValue()
         try await testRevalidationRetainsPhysicalSlotsAndRejectsOldResult()
+        try testPrivacyRulesForProtectedFolders()
+        try await testProtectedFolderWaitsForRequestAndParentSkipsIt()
         print("PASS 25 folder-size lifecycle checks: ownership, bounded admission, cancellation, invalidation, LRU, demand and lexical keys")
     }
 
@@ -926,5 +928,69 @@ struct FolderSizeLifecycleRegressionTests {
         try FileManager.default.removeItem(at: destination)
         // Changing the link's target availability cannot change a lexical key.
         try expect(FolderSizeCache.normalizedKey(input) == expected)
+    }
+
+    /// Browsing the home folder must not open privacy prompts: protected
+    /// folders wait for a click, and their parents are sized without them.
+    private nonisolated func testPrivacyRulesForProtectedFolders() throws {
+        let home = "/Users/u"
+        let gated = FolderSizePrivacy(protectedRoots: [home + "/Desktop", home + "/Library", "/Volumes"],
+                                      cloudRoots: [home + "/Library/CloudStorage"], hasFullDiskAccess: { false })
+        try expect(gated.requiresConsent(home + "/Desktop") && gated.requiresConsent(home + "/Desktop/"))
+        try expect(!gated.requiresConsent(home + "/Desktop/Project") && !gated.requiresConsent(home))
+        let all: Set<String> = [home + "/Desktop", home + "/Library", "/Volumes", home + "/Library/CloudStorage"]
+        try expect(gated.skippedRoots(whileSizing: home) == all)
+        try expect(gated.skippedRoots(whileSizing: "/") == all)
+        // A folder the user asked for, and its ancestors, are sized; everything
+        // else protected stays skipped, even when reached through a firmlink.
+        try expect(gated.skippedRoots(whileSizing: home + "/Library") == all.subtracting([home + "/Library"]))
+        try expect(gated.skippedRoots(whileSizing: home + "/Desktop/Project") == all.subtracting([home + "/Desktop"]))
+        // A home folder named like a protected one is not inside it.
+        try expect(!gated.requiresConsent(home + "/Desktop2"))
+        let granted = FolderSizePrivacy(protectedRoots: gated.protectedRoots, cloudRoots: gated.cloudRoots,
+                                        hasFullDiskAccess: { true })
+        try expect(!granted.requiresConsent(home + "/Desktop"))
+        try expect(granted.skippedRoots(whileSizing: home) == [home + "/Library/CloudStorage"])
+        let system = FolderSizePrivacy.system(home: home)
+        try expect(["Desktop", "Documents", "Downloads", "Music", "Pictures", "Movies", "Library"].allSatisfy { system.protectedRoots.contains(home + "/" + $0) })
+        try expect(system.cloudRoots.contains(home + "/Library/Mobile Documents"))
+    }
+
+    private func testProtectedFolderWaitsForRequestAndParentSkipsIt() async throws {
+        let fm = FileManager.default
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BURROW_TEST_ROOT"]!)
+            .appendingPathComponent("folder-size-privacy-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let protected = root.appendingPathComponent("Protected", isDirectory: true)
+        let open = root.appendingPathComponent("Open", isDirectory: true)
+        try fm.createDirectory(at: protected, withIntermediateDirectories: true)
+        try fm.createDirectory(at: open, withIntermediateDirectories: true)
+        try Data(count: 1_000).write(to: protected.appendingPathComponent("a.bin"))
+        try Data(count: 500).write(to: open.appendingPathComponent("b.bin"))
+
+        let privacy = FolderSizePrivacy(protectedRoots: [protected.path], cloudRoots: [], hasFullDiskAccess: { false })
+        let cache = FolderSizeCache(maxWorkers: 2, maxDemand: 8, maxResults: 8, privacy: privacy)
+        let owner = UUID()
+        defer { cache.release(owner: owner) }
+        cache.updateDemand(owner: owner, paths: [root.path, protected.path, open.path])
+        try await waitFor("parent and open folder sized") {
+            cache.result(for: root.path) != nil && cache.result(for: open.path) != nil
+        }
+        try expect(cache.status(for: protected.path) == .needsConsent && cache.result(for: protected.path) == nil)
+        let parent = cache.result(for: root.path)!
+        try expect(parent.bytes == 500 && !parent.isComplete && parent.skippedDirectoryCount == 1)
+        try expect(cache.size(for: open.path) == 500)
+
+        cache.calculateProtected(protected.path)
+        try await waitFor("protected folder sized on request") { cache.result(for: protected.path) != nil }
+        try expect(cache.size(for: protected.path) == 1_000)
+
+        // The same folder under another path (here a symlinked ancestor, in
+        // the app a firmlink such as /System/Volumes/Data) is still skipped.
+        let alias = root.appendingPathComponent("Alias")
+        try fm.createSymbolicLink(at: alias, withDestinationURL: root)
+        let crawl = BulkCrawler.crawlTreeResult(roots: [root.path], skippedPaths: [alias.path + "/Protected"])
+        try expect(crawl.skippedDirectoryCount == 1 && !crawl.entries.contains { $0.parentPath.hasSuffix("/Protected") })
+        print("PASS protected folders wait for a request; parents skip them")
     }
 }

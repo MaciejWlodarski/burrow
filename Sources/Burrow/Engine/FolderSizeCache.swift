@@ -27,7 +27,8 @@ private final class FolderSizeCancellation: @unchecked Sendable {
 @MainActor
 public final class FolderSizeCache: ObservableObject {
     public static let shared = FolderSizeCache()
-    public enum Status: Equatable { case deferred, queued, scanning, complete, partial }
+    /// `needsConsent`: a privacy-protected folder, calculated only on request.
+    public enum Status: Equatable { case deferred, needsConsent, queued, scanning, complete, partial }
     public enum DemandPriority { case background, visible, interactive }
 
     @Published public private(set) var results: [String: FolderSizeResult] = [:]
@@ -48,16 +49,24 @@ public final class FolderSizeCache: ObservableObject {
     private var oneShotOwners: [String: UUID] = [:]
     private let workerQueue = DispatchQueue(label: "com.burrow.foldersize", qos: .utility, attributes: .concurrent)
     private let calculator: @Sendable (String, @Sendable () -> Bool) -> FolderSizeResult
+    private let privacy: FolderSizePrivacy
+    /// Protected folders the user asked to size; their prompt is expected.
+    private var consented: Set<String> = []
 
     init(maxWorkers: Int = 2, maxDemand: Int = 256, maxResults: Int = 512,
-         cancellableCalculator: @escaping @Sendable (String, @Sendable () -> Bool) -> FolderSizeResult = {
-             FolderSizeCache.calculateFolderSize(at: $0, maxEntries: 15_000, isCancelled: $1)
-         }) {
+         privacy: FolderSizePrivacy? = nil,
+         cancellableCalculator: (@Sendable (String, @Sendable () -> Bool) -> FolderSizeResult)? = nil) {
         precondition(maxWorkers > 0 && maxDemand > 0 && maxResults >= maxDemand)
         self.maxWorkers = maxWorkers
         self.maxDemand = maxDemand
         self.maxResults = maxResults
-        self.calculator = cancellableCalculator
+        // Injected calculators are test fixtures: no privacy gate unless one is passed.
+        let privacy = privacy ?? (cancellableCalculator == nil ? FolderSizePrivacy.system() : .none)
+        self.privacy = privacy
+        self.calculator = cancellableCalculator ?? { path, isCancelled in
+            FolderSizeCache.calculateFolderSize(at: path, maxEntries: 15_000,
+                skipping: privacy.skippedRoots(whileSizing: path), isCancelled: isCancelled)
+        }
     }
 
     convenience init(calculator: @escaping @Sendable (String) -> FolderSizeResult) {
@@ -89,12 +98,13 @@ public final class FolderSizeCache: ObservableObject {
     public func status(for folderPath: String) -> Status {
         let path = key(folderPath)
         if let result = results[path] { return result.isComplete ? .complete : .partial }
-        guard let token = current[path] else { return .deferred }
+        guard let token = current[path] else { return needsConsent(path) ? .needsConsent : .deferred }
         return running.values.contains { $0.token === token } ? .scanning : .queued
     }
     public func statusText(for folderPath: String) -> String {
         switch status(for: folderPath) {
         case .deferred: return String(localized: "Deferred (limit)")
+        case .needsConsent: return String(localized: "Calculate")
         case .queued: return String(localized: "Queued…")
         case .scanning: return String(localized: "Calculating…")
         case .complete, .partial: return displaySize(for: folderPath) ?? String(localized: "Unavailable")
@@ -160,7 +170,19 @@ public final class FolderSizeCache: ObservableObject {
             pending.removeAll { $0 == path }
         }
     }
+    private func needsConsent(_ path: String) -> Bool {
+        !consented.contains(path) && privacy.requiresConsent(path)
+    }
+    /// The user asked for a protected folder's size: macOS may show its prompt now.
+    public func calculateProtected(_ folderPath: String) {
+        let path = key(folderPath)
+        consented.insert(path)
+        if demand[path] == nil { requestSizeIfNeeded(for: path) } else { enqueueIfNeeded(path) }
+        drain()
+        changed()
+    }
     private func enqueueIfNeeded(_ path: String, refreshingCached: Bool = false) {
+        guard !needsConsent(path) else { return }
         guard demand[path] != nil, (results[path] == nil || refreshingCached), current[path] == nil else { return }
         current[path] = FolderSizeCancellation()
         pending.append(path)
@@ -285,8 +307,9 @@ public final class FolderSizeCache: ObservableObject {
     }
 
     nonisolated static func calculateFolderSize(at rootPath: String, maxEntries: Int,
+        skipping skippedPaths: Set<String> = [],
         isCancelled: @Sendable () -> Bool = { false }) -> FolderSizeResult {
-        let crawl = BulkCrawler.crawlTreeResult(roots: [rootPath], skipHeavyDevDirs: false,
+        let crawl = BulkCrawler.crawlTreeResult(roots: [rootPath], skipHeavyDevDirs: false, skippedPaths: skippedPaths,
                                                 maxEntries: maxEntries, includeHidden: true, isCancelled: isCancelled)
         var total: Int64 = 0
         var overflowed = false

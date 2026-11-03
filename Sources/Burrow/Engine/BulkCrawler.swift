@@ -229,6 +229,7 @@ public enum BulkCrawler {
         roots: [String],
         skipHeavyDevDirs: Bool = true,
         customSkippedDirs: Set<String>? = nil,
+        skippedPaths: Set<String> = [],
         maxEntries: Int = 600_000,
         includeHidden: Bool = true,
         isCancelled: @Sendable () -> Bool = { false },
@@ -243,6 +244,14 @@ public enum BulkCrawler {
         }.sorted()
         var visited = Set<String>()
         var visitedIdentities = Set<String>()
+        // Skipped folders are also matched by identity: a firmlink such as
+        // /System/Volumes/Data reaches them under a different path. stat() of a
+        // protected folder itself never shows a privacy prompt.
+        var skippedIdentities = Set<String>()
+        for path in skippedPaths where !normalized.contains(path) {
+            var info = stat()
+            if stat(path, &info) == 0 { skippedIdentities.insert("\(info.st_dev):\(info.st_ino)") }
+        }
         var entries: [IndexedFileEntry] = []
         entries.reserveCapacity(min(max(0, maxEntries), 150_000))
         var head = 0
@@ -265,6 +274,7 @@ public enum BulkCrawler {
             var info = stat()
             if stat(path, &info) == 0 {
                 let identity = "\(info.st_dev):\(info.st_ino)"
+                if skippedIdentities.contains(identity) && !normalized.contains(path) { skippedCount += 1; continue }
                 guard visitedIdentities.insert(identity).inserted else { continue }
             }
             let read = readDirectoryResult(at: path, includeHidden: includeHidden,
@@ -276,6 +286,7 @@ public enum BulkCrawler {
             if !read.isComplete && read.errorCode == nil && !isCancelled() { reachedLimit = true }
             for item in read.entries where item.isDirectory && !item.isSymlink {
                 if item.isDataless { cloudOnlyCount += 1; continue }
+                if !skippedPaths.isEmpty && skippedPaths.contains(item.fullPath) { skippedCount += 1; continue }
                 if skipHeavyDevDirs && (skipped.contains(item.name) || (item.name == "Library" && item.parentPath == NSHomeDirectory())) {
                     skippedCount += 1
                 } else {

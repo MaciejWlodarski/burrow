@@ -184,14 +184,20 @@ public struct InspectorPreviewView: View {
                                     ? (folderSizes.displaySize(for: item.path) ?? folderSizes.statusText(for: item.path))
                                     : FormatHelpers.formatBytes(item.size)
                             )
-                            if item.isDirectory && folderSizes.status(for: item.path) == .deferred {
+                            if item.isDirectory && folderSizes.status(for: item.path) == .needsConsent {
+                                Text("macOS protects this folder. Calculating its size may ask for permission.")
+                                    .font(FinderUI.captionFont)
+                                Button("Calculate Size") { folderSizes.calculateProtected(item.path) }
+                            } else if item.isDirectory && folderSizes.status(for: item.path) == .deferred {
                                 Text("Active folder limit reached. Close other views and retry.")
                                     .font(FinderUI.captionFont)
                                 Button("Retry Size") { updateFolderSizeDemand() }
                             } else if item.isDirectory, let result = folderSizes.result(for: item.path), !result.isComplete {
                                 Text(result.unreadableDirectoryCount > 0
                                     ? String(localized: "Lower bound: some directories could not be read.")
-                                    : String(localized: "Lower bound: the scan reached its limit."))
+                                    : result.skippedDirectoryCount > 0
+                                        ? String(localized: "Lower bound: protected and cloud folders inside are not counted. Select one of them to calculate it.")
+                                        : String(localized: "Lower bound: the scan reached its limit."))
                                     .font(FinderUI.captionFont)
                             }
                             metadataRow(label: "Modified", value: FormatHelpers.formatDate(item.modificationDate))

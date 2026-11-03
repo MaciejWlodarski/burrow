@@ -856,3 +856,10 @@
 "Download" = "Pobierz";
 "Cloud folder" = "Folder w chmurze";
 "Downloaded to this Mac" = "Pobrane na ten Mac";
+
+/* Folder sizes and privacy */
+"Calculate" = "Oblicz";
+"Calculate Size" = "Oblicz rozmiar";
+"macOS protects this folder. Calculating its size may ask for permission. With Full Disk Access sizes are calculated automatically." = "macOS chroni ten folder. Obliczenie rozmiaru może wywołać prośbę o zgodę. Z pełnym dostępem do dysku rozmiary liczą się automatycznie.";
+"macOS protects this folder. Calculating its size may ask for permission." = "macOS chroni ten folder. Obliczenie rozmiaru może wywołać prośbę o zgodę.";
+"Lower bound: protected and cloud folders inside are not counted. Select one of them to calculate it." = "Co najmniej: chronione foldery i foldery w chmurze w środku nie są liczone. Zaznacz jeden z nich, aby go obliczyć.";

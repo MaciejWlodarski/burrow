@@ -1283,7 +1283,12 @@ private struct FolderSizeLabel: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if cache.status(for: path) == .deferred {
+            if cache.status(for: path) == .needsConsent {
+                Button("Calculate") { cache.calculateProtected(path) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    .help("macOS protects this folder. Calculating its size may ask for permission. With Full Disk Access sizes are calculated automatically.")
+            } else if cache.status(for: path) == .deferred {
                 Button("Deferred ↻") { request() }
                     .buttonStyle(.plain)
                     .help("Active folder limit reached. Narrow the view or close other views, then click to retry.")
