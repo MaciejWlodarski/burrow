@@ -256,7 +256,8 @@ public final class DiskScanControl: @unchecked Sendable {
 }
 
 /// Which mounted filesystems a scan may enter. Other disks, snapshots and
-/// pseudo filesystems are excluded by the mount table, never by a name list.
+/// pseudo filesystems are excluded by the mount table; the only named
+/// exclusion is the cryptex graft folder, which has no mount entry.
 struct DiskScanBoundary {
     var excluded: Set<String> = []
     /// Same-container volumes of a whole-disk scan, read after the main queue
@@ -268,6 +269,7 @@ struct DiskScanBoundary {
     var freeBytes: Int64?
 
     private static let dataVolume = "/System/Volumes/Data"
+    static let graftedImageFolders = ["/System/Volumes/Preboot/Cryptexes"]
 
     private static func mounts() -> [(on: String, from: String)] {
         let count = getfsstat(nil, 0, MNT_NOWAIT)
@@ -323,6 +325,12 @@ struct DiskScanBoundary {
                 boundary.excluded.insert(mount.on)
                 boundary.excluded.insert(alias)
             }
+        }
+        // Cryptexes are disk images (os.dmg, rosetta.dmg…) grafted into Preboot
+        // on the same device, so the mount table cannot show them. Their
+        // images are already counted; their grafted contents would double it.
+        for graft in Self.graftedImageFolders where graft != root && graft.hasPrefix(prefix) {
+            boundary.excluded.insert(graft)
         }
         if boundary.isVolumeRoot {
             var info = statfs()

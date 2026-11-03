@@ -129,6 +129,9 @@ struct DiskMapRegressionTests {
         if FileManager.default.fileExists(atPath: "/System/Volumes/Preboot") {
             let preboot = DiskScanBoundary.make(root: "/System/Volumes/Preboot")
             try expect(preboot.isVolumeRoot && preboot.usedBytes == nil && preboot.freeBytes != nil)
+            try expect(preboot.excluded.contains("/System/Volumes/Preboot/Cryptexes"))
+            try expect(DiskScanBoundary.make(root: "/").excluded.contains("/System/Volumes/Preboot/Cryptexes"))
+            try expect(!DiskScanBoundary.make(root: "/System/Volumes/Preboot/Cryptexes").excluded.contains("/System/Volumes/Preboot/Cryptexes"))
         }
         try expect(wholeDisk.excluded.isDisjoint(with: wholeDisk.deferred))
         try expect(DiskMapStore.volumeRoot(of: NSTemporaryDirectory()) == "/")
