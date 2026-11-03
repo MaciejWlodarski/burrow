@@ -291,7 +291,7 @@ struct DiskCLI {
             lines.append("APFS clones sharing data with another file counted once: \(Self.human(tree.cloneSharedBytes)) not double-counted")
         }
         if tree.unreadableDirectoryCount > 0 {
-            lines.append("\(Self.grouped(tree.unreadableDirectoryCount)) folders unreadable: give the app running burrow Full Disk Access for a complete scan")
+            lines.append("\(Self.grouped(tree.unreadableDirectoryCount)) \(tree.unreadableDirectoryCount == 1 ? "folder" : "folders") unreadable: give the app running burrow Full Disk Access for a complete scan")
         }
         if tree.reachedEntryLimit { lines.append("Entry limit reached: the tree is incomplete") }
         return lines

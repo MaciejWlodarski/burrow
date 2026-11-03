@@ -329,7 +329,12 @@ struct DiskScanBoundary {
             if statfs(root, &info) == 0 {
                 let block = Int64(info.f_bsize)
                 boundary.freeBytes = Int64(info.f_bavail) * block
-                boundary.usedBytes = (Int64(info.f_blocks) - Int64(info.f_bavail)) * block
+                // APFS reports space for the whole container. Only a scan of `/`
+                // covers its sibling volumes, so only then is the gap "unscanned".
+                let fsType = withUnsafeBytes(of: &info.f_fstypename) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
+                if root == "/" || fsType != "apfs" {
+                    boundary.usedBytes = (Int64(info.f_blocks) - Int64(info.f_bavail)) * block
+                }
             }
         }
         return boundary

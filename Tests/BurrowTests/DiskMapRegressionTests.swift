@@ -124,6 +124,12 @@ struct DiskMapRegressionTests {
         try expect(wholeDisk.isVolumeRoot && wholeDisk.usedBytes != nil)
         try expect(wholeDisk.excluded.contains("/dev"))
         try expect(wholeDisk.deferred.contains("/System/Volumes/Data"))
+        // A sibling APFS volume shares container-wide space figures, which
+        // must not become a huge "unscanned" block for that volume alone.
+        if FileManager.default.fileExists(atPath: "/System/Volumes/Preboot") {
+            let preboot = DiskScanBoundary.make(root: "/System/Volumes/Preboot")
+            try expect(preboot.isVolumeRoot && preboot.usedBytes == nil && preboot.freeBytes != nil)
+        }
         try expect(wholeDisk.excluded.isDisjoint(with: wholeDisk.deferred))
         try expect(DiskMapStore.volumeRoot(of: NSTemporaryDirectory()) == "/")
         try expect(DiskMapStore.volumeRoot(of: "/System/Volumes/Data/Users") == "/")
