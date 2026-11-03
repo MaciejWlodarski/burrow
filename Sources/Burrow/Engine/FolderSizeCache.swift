@@ -7,12 +7,16 @@ public struct FolderSizeResult: Sendable, Equatable {
     public let isComplete: Bool
     public let skippedDirectoryCount: Int
     public let unreadableDirectoryCount: Int
+    /// Protected and cloud folders left out, as the crawl reached them.
+    public let privacySkippedPaths: [String]
 
-    public init(bytes: Int64, isComplete: Bool, skippedDirectoryCount: Int = 0, unreadableDirectoryCount: Int = 0) {
+    public init(bytes: Int64, isComplete: Bool, skippedDirectoryCount: Int = 0, unreadableDirectoryCount: Int = 0,
+                privacySkippedPaths: [String] = []) {
         self.bytes = bytes
         self.isComplete = isComplete
         self.skippedDirectoryCount = skippedDirectoryCount
         self.unreadableDirectoryCount = unreadableDirectoryCount
+        self.privacySkippedPaths = privacySkippedPaths
     }
 }
 
@@ -50,8 +54,7 @@ public final class FolderSizeCache: ObservableObject {
     private let workerQueue = DispatchQueue(label: "com.burrow.foldersize", qos: .utility, attributes: .concurrent)
     private let calculator: @Sendable (String, @Sendable () -> Bool) -> FolderSizeResult
     private let privacy: FolderSizePrivacy
-    /// Protected folders the user asked to size; their prompt is expected.
-    private var consented: Set<String> = []
+    private var lastFullDiskAccess: Bool?
 
     init(maxWorkers: Int = 2, maxDemand: Int = 256, maxResults: Int = 512,
          privacy: FolderSizePrivacy? = nil,
@@ -65,7 +68,8 @@ public final class FolderSizeCache: ObservableObject {
         self.privacy = privacy
         self.calculator = cancellableCalculator ?? { path, isCancelled in
             FolderSizeCache.calculateFolderSize(at: path, maxEntries: 15_000,
-                skipping: privacy.skippedRoots(whileSizing: path), isCancelled: isCancelled)
+                skipping: privacy.skippedRoots(whileSizing: path),
+                skipDirectory: { privacy.skipsBundle(at: $0) }, isCancelled: isCancelled)
         }
     }
 
@@ -170,14 +174,64 @@ public final class FolderSizeCache: ObservableObject {
             pending.removeAll { $0 == path }
         }
     }
-    private func needsConsent(_ path: String) -> Bool {
-        !consented.contains(path) && privacy.requiresConsent(path)
-    }
-    /// The user asked for a protected folder's size: macOS may show its prompt now.
+    private func needsConsent(_ path: String) -> Bool { privacy.requiresConsent(path) }
+
+    /// The user asked for a protected folder's size: macOS may show its prompt
+    /// now. The choice is remembered, and folders containing it are sized again.
     public func calculateProtected(_ folderPath: String) {
         let path = key(folderPath)
-        consented.insert(path)
+        privacy.consent.insert(path)
         if demand[path] == nil { requestSizeIfNeeded(for: path) } else { enqueueIfNeeded(path) }
+        revalidate(containing: path)
+    }
+
+    /// Allows every protected folder a partial size left out, then sizes again.
+    public func includeProtectedFolders(of folderPath: String) {
+        let skipped = protectedFoldersLeftOut(of: folderPath)
+        for path in skipped { privacy.consent.insert(key(path)) }
+        guard !skipped.isEmpty else { return }
+        for path in skipped { enqueueIfNeeded(key(path)) }
+        invalidate(folderPath)
+        if demand[key(folderPath)] == nil { requestSizeIfNeeded(for: folderPath) }
+    }
+
+    /// Protected folders (not cloud ones) that a partial size left out and the
+    /// user has not allowed since.
+    public func protectedFoldersLeftOut(of folderPath: String) -> [String] {
+        // Folders reached through a firmlink are left out under another name;
+        // only the real protected folders are listed and offered.
+        (results[key(folderPath)]?.privacySkippedPaths ?? []).filter { path in
+            privacy.isProtected(path) && !privacy.consent.contains(key(path))
+        }
+    }
+
+    /// True when a partial size left out cloud storage, which is never counted.
+    public func leftOutCloudFolders(of folderPath: String) -> Bool {
+        (results[key(folderPath)]?.privacySkippedPaths ?? []).contains { privacy.isCloudRoot($0) }
+    }
+
+    /// A pane listed `folderPath`. Listing Desktop, Documents or Downloads is
+    /// the prompt itself, so its size no longer needs a separate request.
+    public func noteListed(_ folderPath: String) {
+        guard let root = privacy.rootGranted(byListing: folderPath), privacy.consent.insert(root) else { return }
+        enqueueIfNeeded(root)
+        revalidate(containing: root)
+    }
+
+    /// Call when the app becomes active: Full Disk Access may have been granted
+    /// or removed in System Settings meanwhile.
+    public func refreshFullDiskAccess() {
+        FullDiskAccess.refresh()
+        let granted = privacy.hasFullDiskAccess()
+        defer { lastFullDiskAccess = granted }
+        guard let previous = lastFullDiskAccess, previous != granted else { return }
+        let partial = results.filter { !$0.value.privacySkippedPaths.isEmpty }.map(\.key)
+        for path in demand.keys where results[path] == nil { enqueueIfNeeded(path) }
+        for path in partial where demand[path] != nil {
+            current.removeValue(forKey: path)?.cancel()
+            pending.removeAll { $0 == path }
+            enqueueIfNeeded(path, refreshingCached: true)
+        }
         drain()
         changed()
     }
@@ -308,9 +362,11 @@ public final class FolderSizeCache: ObservableObject {
 
     nonisolated static func calculateFolderSize(at rootPath: String, maxEntries: Int,
         skipping skippedPaths: Set<String> = [],
+        skipDirectory: ((String) -> Bool)? = nil,
         isCancelled: @Sendable () -> Bool = { false }) -> FolderSizeResult {
         let crawl = BulkCrawler.crawlTreeResult(roots: [rootPath], skipHeavyDevDirs: false, skippedPaths: skippedPaths,
-                                                maxEntries: maxEntries, includeHidden: true, isCancelled: isCancelled)
+                                                skipDirectory: skipDirectory, maxEntries: maxEntries,
+                                                includeHidden: true, isCancelled: isCancelled)
         var total: Int64 = 0
         var overflowed = false
         for entry in crawl.entries where !entry.isDirectory || entry.isSymlink {
@@ -320,6 +376,7 @@ public final class FolderSizeCache: ObservableObject {
         }
         return FolderSizeResult(bytes: total, isComplete: crawl.isComplete && !overflowed,
             skippedDirectoryCount: crawl.skippedDirectoryCount,
-            unreadableDirectoryCount: crawl.unreadableDirectoryCount)
+            unreadableDirectoryCount: crawl.unreadableDirectoryCount,
+            privacySkippedPaths: Array(crawl.privacySkippedPaths.prefix(50)))
     }
 }

@@ -1287,16 +1287,18 @@ private struct FolderSizeLabel: View {
                 Button("Calculate") { cache.calculateProtected(path) }
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.accentColor)
-                    .help("macOS protects this folder. Calculating its size may ask for permission. With Full Disk Access sizes are calculated automatically.")
+                    .help("macOS protects this folder, so its size is calculated only when you ask. macOS may ask for permission once. With Full Disk Access every size is calculated automatically.")
             } else if cache.status(for: path) == .deferred {
                 Button("Deferred ↻") { request() }
                     .buttonStyle(.plain)
                     .help("Active folder limit reached. Narrow the view or close other views, then click to retry.")
             } else {
                 Text(cache.statusText(for: path))
-                    .help(cache.size(for: path) == nil
-                        ? String(localized: "Queued, scanning, or a lower-bound estimate (limit / unread directories).")
-                        : String(localized: "Full folder size"))
+                    .help(cache.size(for: path) != nil
+                        ? String(localized: "Full folder size")
+                        : cache.protectedFoldersLeftOut(of: path).isEmpty
+                            ? String(localized: "Queued, scanning, or a lower-bound estimate (limit / unread directories).")
+                            : String(localized: "At least this much. Not counted: \(FolderSizeNames.list(cache.protectedFoldersLeftOut(of: path))). Select the folder to include them."))
             }
         }
         .onAppear { request() }

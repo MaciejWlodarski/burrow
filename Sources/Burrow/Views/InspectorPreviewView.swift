@@ -185,20 +185,32 @@ public struct InspectorPreviewView: View {
                                     : FormatHelpers.formatBytes(item.size)
                             )
                             if item.isDirectory && folderSizes.status(for: item.path) == .needsConsent {
-                                Text("macOS protects this folder. Calculating its size may ask for permission.")
+                                Text("macOS protects this folder, so its size is calculated only when you ask. macOS may ask for permission once.")
                                     .font(FinderUI.captionFont)
                                 Button("Calculate Size") { folderSizes.calculateProtected(item.path) }
+                                FullDiskAccessLink()
                             } else if item.isDirectory && folderSizes.status(for: item.path) == .deferred {
                                 Text("Active folder limit reached. Close other views and retry.")
                                     .font(FinderUI.captionFont)
                                 Button("Retry Size") { updateFolderSizeDemand() }
                             } else if item.isDirectory, let result = folderSizes.result(for: item.path), !result.isComplete {
-                                Text(result.unreadableDirectoryCount > 0
-                                    ? String(localized: "Lower bound: some directories could not be read.")
-                                    : result.skippedDirectoryCount > 0
-                                        ? String(localized: "Lower bound: protected and cloud folders inside are not counted. Select one of them to calculate it.")
-                                        : String(localized: "Lower bound: the scan reached its limit."))
-                                    .font(FinderUI.captionFont)
+                                let leftOut = folderSizes.protectedFoldersLeftOut(of: item.path)
+                                if !leftOut.isEmpty {
+                                    Text("At least this much. Not counted: \(FolderSizeNames.list(leftOut)). macOS may ask for permission once to include them.")
+                                        .font(FinderUI.captionFont)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Button("Include Them") { folderSizes.includeProtectedFolders(of: item.path) }
+                                    FullDiskAccessLink()
+                                } else {
+                                    Text(result.unreadableDirectoryCount > 0
+                                        ? String(localized: "Lower bound: some directories could not be read.")
+                                        : folderSizes.leftOutCloudFolders(of: item.path)
+                                            ? String(localized: "Lower bound: cloud storage inside is not counted.")
+                                            : result.skippedDirectoryCount > 0
+                                                ? String(localized: "Lower bound: protected folders inside are not counted.")
+                                                : String(localized: "Lower bound: the scan reached its limit."))
+                                        .font(FinderUI.captionFont)
+                                }
                             }
                             metadataRow(label: "Modified", value: FormatHelpers.formatDate(item.modificationDate))
                             CloudInspectorRow(item: item)
@@ -846,4 +858,23 @@ public struct InspectorPreviewView: View {
     }
 
 
+}
+
+/// Explains Full Disk Access, with which every folder size is automatic.
+private struct FullDiskAccessLink: View {
+    var body: some View {
+        Button("Allow Full Disk Access…") { AppState.shared.showFullDiskAccessSheet = true }
+        .buttonStyle(.link)
+        .font(FinderUI.captionFont)
+        .help("With Full Disk Access, Burrow calculates every folder size automatically.")
+    }
+}
+
+/// Folder names as Finder shows them (“Desktop”, localized), joined for a sentence.
+enum FolderSizeNames {
+    static func list(_ paths: [String]) -> String {
+        let names = paths.map { FileManager.default.displayName(atPath: $0) }
+        let unique = names.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        return ListFormatter.localizedString(byJoining: unique)
+    }
 }

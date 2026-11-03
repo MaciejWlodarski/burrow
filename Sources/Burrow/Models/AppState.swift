@@ -142,6 +142,8 @@ public final class AppState: ObservableObject {
     @Published public var showNewFolderSheet: Bool = false
     @Published public var showCompareSheet: Bool = false
     @Published public var showSettingsSheet: Bool = false
+    /// Offered once on first launch, and from Help at any time.
+    @Published public var showFullDiskAccessSheet: Bool = false
     @Published public var showFSearchHelpPopover: Bool = false
     @Published public var focusSearchFieldTrigger: Int = 0
 
@@ -231,6 +233,14 @@ public final class AppState: ObservableObject {
 
         if isDualPane { rightPane.retainInitialLocation() }
 
+        #if !BURROW_TESTING
+        let offeredKey = "bf.onboarding.fullDiskAccessOffered"
+        if !defaults.bool(forKey: offeredKey) {
+            defaults.set(true, forKey: offeredKey)
+            showFullDiskAccessSheet = !FullDiskAccess.isGranted()
+        }
+        #endif
+
         setupSidebarLocations()
         #if !BURROW_TESTING
         let volumes = VolumeRefreshService.production()
@@ -239,6 +249,8 @@ public final class AppState: ObservableObject {
             self?.volumeInventory.apply(result)
             // Signing in to a cloud app mounts a File Provider domain.
             CloudActivity.shared.refreshLocations()
+            // Runs on activation too: Full Disk Access may have just been granted.
+            FolderSizeCache.shared.refreshFullDiskAccess()
         }
         #endif
         setupIndexCallbacks()

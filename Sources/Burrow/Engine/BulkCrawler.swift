@@ -113,6 +113,8 @@ public enum BulkCrawler {
         public let reachedEntryLimit: Bool
         /// Cloud folders whose contents are not on this Mac; never downloaded.
         public var cloudOnlyDirectoryCount: Int = 0
+        /// Folders left out because of `skippedPaths` or `skipDirectory`, as reached.
+        public var privacySkippedPaths: [String] = []
     }
 
     /// Compatibility listing; callers needing completeness use readDirectoryResult.
@@ -230,6 +232,7 @@ public enum BulkCrawler {
         skipHeavyDevDirs: Bool = true,
         customSkippedDirs: Set<String>? = nil,
         skippedPaths: Set<String> = [],
+        skipDirectory: ((String) -> Bool)? = nil,
         maxEntries: Int = 600_000,
         includeHidden: Bool = true,
         isCancelled: @Sendable () -> Bool = { false },
@@ -256,6 +259,7 @@ public enum BulkCrawler {
         entries.reserveCapacity(min(max(0, maxEntries), 150_000))
         var head = 0
         var skippedCount = 0
+        var privacySkipped: [String] = []
         var unreadableCount = 0
         var reachedLimit = false
         var cloudOnlyCount = 0
@@ -274,7 +278,9 @@ public enum BulkCrawler {
             var info = stat()
             if stat(path, &info) == 0 {
                 let identity = "\(info.st_dev):\(info.st_ino)"
-                if skippedIdentities.contains(identity) && !normalized.contains(path) { skippedCount += 1; continue }
+                if skippedIdentities.contains(identity) && !normalized.contains(path) {
+                    skippedCount += 1; privacySkipped.append(path); continue
+                }
                 guard visitedIdentities.insert(identity).inserted else { continue }
             }
             let read = readDirectoryResult(at: path, includeHidden: includeHidden,
@@ -286,7 +292,9 @@ public enum BulkCrawler {
             if !read.isComplete && read.errorCode == nil && !isCancelled() { reachedLimit = true }
             for item in read.entries where item.isDirectory && !item.isSymlink {
                 if item.isDataless { cloudOnlyCount += 1; continue }
-                if !skippedPaths.isEmpty && skippedPaths.contains(item.fullPath) { skippedCount += 1; continue }
+                if skippedPaths.contains(item.fullPath) || skipDirectory?(item.fullPath) == true {
+                    skippedCount += 1; privacySkipped.append(item.fullPath); continue
+                }
                 if skipHeavyDevDirs && (skipped.contains(item.name) || (item.name == "Library" && item.parentPath == NSHomeDirectory())) {
                     skippedCount += 1
                 } else {
@@ -300,7 +308,8 @@ public enum BulkCrawler {
         return CrawlResult(entries: entries,
             isComplete: !cancelled && !reachedLimit && unreadableCount == 0 && skippedCount == 0 && cloudOnlyCount == 0,
             skippedDirectoryCount: skippedCount, unreadableDirectoryCount: unreadableCount,
-            wasCancelled: cancelled, reachedEntryLimit: reachedLimit, cloudOnlyDirectoryCount: cloudOnlyCount)
+            wasCancelled: cancelled, reachedEntryLimit: reachedLimit, cloudOnlyDirectoryCount: cloudOnlyCount,
+            privacySkippedPaths: privacySkipped)
     }
 
     public static func crawlTree(

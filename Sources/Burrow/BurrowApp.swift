@@ -281,6 +281,8 @@ struct BurrowApp: App {
                 Button("Release Notes") { Self.openProjectPage("releases") }
                 Button("Check for Updates…") { Self.openProjectPage("releases/latest") }
                 Divider()
+                Button("Full Disk Access…") { appState.showFullDiskAccessSheet = true }
+                Divider()
                 Button("Report an Issue…") { Self.openProjectPage("issues/new/choose") }
                 Button("Burrow on GitHub") { Self.openProjectPage("") }
             }

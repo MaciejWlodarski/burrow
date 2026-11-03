@@ -95,6 +95,7 @@ public struct MainWindowView: View {
         }
         .sheet(isPresented: $appState.showCompareSheet) { FolderCompareSheetView(appState: appState) }
         .sheet(isPresented: $appState.showSettingsSheet) { FSearchSettingsSheetView(appState: appState) }
+        .sheet(isPresented: $appState.showFullDiskAccessSheet) { FullDiskAccessSheetView() }
         .sheet(item: windowConflict) { ConflictResolutionSheetView(conflict: $0) }
     }
 

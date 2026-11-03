@@ -166,6 +166,7 @@ struct FolderSizeLifecycleRegressionTests {
         try await testRevalidationRetainsPhysicalSlotsAndRejectsOldResult()
         try testPrivacyRulesForProtectedFolders()
         try await testProtectedFolderWaitsForRequestAndParentSkipsIt()
+        try await testMediaLibrariesAndListingConsent()
         print("PASS 25 folder-size lifecycle checks: ownership, bounded admission, cancellation, invalidation, LRU, demand and lexical keys")
     }
 
@@ -935,9 +936,13 @@ struct FolderSizeLifecycleRegressionTests {
     private nonisolated func testPrivacyRulesForProtectedFolders() throws {
         let home = "/Users/u"
         let gated = FolderSizePrivacy(protectedRoots: [home + "/Desktop", home + "/Library", "/Volumes"],
+                                      rootsGrantedByListing: [home + "/Desktop"],
+                                      protectedBundleExtensions: ["photoslibrary"],
                                       cloudRoots: [home + "/Library/CloudStorage"], hasFullDiskAccess: { false })
         try expect(gated.requiresConsent(home + "/Desktop") && gated.requiresConsent(home + "/Desktop/"))
         try expect(!gated.requiresConsent(home + "/Desktop/Project") && !gated.requiresConsent(home))
+        // A home folder named like a protected one is not inside it.
+        try expect(!gated.requiresConsent(home + "/Desktop2"))
         let all: Set<String> = [home + "/Desktop", home + "/Library", "/Volumes", home + "/Library/CloudStorage"]
         try expect(gated.skippedRoots(whileSizing: home) == all)
         try expect(gated.skippedRoots(whileSizing: "/") == all)
@@ -945,15 +950,39 @@ struct FolderSizeLifecycleRegressionTests {
         // else protected stays skipped, even when reached through a firmlink.
         try expect(gated.skippedRoots(whileSizing: home + "/Library") == all.subtracting([home + "/Library"]))
         try expect(gated.skippedRoots(whileSizing: home + "/Desktop/Project") == all.subtracting([home + "/Desktop"]))
-        // A home folder named like a protected one is not inside it.
-        try expect(!gated.requiresConsent(home + "/Desktop2"))
-        let granted = FolderSizePrivacy(protectedRoots: gated.protectedRoots, cloudRoots: gated.cloudRoots,
-                                        hasFullDiskAccess: { true })
-        try expect(!granted.requiresConsent(home + "/Desktop"))
+
+        // Media libraries are protected by extension, wherever they are.
+        try expect(gated.requiresConsent(home + "/Pictures/Library.photoslibrary"))
+        try expect(gated.skipsBundle(at: home + "/Pictures/My.PhotosLibrary") && !gated.requiresConsent(home + "/Pictures"))
+
+        // Listing Desktop is its prompt; listing ~/Library is not.
+        try expect(gated.rootGranted(byListing: home + "/Desktop/Project") == home + "/Desktop")
+        try expect(gated.rootGranted(byListing: home + "/Library") == nil)
+
+        // An allowed folder is no longer gated nor skipped by its parents.
+        gated.consent.insert(home + "/Desktop")
+        try expect(!gated.requiresConsent(home + "/Desktop"))
+        try expect(gated.skippedRoots(whileSizing: home) == all.subtracting([home + "/Desktop"]))
+
+        let granted = FolderSizePrivacy(protectedRoots: gated.protectedRoots, protectedBundleExtensions: ["photoslibrary"],
+                                        cloudRoots: gated.cloudRoots, hasFullDiskAccess: { true })
+        try expect(!granted.requiresConsent(home + "/Library") && !granted.skipsBundle(at: home + "/P/A.photoslibrary"))
         try expect(granted.skippedRoots(whileSizing: home) == [home + "/Library/CloudStorage"])
+
         let system = FolderSizePrivacy.system(home: home)
-        try expect(["Desktop", "Documents", "Downloads", "Music", "Pictures", "Movies", "Library"].allSatisfy { system.protectedRoots.contains(home + "/" + $0) })
+        try expect(["Desktop", "Documents", "Downloads", "Library"].allSatisfy { system.protectedRoots.contains(home + "/" + $0) })
+        // Pictures, Movies and Music are sized automatically; only their libraries wait.
+        try expect(!["Pictures", "Movies", "Music"].contains { system.requiresConsent(home + "/" + $0) })
+        try expect(["photoslibrary", "musiclibrary", "tvlibrary"].allSatisfy(system.protectedBundleExtensions.contains))
         try expect(system.cloudRoots.contains(home + "/Library/Mobile Documents"))
+
+        // The user's choices survive a relaunch.
+        let suite = "com.burrow.tests.consent.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        try expect(FolderSizeConsent(defaults: defaults).insert(home + "/Documents"))
+        try expect(FolderSizeConsent(defaults: defaults).contains(home + "/Documents"))
+        try expect(!FolderSizeConsent(defaults: defaults).insert(home + "/Documents"))
     }
 
     private func testProtectedFolderWaitsForRequestAndParentSkipsIt() async throws {
@@ -968,7 +997,9 @@ struct FolderSizeLifecycleRegressionTests {
         try Data(count: 1_000).write(to: protected.appendingPathComponent("a.bin"))
         try Data(count: 500).write(to: open.appendingPathComponent("b.bin"))
 
-        let privacy = FolderSizePrivacy(protectedRoots: [protected.path], cloudRoots: [], hasFullDiskAccess: { false })
+        let privacy = FolderSizePrivacy(protectedRoots: [protected.path], rootsGrantedByListing: [protected.path],
+                                        protectedBundleExtensions: ["photoslibrary"], cloudRoots: [],
+                                        hasFullDiskAccess: { false })
         let cache = FolderSizeCache(maxWorkers: 2, maxDemand: 8, maxResults: 8, privacy: privacy)
         let owner = UUID()
         defer { cache.release(owner: owner) }
@@ -979,11 +1010,15 @@ struct FolderSizeLifecycleRegressionTests {
         try expect(cache.status(for: protected.path) == .needsConsent && cache.result(for: protected.path) == nil)
         let parent = cache.result(for: root.path)!
         try expect(parent.bytes == 500 && !parent.isComplete && parent.skippedDirectoryCount == 1)
+        try expect(cache.protectedFoldersLeftOut(of: root.path) == [protected.path])
         try expect(cache.size(for: open.path) == 500)
 
+        // Asking once sizes the folder and its parent again, now including it.
         cache.calculateProtected(protected.path)
         try await waitFor("protected folder sized on request") { cache.result(for: protected.path) != nil }
         try expect(cache.size(for: protected.path) == 1_000)
+        try await waitFor("parent includes the allowed folder") { cache.size(for: root.path) == 1_500 }
+        try expect(cache.protectedFoldersLeftOut(of: root.path).isEmpty)
 
         // The same folder under another path (here a symlinked ancestor, in
         // the app a firmlink such as /System/Volumes/Data) is still skipped.
@@ -992,5 +1027,42 @@ struct FolderSizeLifecycleRegressionTests {
         let crawl = BulkCrawler.crawlTreeResult(roots: [root.path], skippedPaths: [alias.path + "/Protected"])
         try expect(crawl.skippedDirectoryCount == 1 && !crawl.entries.contains { $0.parentPath.hasSuffix("/Protected") })
         print("PASS protected folders wait for a request; parents skip them")
+    }
+
+    /// Media libraries inside an ordinary folder are left out until the user
+    /// includes them; opening Desktop, Documents or Downloads counts as consent.
+    private func testMediaLibrariesAndListingConsent() async throws {
+        let fm = FileManager.default
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BURROW_TEST_ROOT"]!)
+            .appendingPathComponent("folder-size-libraries-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let pictures = root.appendingPathComponent("Pictures", isDirectory: true)
+        let library = pictures.appendingPathComponent("Holiday.photoslibrary", isDirectory: true)
+        let desktop = root.appendingPathComponent("Desktop", isDirectory: true)
+        try fm.createDirectory(at: library, withIntermediateDirectories: true)
+        try fm.createDirectory(at: desktop, withIntermediateDirectories: true)
+        try Data(count: 300).write(to: pictures.appendingPathComponent("a.jpg"))
+        try Data(count: 700).write(to: library.appendingPathComponent("db"))
+        try Data(count: 50).write(to: desktop.appendingPathComponent("note.txt"))
+
+        let privacy = FolderSizePrivacy(protectedRoots: [desktop.path], rootsGrantedByListing: [desktop.path],
+                                        protectedBundleExtensions: ["photoslibrary"], cloudRoots: [],
+                                        hasFullDiskAccess: { false })
+        let cache = FolderSizeCache(maxWorkers: 2, maxDemand: 8, maxResults: 8, privacy: privacy)
+        let owner = UUID()
+        defer { cache.release(owner: owner) }
+        cache.updateDemand(owner: owner, paths: [pictures.path, library.path, desktop.path])
+        try await waitFor("pictures sized without its library") { cache.result(for: pictures.path) != nil }
+        try expect(cache.result(for: pictures.path)!.bytes == 300 && cache.status(for: library.path) == .needsConsent)
+        try expect(cache.protectedFoldersLeftOut(of: pictures.path) == [library.path])
+
+        cache.includeProtectedFolders(of: pictures.path)
+        try await waitFor("pictures include the library") { cache.size(for: pictures.path) == 1_000 }
+        try await waitFor("library sized") { cache.size(for: library.path) == 700 }
+
+        try expect(cache.status(for: desktop.path) == .needsConsent)
+        cache.noteListed(desktop.appendingPathComponent("Sub").path)
+        try await waitFor("opened Desktop sized automatically") { cache.size(for: desktop.path) == 50 }
+        print("PASS media libraries wait to be included; opening Desktop allows its size")
     }
 }

@@ -497,6 +497,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
         }
         // Install exactly the validated snapshot, never a second filesystem read.
         installDirectoryEntries(entries)
+        FolderSizeCache.shared.noteListed(standardized.path)
         updateColumnTrail(for: standardized)
         FolderSizeCache.shared.revalidate(containing: standardized.path)
         FSearchIndex.shared.ensureDirectoryIndexed(standardized.path)
@@ -566,6 +567,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
         }
         if failedNavigation?.0 == currentURL { clearNavigationFailure() }
         installDirectoryEntries(result.entries, invalidateCaches: invalidateCaches)
+        FolderSizeCache.shared.noteListed(currentURL.path)
     }
 
     private func installDirectoryEntries(_ entries: [IndexedFileEntry], invalidateCaches: Bool = false) {

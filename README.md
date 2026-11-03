@@ -120,7 +120,7 @@ brew tap maciejwlodarski/burrow https://github.com/MaciejWlodarski/burrow
 brew install --cask burrow
 ```
 
-**First launch.** Burrow is open source and not notarized by Apple, so macOS blocks it the first time. Open **System Settings → Privacy & Security** and choose **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Burrow.app`. Grant **Full Disk Access** in the same place so the disk map can read protected folders. Releases from 0.1.1 on are signed with the same certificate, so updates keep that permission. Version 0.1.0 was signed ad hoc: after updating from it, grant Full Disk Access once more.
+**First launch.** Burrow is open source and not notarized by Apple, so macOS blocks it the first time. Open **System Settings → Privacy & Security** and choose **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Burrow.app`. On first launch Burrow offers to set up **Full Disk Access**: with it, folder sizes and the disk map cover protected folders without a prompt for each. You can skip it; protected folders are then sized when you ask. Releases from 0.1.1 on are signed with the same certificate, so updates keep that permission. Version 0.1.0 was signed ad hoc: after updating from it, grant Full Disk Access once more.
 
 The interface follows the macOS language (English or Polish). To choose one, open **Settings → Language**.
 
