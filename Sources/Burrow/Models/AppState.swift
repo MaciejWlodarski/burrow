@@ -143,7 +143,16 @@ public final class AppState: ObservableObject {
     @Published public var showCompareSheet: Bool = false
     @Published public var showSettingsSheet: Bool = false
     /// Offered once on first launch, and from Help at any time.
-    @Published public var showFullDiskAccessSheet: Bool = false
+    @Published public var showFullDiskAccessSheet: Bool = false {
+        didSet {
+            // First launch indexes Desktop, Documents and Downloads only after
+            // the user chose, so a granted access means no prompts at all.
+            guard !showFullDiskAccessSheet, indexingWaitsForOnboarding else { return }
+            indexingWaitsForOnboarding = false
+            FSearchIndex.shared.startIndexing()
+        }
+    }
+    private var indexingWaitsForOnboarding = false
     @Published public var showFSearchHelpPopover: Bool = false
     @Published public var focusSearchFieldTrigger: Int = 0
 
@@ -298,7 +307,11 @@ public final class AppState: ObservableObject {
             }
         }
         #if !BURROW_TESTING
-        FSearchIndex.shared.startIndexing()
+        if showFullDiskAccessSheet {
+            indexingWaitsForOnboarding = true
+        } else {
+            FSearchIndex.shared.startIndexing()
+        }
         #else
         isIndexing = false
         #endif

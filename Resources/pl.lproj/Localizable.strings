@@ -877,7 +877,7 @@
 "2. Turn on Burrow in the list. If it is missing, drag this icon into the list." = "2. Włącz Burrow na liście. Jeśli go nie ma, przeciągnij tę ikonę na listę.";
 "3. If System Settings offers Quit & Reopen, choose it." = "3. Jeśli Ustawienia systemowe zaproponują Zakończ i otwórz ponownie, wybierz to.";
 "Burrow notices the change when you come back." = "Burrow zauważy zmianę, gdy tu wrócisz.";
-"Without it, Burrow still works: protected folders such as Desktop and Documents are sized when you ask, and macOS asks for each of them once." = "Bez tego Burrow też działa: rozmiar chronionych folderów, takich jak Biurko i Dokumenty, liczy się na żądanie, a macOS pyta o każdy z nich raz.";
+"Without it, Burrow still works: macOS asks once each for Desktop, Documents and Downloads, which search indexes, and other protected folders are sized when you ask." = "Bez tego Burrow też działa: macOS raz zapyta o Biurko, Dokumenty i Pobrane, które indeksuje wyszukiwarka, a rozmiar innych chronionych folderów liczy się na żądanie.";
 "Not Now" = "Nie teraz";
 "Open System Settings" = "Otwórz Ustawienia systemowe";
 "Full Disk Access…" = "Pełny dostęp do dysku…";
