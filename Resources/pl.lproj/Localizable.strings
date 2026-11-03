@@ -899,3 +899,4 @@
 "Check for updates automatically" = "Sprawdzaj aktualizacje automatycznie";
 "Once a day Burrow asks GitHub for the latest version number. Nothing about you or your files is sent." = "Raz dziennie Burrow pyta GitHuba o numer najnowszej wersji. Nic o Tobie ani Twoich plikach nie jest wysyłane.";
 "OK" = "OK";
+"Opening “%@”…" = "Otwieranie „%@”…";

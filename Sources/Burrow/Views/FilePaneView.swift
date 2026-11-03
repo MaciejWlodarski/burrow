@@ -1065,7 +1065,6 @@ public struct FilePaneView: View {
 
         Button(role: .destructive) {
             fileOps.moveToTrash(targetItems())
-            pane.reloadDirectory()
         } label: {
             Label("Move to Trash", systemImage: "trash")
         }

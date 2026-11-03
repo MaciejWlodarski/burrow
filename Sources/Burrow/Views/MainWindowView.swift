@@ -302,6 +302,11 @@ private struct FinderStatusBar: View {
     var body: some View {
         HStack(spacing: 14) {
             Text(selectionDescription).lineLimit(1).layoutPriority(1).help(selectionDescription)
+            if let opening = activeTab.openingLocation {
+                ProgressView().controlSize(.small).accessibilityHidden(true)
+                Text("Opening “\(FileManager.default.displayName(atPath: opening.path))”…")
+                    .lineLimit(1).truncationMode(.middle).help(opening.path)
+            }
             if let transfer = fileOps.activeTransfer {
                 ProgressView(value: transfer.fraction).frame(width: 70)
                     .accessibilityLabel("File operation progress")

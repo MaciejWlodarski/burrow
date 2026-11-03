@@ -136,7 +136,6 @@ struct BurrowApp: App {
                     if routeTextAction(#selector(NSResponder.deleteToBeginningOfLine(_:))) { return }
                     guard canUseFileCommands else { return }
                     fileOps.moveToTrash(appState.activeTab.selectedItems)
-                    appState.activeTab.reloadDirectory()
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(!isEditingText && (!canUseFileCommands || appState.activeTab.selectedItems.isEmpty || fileOps.isBusy))

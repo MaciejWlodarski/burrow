@@ -306,7 +306,6 @@ public struct InspectorPreviewView: View {
                                 }
                                 inspectorActionButton(title: "Move to Trash", icon: "trash", isDestructive: true) {
                                     fileOps.moveToTrash([item])
-                                    activeTab.reloadDirectory()
                                 }
                             }
                         }

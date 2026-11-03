@@ -104,7 +104,7 @@ struct FileOperationSafetyTests {
         try await testDuplicateDoesNotBlockMainActor()
         try await testHistoryDoesNotBlockMainActor()
         try await testPartialHistoryIdentity()
-        try testTrashValidationAbortsBatch()
+        try await testTrashValidationAbortsBatch()
         try await testStandaloneCompressedFiles()
         try await testInvalidCompressedInputAndOccupiedOutput()
         try await testZipOperandsPreserveSources()
@@ -462,6 +462,7 @@ struct FileOperationSafetyTests {
                 manager.compressItems([f.item(source)], in: f.sourceDirectory)
             case 9:
                 manager.moveToTrash([f.item(source)])
+                try await idle(manager)
                 target = try f.fm.contentsOfDirectory(at: f.trash, includingPropertiesForKeys: nil).first!
             default:
                 let archive = f.sourceDirectory.appendingPathComponent("item.zip")
@@ -866,6 +867,7 @@ struct FileOperationSafetyTests {
         try expect(copiedText == "incoming")
         try expect((try? f.fm.destinationOfSymbolicLink(atPath: target.path)) != nil)
         manager.moveToTrash([f.item(copy)])
+        try await idle(manager)
         try f.fm.createSymbolicLink(atPath: copy.path, withDestinationPath: "/missing-bf-fixture-\(UUID())")
         manager.undoLastOperation()
         try await idle(manager)
@@ -1017,7 +1019,7 @@ struct FileOperationSafetyTests {
         try expect(final == "incoming" && manager.undoStack.count == 1)
     }
 
-    private static func testTrashValidationAbortsBatch() throws {
+    private static func testTrashValidationAbortsBatch() async throws {
         let f = try Fixture()
         let urls = ["one.txt", "two.txt", "three.txt"].map { f.sourceDirectory.appendingPathComponent($0) }
         for url in urls { try f.write(url.lastPathComponent, to: url) }
@@ -1025,6 +1027,7 @@ struct FileOperationSafetyTests {
         manager.moveToTrash(urls.map(f.item)) { item in
             if item.url == urls[1] { throw RegressionFailure(description: "Retained copy changed") }
         }
+        try await idle(manager)
         try expect(!f.io.exists(urls[0]) && f.io.exists(urls[1]) && f.io.exists(urls[2]))
         try expect(manager.undoStack.count == 1 && manager.lastStatusMessage?.contains("Retained copy changed") == true)
     }

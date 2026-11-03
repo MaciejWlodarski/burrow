@@ -1262,41 +1262,61 @@ public final class FileOperationsManager: ObservableObject {
         }
     }
 
-    public func moveToTrash(_ items: [FileItem], validating: ((FileItem) throws -> Void)? = nil) {
+    /// Trashing runs off the main thread: a large selection or a slow disk
+    /// must not freeze the window. Other changes wait until it finishes.
+    public func moveToTrash(_ items: [FileItem], validating: (@Sendable (FileItem) throws -> Void)? = nil,
+                            completion: (@MainActor () -> Void)? = nil) {
         guard !items.isEmpty, beginMutation(title: String(localized: "Moving to Trash"), totalCount: items.count) else { return }
-        defer { activeTransfer = nil }
-        var trashedPairs: [(original: URL, trashed: URL)] = []
-        var undo: [FileHistoryAction] = []
-        var failures = 0
-        var validationError: String?
-        for item in items {
-            do {
-                // A stale duplicate scan must not be allowed to remove the last
-                // surviving or newly modified copy. Abort the batch on invalidation.
-                try validating?(item)
-            } catch {
-                validationError = error.localizedDescription
-                break
+        let io = fileIO
+        Task.detached(priority: .userInitiated) { [self] in
+            var trashedPairs: [(original: URL, trashed: URL)] = []
+            var undo: [FileHistoryAction] = []
+            var touched = Set<String>()
+            var failures = 0
+            var validationError: String?
+            var lastProgress = Date.distantPast
+            for (index, item) in items.enumerated() {
+                do {
+                    // A stale duplicate scan must not be allowed to remove the last
+                    // surviving or newly modified copy. Abort the batch on invalidation.
+                    try validating?(item)
+                } catch {
+                    validationError = error.localizedDescription
+                    break
+                }
+                do {
+                    let trashed = try io.trash(item.url)
+                    trashedPairs.append((original: item.url, trashed: trashed))
+                    undo.append(.restore(from: trashed, to: item.url, io: io))
+                    self.enqueueDirectoryRefresh(item.parentPath)
+                    touched.insert(item.parentPath)
+                } catch {
+                    failures += 1
+                }
+                if items.count > 1, Date().timeIntervalSince(lastProgress) > 0.1 {
+                    lastProgress = Date()
+                    let progress = TransferProgressInfo(title: String(localized: "Moving to Trash"),
+                        currentFile: item.name, completedCount: index + 1, totalCount: items.count)
+                    await MainActor.run { self.activeTransfer = progress }
+                }
             }
-            do {
-                let trashed = try fileIO.trash(item.url)
-                trashedPairs.append((original: item.url, trashed: trashed))
-                undo.append(.restore(from: trashed, to: item.url, io: fileIO))
-                self.enqueueDirectoryRefresh(item.parentPath)
-                FolderSizeCache.shared.invalidate(containing: item.parentPath)
-            } catch {
-                failures += 1
+            let pairs = trashedPairs, actions = undo, failed = failures, stopped = validationError, dirs = touched
+            await MainActor.run {
+                for dir in dirs { FolderSizeCache.shared.invalidate(containing: dir) }
+                if !pairs.isEmpty {
+                    self.pushUndo(UndoableFileOperation(label: String(localized: "Trash (\(pairs.count) items)"), kind: .actions(actions)))
+                }
+                if let stopped {
+                    self.lastStatusMessage = String(localized: "Deletion stopped: \(stopped) (moved \(pairs.count) items)")
+                } else if failed > 0 {
+                    self.lastStatusMessage = String(localized: "Could not move \(failed) items to the Trash (no permission?)")
+                } else {
+                    self.lastStatusMessage = String(localized: "Moved to the Trash: \(pairs.count) items (⌘Z to restore)")
+                }
+                self.activeTransfer = nil
+                self.reloadVisiblePanes()
+                completion?()
             }
-        }
-        if !trashedPairs.isEmpty {
-            pushUndo(UndoableFileOperation(label: String(localized: "Trash (\(trashedPairs.count) items)"), kind: .actions(undo)))
-        }
-        if let validationError {
-            lastStatusMessage = String(localized: "Deletion stopped: \(validationError) (moved \(trashedPairs.count) items)")
-        } else if failures > 0 {
-            lastStatusMessage = String(localized: "Could not move \(failures) items to the Trash (no permission?)")
-        } else {
-            lastStatusMessage = String(localized: "Moved to the Trash: \(trashedPairs.count) items (⌘Z to restore)")
         }
     }
 

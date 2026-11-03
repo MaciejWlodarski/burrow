@@ -1624,18 +1624,19 @@ public struct WizTreeAnalyzerView: View {
         let root = pane.currentURL.path
         guard canUseRenderedResult(generation, requiresComplete: false),
               item.path.hasPrefix(root == "/" ? "/" : root + "/") else { return }
-        FileOperationsManager.shared.moveToTrash([item])
-        guard isMapMode else {
-            runActiveScan(for: pane.currentURL)
-            return
+        FileOperationsManager.shared.moveToTrash([item]) {
+            guard isMapMode else {
+                runActiveScan(for: pane.currentURL)
+                return
+            }
+            // The map is a snapshot: drop what really left the disk instead of rescanning it.
+            var info = stat()
+            guard let tree = mapTree, let node = tree.node(forPath: item.path), lstat(item.path, &info) != 0,
+                  let token = scanToken else { return }
+            tree.remove(node)
+            if selectedNode == node { selectedNode = nil }
+            refreshDiskMapContents(token: token)
         }
-        // The map is a snapshot: drop what really left the disk instead of rescanning it.
-        var info = stat()
-        guard let tree = mapTree, let node = tree.node(forPath: item.path), lstat(item.path, &info) != 0,
-              let token = scanToken else { return }
-        tree.remove(node)
-        if selectedNode == node { selectedNode = nil }
-        refreshDiskMapContents(token: token)
     }
 
     private func trashDuplicates(_ groups: [DuplicateFileGroup], generation: AnalysisRequestToken?, onlyPath: String? = nil) {

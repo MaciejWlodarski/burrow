@@ -367,7 +367,13 @@ public final class PaneTabState: ObservableObject, Identifiable {
     // deterministic and ensure that history never becomes a file-open gesture.
     var navigationDirectoryReader: (String, Bool) -> BulkCrawler.DirectoryReadResult = {
         BulkCrawler.readDirectoryResult(at: $0, includeHidden: $1)
-    }
+    } { didSet { readsDirectoriesInBackground = false } }
+    /// The real reader runs off the main thread; injected test readers stay synchronous.
+    private var readsDirectoriesInBackground = true
+    /// A folder still being read after the short synchronous wait (a slow or
+    /// network disk). The window stays responsive and shows it as opening.
+    @Published private(set) var openingLocation: URL?
+    private var pendingNavigationID: UUID?
     var fileOpener: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
     @Published private(set) var navigationDiagnostic: String?
     @Published private(set) var navigationFailureIsPermissionDenied = false
@@ -429,21 +435,63 @@ public final class PaneTabState: ObservableObject, Identifiable {
         // Invalidate a Resume even when this attempt fails: its late completion
         // must not publish over the user's newer intent. Browsing state is retained.
         cancelSessionRestoration()
+        // A newer request replaces one still waiting for a slow disk.
+        pendingNavigationID = nil
+        openingLocation = nil
         let standardized = url.standardizedFileURL
+        let showHidden = showHiddenFiles
+        let outcome: Result<[IndexedFileEntry], Error>
+        if readsDirectoriesInBackground {
+            let read = DirectoryReadHandoff()
+            DispatchQueue.global(qos: .userInitiated).async {
+                read.finish(Self.readNavigationTarget(standardized.path, includeHidden: showHidden,
+                    reader: { BulkCrawler.readDirectoryResult(at: $0, includeHidden: $1) }))
+            }
+            // Local folders answer well within this; only slow disks go async.
+            if let result = read.wait(seconds: 0.15) {
+                outcome = result
+            } else {
+                let id = UUID()
+                pendingNavigationID = id
+                openingLocation = standardized
+                read.whenFinished { result in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.pendingNavigationID == id else { return }
+                        self.pendingNavigationID = nil
+                        self.openingLocation = nil
+                        self.commitNavigation(to: standardized, transition: transition, outcome: result)
+                    }
+                }
+                return true
+            }
+        } else {
+            outcome = Self.readNavigationTarget(standardized.path, includeHidden: showHidden, reader: navigationDirectoryReader)
+        }
+        return commitNavigation(to: standardized, transition: transition, outcome: outcome)
+    }
+
+    nonisolated private static func readNavigationTarget(_ path: String, includeHidden: Bool,
+        reader: (String, Bool) -> BulkCrawler.DirectoryReadResult) -> Result<[IndexedFileEntry], Error> {
+        var info = stat()
+        guard stat(path, &info) == 0 else {
+            return .failure(NSError(domain: NSPOSIXErrorDomain, code: Int(errno)))
+        }
+        guard (info.st_mode & S_IFMT) == S_IFDIR else {
+            return .failure(NSError(domain: NSPOSIXErrorDomain, code: Int(ENOTDIR)))
+        }
+        let result = reader(path, includeHidden)
+        guard result.isComplete, result.errorCode == nil else {
+            return .failure(NSError(domain: NSPOSIXErrorDomain, code: Int(result.errorCode ?? EIO)))
+        }
+        return .success(result.entries)
+    }
+
+    @discardableResult
+    private func commitNavigation(to standardized: URL, transition: NavigationTransition,
+                                  outcome: Result<[IndexedFileEntry], Error>) -> Bool {
         let entries: [IndexedFileEntry]
         do {
-            var info = stat()
-            guard stat(standardized.path, &info) == 0 else {
-                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-            }
-            guard (info.st_mode & S_IFMT) == S_IFDIR else {
-                throw NSError(domain: NSPOSIXErrorDomain, code: Int(ENOTDIR))
-            }
-            let result = navigationDirectoryReader(standardized.path, showHiddenFiles)
-            guard result.isComplete, result.errorCode == nil else {
-                throw NSError(domain: NSPOSIXErrorDomain, code: Int(result.errorCode ?? EIO))
-            }
-            entries = result.entries
+            entries = try outcome.get()
         } catch {
             failedNavigation = (standardized, transition, navigationRetryContext)
             navigationFailureID = UUID()
@@ -966,6 +1014,41 @@ public final class PaneTabState: ObservableObject, Identifiable {
             } else {
                 columnTrailURLs = [url]
             }
+        }
+    }
+}
+
+/// Hands a directory read from a worker to the main thread: either within a
+/// short synchronous wait, or later through a callback.
+private final class DirectoryReadHandoff: @unchecked Sendable {
+    private let lock = NSLock()
+    private let done = DispatchSemaphore(value: 0)
+    private var result: Result<[IndexedFileEntry], Error>?
+    private var callback: (@Sendable (Result<[IndexedFileEntry], Error>) -> Void)?
+
+    func finish(_ value: Result<[IndexedFileEntry], Error>) {
+        lock.lock()
+        result = value
+        let waiting = callback
+        lock.unlock()
+        done.signal()
+        waiting?(value)
+    }
+
+    func wait(seconds: Double) -> Result<[IndexedFileEntry], Error>? {
+        guard done.wait(timeout: .now() + seconds) == .success else { return nil }
+        lock.lock(); defer { lock.unlock() }
+        return result
+    }
+
+    func whenFinished(_ handler: @escaping @Sendable (Result<[IndexedFileEntry], Error>) -> Void) {
+        lock.lock()
+        if let result {
+            lock.unlock()
+            handler(result)
+        } else {
+            callback = handler
+            lock.unlock()
         }
     }
 }
