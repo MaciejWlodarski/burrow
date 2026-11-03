@@ -284,6 +284,7 @@ enum DiskMapPresentation {
         if tree.unreadableDirectoryCount > 0 { messages.append("Foldery bez dostępu: \(tree.unreadableDirectoryCount.formatted()).") }
         if tree.datalessDirectoryCount > 0 { messages.append("Foldery iCloud bez lokalnej zawartości: \(tree.datalessDirectoryCount.formatted()).") }
         if tree.skippedMountCount > 0 { messages.append("Pominięte inne dyski i montowania: \(tree.skippedMountCount.formatted()).") }
+        if tree.cloneSharedBytes > 0 { messages.append("Klony APFS policzone raz: \(FormatHelpers.formatBytes(tree.cloneSharedBytes)) nie liczono podwójnie.") }
         return messages.isEmpty ? nil : messages.joined(separator: " ")
     }
 }

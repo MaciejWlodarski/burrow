@@ -72,7 +72,8 @@ struct DiskCLI {
       --quiet           No progress line on stderr
 
     NOTES
-      Sizes are on-disk (allocated) bytes. Hard links count once, other disks and
+      Sizes are on-disk (allocated) bytes. Hard links and unmodified APFS clones
+      (e.g. Finder copies) count once, other disks and
       iCloud-only files are skipped. Every command scans fresh: a whole disk takes
       about 15 s, a single folder much less, so prefer one `scan` with --files,
       --types and --junk over several commands. Without Full Disk Access for the
@@ -271,6 +272,7 @@ struct DiskCLI {
             "cloudOnlyFolders": tree.datalessDirectoryCount,
             "skippedMounts": tree.skippedMountCount,
             "unscannedSize": tree.unaccountedBytes,
+            "cloneSharedSize": tree.cloneSharedBytes,
             "sizeUnit": "bytes on disk"
         ]
         if let free = tree.volumeFreeBytes { document["volumeFreeSize"] = free }
@@ -285,6 +287,9 @@ struct DiskCLI {
         if let free = tree.volumeFreeBytes { disk += ", free \(Self.human(free))" }
         if tree.unaccountedBytes > 0 { disk += ", unscanned (system/protected) \(Self.human(tree.unaccountedBytes))" }
         lines.append(disk)
+        if tree.cloneSharedBytes > 0 {
+            lines.append("APFS clones sharing data with another file counted once: \(Self.human(tree.cloneSharedBytes)) not double-counted")
+        }
         if tree.unreadableDirectoryCount > 0 {
             lines.append("\(Self.grouped(tree.unreadableDirectoryCount)) folders unreadable: give the app running burrow Full Disk Access for a complete scan")
         }

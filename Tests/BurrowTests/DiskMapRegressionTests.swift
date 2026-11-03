@@ -208,8 +208,43 @@ struct DiskMapRegressionTests {
         print("PASS disk map store shares finished trees, replaces refreshed ones and honours cancel")
     }
 
+    /// A Finder copy on APFS is a clone: one set of blocks, two names. A clone
+    /// changed after copying owns new blocks and keeps its own size.
+    private func testPureClonesCountOnce() throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = root.appendingPathComponent("a/original.bin")
+        try write(4_000_000, to: original)
+        let copy = root.appendingPathComponent("b/copy.bin")
+        try FileManager.default.createDirectory(at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard clonefile(original.path, copy.path, 0) == 0 else {
+            print("SKIP clone accounting: the temporary folder is not on APFS")
+            return
+        }
+        let edited = root.appendingPathComponent("c/edited.bin")
+        try FileManager.default.createDirectory(at: edited.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try expect(clonefile(original.path, edited.path, 0) == 0)
+        let handle = try FileHandle(forWritingTo: edited)
+        try handle.seek(toOffset: 1_000_000)
+        try handle.write(contentsOf: Data(repeating: 0x11, count: 100_000))
+        try handle.close()
+
+        let tree = try scan(root)
+        let block = Int64(4_000_000)
+        let names = tree.children(of: DiskTree.rootID).map { (tree.name($0), tree.allocatedSize($0)) }
+        let sizes = Dictionary(uniqueKeysWithValues: names)
+        // Exactly one of the two pure clones carries the shared blocks.
+        try expect(((sizes["a"] ?? 0) >= block) != ((sizes["b"] ?? 0) >= block))
+        try expect((sizes["a"] ?? 0) + (sizes["b"] ?? 0) < 2 * block)
+        try expect((sizes["c"] ?? 0) >= block)
+        try expect(tree.cloneSharedBytes >= block)
+        try expect(tree.logicalSize(DiskTree.rootID) == 3 * 4_000_000)
+        print("PASS pure APFS clones are counted once, edited clones keep their size")
+    }
+
     @MainActor func runAll() async throws {
         try testSizesCoverDeepHiddenLinkedAndSparseFiles()
+        try testPureClonesCountOnce()
         try testLimitCancellationUnreadableAndRemoval()
         try testBoundaryStaysOnTheScannedDisk()
         try testMapDrawsEveryLevelWithinItsBounds()

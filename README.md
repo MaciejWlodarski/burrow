@@ -67,7 +67,7 @@ burrow size ~/Downloads ~/dev/app/node_modules        # on-disk size of paths
 burrow trash ~/dev/app/target --dry-run               # preview, then run without --dry-run
 ```
 
-- **Sizes** are on-disk bytes. Hard links count once, and other disks and iCloud-only files are skipped.
+- **Sizes** are on-disk bytes. Hard links and unmodified APFS clones, such as Finder copies, count once. Other disks and iCloud-only files are skipped.
 - **Every command scans fresh.** A whole disk takes about 20 seconds, so combine `--files`, `--types` and `--junk` in one `scan`.
 - **Junk results are labeled.** Each item has a risk level (`safe` items are rebuilt on demand, `review` items need a check first) and a hint.
 - **`trash` only moves items to the Trash**, so they can be recovered, and space is freed when the Trash is emptied. It refuses the disk root, system folders, mounted volumes, your home and its standard folders.

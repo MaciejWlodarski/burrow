@@ -44,6 +44,9 @@ public final class DiskTree: @unchecked Sendable {
     public let skippedMountCount: Int
     public let volumeFreeBytes: Int64?
     public let unaccountedBytes: Int64
+    /// Bytes of APFS clones (such as Finder copies) that share their data with
+    /// a file counted elsewhere in the tree, so they were counted once.
+    public let cloneSharedBytes: Int64
     private let lock = NSLock()
     private var nodes: ContiguousArray<Node>
     private var children: ContiguousArray<NodeID>
@@ -52,7 +55,7 @@ public final class DiskTree: @unchecked Sendable {
     init(rootPath: String, nodes: ContiguousArray<Node>, children: ContiguousArray<NodeID>,
          nameBytes: ContiguousArray<UInt8>, elapsedMilliseconds: Double, isComplete: Bool,
          reachedEntryLimit: Bool, unreadableDirectoryCount: Int, datalessDirectoryCount: Int,
-         skippedMountCount: Int, volumeFreeBytes: Int64?, unaccountedBytes: Int64) {
+         skippedMountCount: Int, volumeFreeBytes: Int64?, unaccountedBytes: Int64, cloneSharedBytes: Int64 = 0) {
         self.rootPath = rootPath
         self.nodes = nodes
         self.children = children
@@ -65,6 +68,7 @@ public final class DiskTree: @unchecked Sendable {
         self.skippedMountCount = skippedMountCount
         self.volumeFreeBytes = volumeFreeBytes
         self.unaccountedBytes = unaccountedBytes
+        self.cloneSharedBytes = cloneSharedBytes
         scannedAt = Date()
     }
 
@@ -333,7 +337,7 @@ struct DiskScanBoundary {
 }
 
 /// Whole-tree parallel `getattrlistbulk` scanner. It records on-disk (allocated)
-/// and logical sizes, counts hard links once, stays on the scanned disk and
+/// and logical sizes, counts hard links and APFS clones once, stays on the scanned disk and
 /// never materializes iCloud placeholders.
 public enum DiskScanner {
     public static let defaultMaxEntries = 40_000_000
@@ -360,6 +364,8 @@ public enum DiskScanner {
         var logical: Int64
         var fileID: UInt64
         var linkCount: UInt32
+        /// APFS data-stream id of a file that may share blocks; 0 otherwise.
+        var cloneID: UInt64
     }
 
     /// All mutable scan state; every access holds `condition`.
@@ -373,6 +379,8 @@ public enum DiskScanner {
         var finished = false
         var visited = Set<FileIdentity>()
         var hardLinks = Set<FileIdentity>()
+        var clones = Set<FileIdentity>()
+        var cloneSharedBytes: Int64 = 0
         var unreadable = 0
         var dataless = 0
         var skippedMounts = 0
@@ -423,7 +431,7 @@ public enum DiskScanner {
             elapsedMilliseconds: elapsed, isComplete: shared.unreadable == 0 && !shared.reachedLimit,
             reachedEntryLimit: shared.reachedLimit, unreadableDirectoryCount: shared.unreadable,
             datalessDirectoryCount: shared.dataless, skippedMountCount: shared.skippedMounts,
-            volumeFreeBytes: boundary.freeBytes, unaccountedBytes: unaccounted)
+            volumeFreeBytes: boundary.freeBytes, unaccountedBytes: unaccounted, cloneSharedBytes: shared.cloneSharedBytes)
     }
 
     private static func work(shared: Shared, boundary: DiskScanBoundary, root: String,
@@ -515,13 +523,24 @@ public enum DiskScanner {
         request.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS) | attrgroup_t(ATTR_CMN_NAME)
             | attrgroup_t(ATTR_CMN_OBJTYPE) | attrgroup_t(ATTR_CMN_MODTIME) | attrgroup_t(ATTR_CMN_FILEID)
         request.fileattr = attrgroup_t(ATTR_FILE_LINKCOUNT) | attrgroup_t(ATTR_FILE_TOTALSIZE) | attrgroup_t(ATTR_FILE_ALLOCSIZE)
+        // Clone ids find pure APFS clones; with this option forkattr holds
+        // extended common attributes. Filesystems without them get a plain read.
+        request.forkattr = attrgroup_t(ATTR_CMNEXT_CLONEID) | attrgroup_t(ATTR_CMNEXT_EXT_FLAGS)
+        var options = UInt64(FSOPT_ATTR_CMN_EXTENDED)
+        var delivered = false
         while true {
-            let count = getattrlistbulk(fd, &request, buffer, bufferSize, 0)
+            let count = getattrlistbulk(fd, &request, buffer, bufferSize, options)
             if count == 0 { return .read(device: info.st_dev) }
             if count < 0 {
                 if errno == EINTR { continue }
+                if errno == EINVAL && options != 0 && !delivered {
+                    request.forkattr = 0
+                    options = 0
+                    continue
+                }
                 return .failed(errno)
             }
+            delivered = true
             var cursor = buffer
             let end = buffer + bufferSize
             for _ in 0..<count {
@@ -582,7 +601,18 @@ public enum DiskScanner {
         if returned.fileattr & attrgroup_t(ATTR_FILE_ALLOCSIZE) != 0 {
             guard has(8) else { return }
             allocated = (entry + offset).loadUnaligned(as: Int64.self)
+            offset += 8
         }
+        var cloneID: UInt64 = 0
+        if returned.forkattr & attrgroup_t(ATTR_CMNEXT_CLONEID) != 0, has(8) {
+            cloneID = (entry + offset).loadUnaligned(as: UInt64.self)
+            offset += 8
+        }
+        var extendedFlags: UInt64 = 0
+        if returned.forkattr & attrgroup_t(ATTR_CMNEXT_EXT_FLAGS) != 0, has(8) {
+            extendedFlags = (entry + offset).loadUnaligned(as: UInt64.self)
+        }
+        if extendedFlags & UInt64(EF_MAY_SHARE_BLOCKS) == 0 { cloneID = 0 }
 
         let isDirectory = type == VDIR.rawValue
         let isSymlink = type == VLNK.rawValue
@@ -603,7 +633,8 @@ public enum DiskScanner {
         entries.append(Entry(nameOffset: names.count, nameLength: nameLength, category: category,
             flags: (isDirectory ? DiskTree.Flag.directory : 0) | (isSymlink ? DiskTree.Flag.symlink : 0),
             modified: Int64(modified.tv_sec), allocated: isDirectory ? 0 : allocated,
-            logical: isDirectory ? 0 : logical, fileID: fileID, linkCount: linkCount))
+            logical: isDirectory ? 0 : logical, fileID: fileID, linkCount: linkCount,
+            cloneID: isDirectory || isSymlink ? 0 : cloneID))
         names.append(contentsOf: name)
     }
 
@@ -624,6 +655,12 @@ public enum DiskScanner {
             // A hard-linked file occupies disk once, however many names it has.
             if entry.linkCount > 1, entry.flags & DiskTree.Flag.directory == 0, device != 0,
                !shared.hardLinks.insert(FileIdentity(device: device, file: entry.fileID)).inserted {
+                allocated = 0
+            }
+            // Pure clones share one data stream id; its blocks occupy disk once.
+            if allocated > 0, entry.cloneID != 0, device != 0,
+               !shared.clones.insert(FileIdentity(device: device, file: entry.cloneID)).inserted {
+                shared.cloneSharedBytes += allocated
                 allocated = 0
             }
             let id = DiskTree.NodeID(shared.nodes.count)
