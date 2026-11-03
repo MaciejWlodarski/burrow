@@ -4,6 +4,7 @@ import SwiftUI
 
 struct FolderAddressRegressionTests {
     @MainActor static func runAll() throws {
+        try testBreadcrumbSegments()
         let base = URL(fileURLWithPath: "/tmp/Address Base", isDirectory: true)
         let home = URL(fileURLWithPath: "/Users/test", isDirectory: true)
         let examples = [
@@ -90,4 +91,28 @@ struct FolderAddressRegressionTests {
         // native GUI harness gates; delegate calls alone cannot establish them.
     }
 
+
+    /// Paths on another volume start at the volume, like an Explorer drive;
+    /// every segment opens its own folder.
+    @MainActor private static func testBreadcrumbSegments() throws {
+        let volumes = [
+            VolumeInfoItem(name: "Macintosh HD", url: URL(fileURLWithPath: "/"), totalBytes: nil, freeBytes: nil, isRemovable: false),
+            VolumeInfoItem(name: "_WIZUALIZACJE", url: URL(fileURLWithPath: "/Volumes/_WIZUALIZACJE"), totalBytes: nil, freeBytes: nil,
+                           isRemovable: false, isNetwork: true)
+        ]
+        let share = PathBreadcrumbBar.segments(
+            for: URL(fileURLWithPath: "/Volumes/_WIZUALIZACJE/_ARCHIWUM/WIZUALIZACJE_2026/P18654/_PLIKI_GRAWER"), volumes: volumes)
+        try expect(share.map(\.name) == ["_WIZUALIZACJE", "_ARCHIWUM", "WIZUALIZACJE_2026", "P18654", "_PLIKI_GRAWER"])
+        try expect(share.map(\.url.path) == ["/Volumes/_WIZUALIZACJE", "/Volumes/_WIZUALIZACJE/_ARCHIWUM",
+            "/Volumes/_WIZUALIZACJE/_ARCHIWUM/WIZUALIZACJE_2026", "/Volumes/_WIZUALIZACJE/_ARCHIWUM/WIZUALIZACJE_2026/P18654",
+            "/Volumes/_WIZUALIZACJE/_ARCHIWUM/WIZUALIZACJE_2026/P18654/_PLIKI_GRAWER"])
+        try expect(share.first?.isRoot == true && share.first?.symbol == "network")
+        // A name that merely starts like a volume stays on the startup disk.
+        let lookalike = PathBreadcrumbBar.segments(for: URL(fileURLWithPath: "/Volumes/_WIZUALIZACJE_OLD/a"), volumes: volumes)
+        try expect(lookalike.map(\.name) == ["Macintosh HD", "Volumes", "_WIZUALIZACJE_OLD", "a"])
+        let root = PathBreadcrumbBar.segments(for: URL(fileURLWithPath: "/"), volumes: volumes)
+        try expect(root.map(\.url.path) == ["/"])
+        try expect(PathBreadcrumbBar.segments(for: URL(fileURLWithPath: "/Volumes/_WIZUALIZACJE"), volumes: volumes).count == 1)
+        print("PASS breadcrumb segments start at the containing volume and open each ancestor")
+    }
 }

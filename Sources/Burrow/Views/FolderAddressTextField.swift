@@ -54,6 +54,7 @@ struct FolderAddressTextField: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) {
+        coordinator.removeOutsideClickMonitor()
         coordinator.alive = false
         coordinator.delivery &+= 1
         field.delegate = nil
@@ -64,7 +65,38 @@ struct FolderAddressTextField: NSViewRepresentable {
         var lastRequest: UInt64 = 0
         var delivery: UInt64 = 0
         var alive = true
+        private var outsideClickMonitor: Any?
         init(_ parent: FolderAddressTextField) { self.parent = parent }
+
+        /// Like Explorer, a click anywhere outside the address bar ends editing,
+        /// even on views that never take keyboard focus (file rows, sidebar).
+        /// The bar's own Go/Cancel buttons and folder icon sit beside the field.
+        func installOutsideClickMonitor(_ field: NSTextField) {
+            guard outsideClickMonitor == nil else { return }
+            outsideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self, weak field] event in
+                guard let self, let field, self.alive else { return event }
+                guard self.parent.isEditing else {
+                    self.removeOutsideClickMonitor()
+                    return event
+                }
+                guard event.window === field.window else { return event }
+                let barRect = field.convert(field.bounds, to: nil).insetBy(dx: 0, dy: -8)
+                let keptRect = NSRect(x: barRect.minX - 34, y: barRect.minY, width: barRect.width + 34 + 84, height: barRect.height)
+                if !keptRect.contains(event.locationInWindow) {
+                    // Let the click act first, then return to the breadcrumbs.
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.alive, self.parent.isEditing else { return }
+                        self.parent.cancel()
+                    }
+                }
+                return event
+            }
+        }
+
+        func removeOutsideClickMonitor() {
+            if let outsideClickMonitor { NSEvent.removeMonitor(outsideClickMonitor) }
+            outsideClickMonitor = nil
+        }
 
         func scheduleFocus(_ field: NSTextField, request: UInt64) {
             delivery &+= 1
@@ -104,6 +136,7 @@ struct FolderAddressTextField: NSViewRepresentable {
                 guard let type = NSApp.currentEvent?.type, type == .leftMouseDown || type == .keyDown else { return }
                 parent.beginEditing()
             }
+            installOutsideClickMonitor(field)
             // Selecting on first click mirrors an address bar. Subsequent clicks
             // in the already-focused editor place the caret normally.
             delivery &+= 1
@@ -122,6 +155,7 @@ struct FolderAddressTextField: NSViewRepresentable {
         }
 
         func controlTextDidEndEditing(_ notification: Notification) {
+            removeOutsideClickMonitor()
             guard alive else { return }
             parent.endEditing()
         }

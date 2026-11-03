@@ -48,6 +48,12 @@ An existing app bundle is kept until compilation, icon generation, and signing s
 
 To install the build into `/Applications` and put the `burrow` command on your `PATH`, run `zsh scripts/install.sh`. It links the command into the first writable folder of `/opt/homebrew/bin`, `/usr/local/bin` or `~/.local/bin`.
 
+#### Keep permissions across rebuilds
+
+macOS ties Full Disk Access and folder permissions to the app's code signature. An ad-hoc signature changes with every build, so each rebuild would need those permissions again. Run `zsh scripts/setup_signing.sh` once: it creates a local "Burrow Local Signing" certificate in its own keychain under `~/Library/Application Support/Burrow/Signing`, and `build_app.sh` signs with it from then on. After the first install signed this way, grant Full Disk Access once; later builds keep it.
+
+To ship a change, run `zsh scripts/update.sh`. It builds, quits a running Burrow, replaces `/Applications/Burrow.app`, relaunches it if it was open and removes the build from the repository. Setting Burrow as the default folder viewer survives updates, because macOS stores it by bundle identifier.
+
 ### Command-line disk analysis
 
 The app bundle includes `burrow`, a command-line tool that uses the disk map's scanner. It is meant for scripts and AI agents: every command prints readable text, or a single JSON document with `--json`.

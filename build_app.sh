@@ -16,6 +16,20 @@ ICON_GEN_BIN="${BUILD_TMP_DIR}/generate-icon"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 TARGET_ARCH="$(uname -m)"
 
+# A stable identity (scripts/setup_signing.sh) keeps macOS privacy grants such
+# as Full Disk Access across rebuilds. Without it the build is signed ad hoc and
+# every rebuild needs those grants again.
+SIGNING_DIR="${BURROW_SIGNING_DIR:-${HOME}/Library/Application Support/Burrow/Signing}"
+SIGNING_KEYCHAIN="${SIGNING_DIR}/burrow-signing.keychain-db"
+SIGNING_IDENTITY="Burrow Local Signing"
+SIGN_ARGS=(--sign -)
+if [[ -f "${SIGNING_KEYCHAIN}" && -f "${SIGNING_DIR}/keychain-password" ]] \
+    && security unlock-keychain -p "$(<"${SIGNING_DIR}/keychain-password")" "${SIGNING_KEYCHAIN}" 2>/dev/null; then
+    SIGN_ARGS=(--keychain "${SIGNING_KEYCHAIN}" --sign "${SIGNING_IDENTITY}")
+else
+    echo "Uwaga: brak stałej tożsamości podpisu; uruchom scripts/setup_signing.sh, inaczej uprawnienia trzeba nadawać po każdym buildzie." >&2
+fi
+
 cleanup_temp() {
     rm -rf -- "${BUILD_TMP_DIR}"
 }
@@ -52,7 +66,7 @@ xcrun swiftc \
     Sources/Burrow/Models/FileItem.swift \
     Sources/BurrowCLI/*.swift \
     -o "${CONTENTS_DIR}/Helpers/burrow"
-codesign --force --sign - --timestamp=none "${CONTENTS_DIR}/Helpers/burrow"
+codesign --force "${SIGN_ARGS[@]}" --identifier com.burrow.cli --timestamp=none "${CONTENTS_DIR}/Helpers/burrow"
 
 cp Resources/Info.plist "${CONTENTS_DIR}/Info.plist"
 xcrun swiftc \
@@ -72,7 +86,7 @@ for icon_size in 16 32 128 256 512; do
     fi
 done
 iconutil -c icns "${ICONSET_DIR}" -o "${RESOURCES_DIR}/AppIcon.icns"
-codesign --force --sign - --timestamp=none "${STAGED_APP}"
+codesign --force "${SIGN_ARGS[@]}" --timestamp=none "${STAGED_APP}"
 codesign --verify --strict "${STAGED_APP}"
 
 if [[ -e "${APP_BUNDLE}" ]]; then

@@ -6,6 +6,7 @@ public struct PathBreadcrumbSegment: Identifiable {
     public let name: String
     public let url: URL
     public let isRoot: Bool
+    public var symbol: String? = nil
 }
 
 /// Retained layout regression contract for the previous breadcrumb renderer.
@@ -97,18 +98,34 @@ public struct PathBreadcrumbBar: View {
         self.pane = pane
     }
 
+    /// Like an Explorer address bar, a path on another volume starts at that
+    /// volume (`_WIZUALIZACJE › _ARCHIWUM`), not at `Macintosh HD › Volumes`.
     private var segments: [PathBreadcrumbSegment] {
-        var result: [PathBreadcrumbSegment] = []
-        var runningURL = URL(fileURLWithPath: "/", isDirectory: true)
-        let rootName = appState.mountedVolumes.first { $0.url.path == "/" }?.name ?? "/"
+        Self.segments(for: pane.currentURL, volumes: appState.mountedVolumes)
+    }
 
-        for (index, component) in pane.currentURL.pathComponents.enumerated() {
-            if index == 0 && component == "/" {
-                result.append(PathBreadcrumbSegment(name: rootName, url: runningURL, isRoot: true))
-            } else {
-                runningURL = runningURL.appendingPathComponent(component, isDirectory: true)
-                result.append(PathBreadcrumbSegment(name: component, url: runningURL, isRoot: false))
-            }
+    static func segments(for url: URL, volumes: [VolumeInfoItem]) -> [PathBreadcrumbSegment] {
+        let path = url.standardizedFileURL.path
+        let volume = volumes
+            .filter { $0.url.path != "/" && (path == $0.url.path || path.hasPrefix($0.url.path + "/")) }
+            .max { $0.url.path.count < $1.url.path.count }
+        var result: [PathBreadcrumbSegment]
+        var runningURL: URL
+        let remainder: Substring
+        if let volume {
+            let symbol = volume.isNetwork ? "network" : (volume.isRemovable ? "externaldrive" : "internaldrive")
+            runningURL = URL(fileURLWithPath: volume.url.path, isDirectory: true)
+            result = [PathBreadcrumbSegment(name: volume.name, url: runningURL, isRoot: true, symbol: symbol)]
+            remainder = path.dropFirst(volume.url.path.count)
+        } else {
+            let rootName = volumes.first { $0.url.path == "/" }?.name ?? "/"
+            runningURL = URL(fileURLWithPath: "/", isDirectory: true)
+            result = [PathBreadcrumbSegment(name: rootName, url: runningURL, isRoot: true, symbol: "internaldrive")]
+            remainder = path.dropFirst()
+        }
+        for component in remainder.split(separator: "/") {
+            runningURL = runningURL.appendingPathComponent(String(component), isDirectory: true)
+            result.append(PathBreadcrumbSegment(name: String(component), url: runningURL, isRoot: false))
         }
         return result
     }
@@ -161,44 +178,148 @@ public struct PathBreadcrumbBar: View {
         }
     }
 
+    private var isShowingField: Bool { pane.isEditingPathBar || isVisualFixture }
+
     private var pathEditor: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: "folder")
                 .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
+                .contentShape(Rectangle())
+                .onTapGesture { beginEditingFromBreadcrumbs() }
 
-            FolderAddressTextField(
-                text: displayedText,
-                isEditing: !isVisualFixture && pane.isEditingPathBar,
-                focusRequest: pane.pathEditRequest,
-                mayFocus: { !isVisualFixture && pane.isEditingPathBar && appState.activeTab.id == pane.id },
-                beginEditing: {
-                    activatePane()
-                    pane.isEditingPathBar = true
-                    isPathFieldFocused = true
-                },
-                endEditing: { isPathFieldFocused = false },
-                changed: { pathValidationMessage = nil },
-                submit: submitPath,
-                cancel: cancelEditing
-            )
-            .frame(minWidth: 40, maxWidth: .infinity, minHeight: 24)
-            .help("Kliknij, aby edytować lub skopiować ścieżkę (⌘L). Return otwiera folder, Escape anuluje. Obsługuje ~ i adresy file:///.")
+            if isShowingField {
+                FolderAddressTextField(
+                    text: displayedText,
+                    isEditing: !isVisualFixture && pane.isEditingPathBar,
+                    focusRequest: pane.pathEditRequest,
+                    mayFocus: { !isVisualFixture && pane.isEditingPathBar && appState.activeTab.id == pane.id },
+                    beginEditing: {
+                        activatePane()
+                        pane.isEditingPathBar = true
+                        isPathFieldFocused = true
+                    },
+                    endEditing: {
+                        isPathFieldFocused = false
+                        // Clicking elsewhere returns to the breadcrumbs, as in Explorer.
+                        DispatchQueue.main.async {
+                            if pane.isEditingPathBar && !isPathFieldFocused { cancelEditing() }
+                        }
+                    },
+                    changed: { pathValidationMessage = nil },
+                    submit: submitPath,
+                    cancel: cancelEditing
+                )
+                .frame(minWidth: 40, maxWidth: .infinity, minHeight: 24)
+                .help("Return otwiera folder, Escape anuluje. Obsługuje ~ i adresy file:///.")
 
-            if pane.isEditingPathBar || isVisualFixture {
                 pathActionButton(icon: "arrow.right", label: "Otwórz wpisany folder", help: "Otwórz folder (Return)", action: submitPath)
                     .accessibilityIdentifier("folder.address.go")
                 pathActionButton(icon: "xmark", label: "Anuluj edycję ścieżki", help: "Anuluj (Escape)", action: cancelEditing)
                     .accessibilityIdentifier("folder.address.cancel")
+            } else {
+                breadcrumbs
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.leading, 10)
+        .padding(.trailing, isShowingField ? 10 : 0)
         .frame(minHeight: 32)
         .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: FinderUI.cornerRadius)
                 .strokeBorder(displayedValidationMessage != nil ? Color.red : (displayedFocus ? Color.accentColor : Color.secondary.opacity(0.25)), lineWidth: 1)
         }
+    }
+
+    /// Clickable folders with a subfolder menu after each one. When the path
+    /// does not fit, the leading folders collapse into a « menu. The empty
+    /// space after the last folder switches to the editable path.
+    private var breadcrumbs: some View {
+        let segments = self.segments
+        return HStack(spacing: 0) {
+            ViewThatFits(in: .horizontal) {
+                ForEach(0..<segments.count, id: \.self) { start in
+                    breadcrumbRow(segments, from: start)
+                }
+            }
+            .layoutPriority(1)
+            Color.clear
+                .frame(minWidth: 28, maxWidth: .infinity)
+                .frame(height: 28)
+                .contentShape(Rectangle())
+                .onTapGesture { beginEditingFromBreadcrumbs() }
+                .help("Kliknij, aby edytować lub skopiować ścieżkę (⌘L)")
+                .accessibilityElement()
+                .accessibilityLabel("Edytuj ścieżkę")
+                .accessibilityValue(pane.currentURL.path)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { beginEditingFromBreadcrumbs() }
+                .accessibilityIdentifier("folder.address")
+        }
+    }
+
+    private func breadcrumbRow(_ segments: [PathBreadcrumbSegment], from start: Int) -> some View {
+        HStack(spacing: 0) {
+            if start > 0 {
+                Menu {
+                    ForEach(Array(segments[..<start].reversed())) { segment in
+                        Button(segment.isRoot ? segment.name : segment.url.path) { navigate(to: segment.url) }
+                    }
+                } label: {
+                    Image(systemName: "chevron.left.2")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Ukryte foldery nadrzędne")
+                .accessibilityLabel("Ukryte foldery nadrzędne")
+            }
+            ForEach(Array(segments.enumerated()).dropFirst(start), id: \.element.id) { index, segment in
+                let isCurrent = index == segments.count - 1
+                Button {
+                    if isCurrent { activatePane(); pane.reloadDirectory() } else { navigate(to: segment.url) }
+                } label: {
+                    HStack(spacing: 4) {
+                        if let symbol = segment.symbol {
+                            Image(systemName: symbol).foregroundStyle(.secondary)
+                        }
+                        Text(segment.name)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .fontWeight(isCurrent ? .semibold : .regular)
+                    }
+                    .padding(.horizontal, 5)
+                    .frame(minHeight: 22)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(BreadcrumbButtonStyle())
+                .help(segment.url.path)
+                .contextMenu { folderContextActions(for: segment.url) }
+                .accessibilityLabel(segment.name)
+                .accessibilityHint(isCurrent ? "Odśwież bieżący folder" : "Przejdź do folderu")
+
+                BreadcrumbSubfolderButton(
+                    url: segment.url,
+                    highlightedPath: isCurrent ? nil : segments[index + 1].url.path,
+                    showsHiddenFiles: pane.showHiddenFiles,
+                    open: { navigate(to: $0) }
+                )
+                .frame(width: 16, height: 22)
+                .help("Podfoldery: \(segment.name)")
+            }
+        }
+    }
+
+    private func beginEditingFromBreadcrumbs() {
+        guard !isVisualFixture else { return }
+        activatePane()
+        editablePathText = pane.currentURL.path
+        pathValidationMessage = nil
+        pane.requestPathEditing()
     }
 
     private var folderActionsMenu: some View {
@@ -333,6 +454,125 @@ public struct PathBreadcrumbBar: View {
     private func activatePane() {
         if appState.isDualPane {
             appState.activePaneSide = pane.id == appState.rightPane.id ? .right : .left
+        }
+    }
+}
+
+private struct BreadcrumbButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HighlightedLabel(configuration: configuration)
+    }
+
+    private struct HighlightedLabel: View {
+        let configuration: ButtonStyleConfiguration
+        @ViewState private var isHovered = false
+
+        var body: some View {
+            configuration.label
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.primary.opacity(configuration.isPressed ? 0.16 : (isHovered ? 0.08 : 0)))
+                )
+                .onHover { isHovered = $0 }
+        }
+    }
+}
+
+/// The › after a breadcrumb lists that folder's subfolders, read only when
+/// clicked so slow network volumes are not listed on every redraw.
+private struct BreadcrumbSubfolderButton: NSViewRepresentable {
+    let url: URL
+    let highlightedPath: String?
+    let showsHiddenFiles: Bool
+    let open: (URL) -> Void
+
+    func makeNSView(context: Context) -> ChevronButton {
+        let button = ChevronButton()
+        button.update(from: self)
+        return button
+    }
+
+    func updateNSView(_ button: ChevronButton, context: Context) {
+        button.update(from: self)
+    }
+
+    final class ChevronButton: NSButton {
+        private static let itemLimit = 1_000
+        private var url = URL(fileURLWithPath: "/")
+        private var highlightedPath: String?
+        private var showsHiddenFiles = false
+        private var open: (URL) -> Void = { _ in }
+
+        init() {
+            super.init(frame: NSRect(x: 0, y: 0, width: 16, height: 22))
+            isBordered = false
+            imagePosition = .imageOnly
+            contentTintColor = .secondaryLabelColor
+            setChevron(open: false)
+            target = self
+            action = #selector(showMenu)
+            setAccessibilityLabel("Podfoldery")
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        fileprivate func update(from view: BreadcrumbSubfolderButton) {
+            url = view.url
+            highlightedPath = view.highlightedPath
+            showsHiddenFiles = view.showsHiddenFiles
+            open = view.open
+        }
+
+        override var intrinsicContentSize: NSSize { NSSize(width: 16, height: 22) }
+
+        private func setChevron(open: Bool) {
+            let configuration = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
+            image = NSImage(systemSymbolName: open ? "chevron.down" : "chevron.right", accessibilityDescription: nil)?
+                .withSymbolConfiguration(configuration)
+        }
+
+        static func subfolders(of url: URL, includeHidden: Bool) -> [URL] {
+            let keys: [URLResourceKey] = [.isDirectoryKey, .isPackageKey]
+            let options: FileManager.DirectoryEnumerationOptions = includeHidden ? [] : [.skipsHiddenFiles]
+            let contents = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: keys, options: options)) ?? []
+            return contents.filter {
+                let values = try? $0.resourceValues(forKeys: Set(keys))
+                return values?.isDirectory == true && values?.isPackage != true
+            }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        }
+
+        @objc private func showMenu() {
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            let folders = Self.subfolders(of: url, includeHidden: showsHiddenFiles)
+            let folderImage = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+            for folder in folders.prefix(Self.itemLimit) {
+                let item = NSMenuItem(title: folder.lastPathComponent, action: #selector(choose(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = folder
+                item.image = folderImage
+                if folder.path == highlightedPath { item.state = .on }
+                menu.addItem(item)
+            }
+            if folders.count > Self.itemLimit {
+                let more = NSMenuItem(title: "… i \(folders.count - Self.itemLimit) więcej", action: nil, keyEquivalent: "")
+                more.isEnabled = false
+                menu.addItem(more)
+            }
+            if folders.isEmpty {
+                let empty = NSMenuItem(title: "Brak podfolderów", action: nil, keyEquivalent: "")
+                empty.isEnabled = false
+                menu.addItem(empty)
+            }
+            setChevron(open: true)
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: isFlipped ? bounds.maxY + 2 : -2), in: self)
+            setChevron(open: false)
+        }
+
+        @objc private func choose(_ item: NSMenuItem) {
+            guard let folder = item.representedObject as? URL else { return }
+            open(folder)
         }
     }
 }
