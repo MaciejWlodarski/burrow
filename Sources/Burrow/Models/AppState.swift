@@ -23,7 +23,7 @@ public final class AppState: ObservableObject {
 
     // A test executable must never restore or write the user's real preferences,
     // enumerate their home, or automatically start the indexer.
-    private static let preferences: UserDefaults = {
+    static let preferences: UserDefaults = {
         #if BURROW_TESTING
         guard let suite = UserDefaults(suiteName: "com.burrow.tests.\(UUID().uuidString)") else {
             fatalError("Could not create isolated test preferences")
@@ -524,9 +524,6 @@ public final class AppState: ObservableObject {
         let newTab = PaneTabState(initialURL: targetURL)
         newTab.viewMode = activeTab.viewMode
         newTab.showHiddenFiles = activeTab.showHiddenFiles
-        newTab.sortField = activeTab.sortField
-        newTab.sortAscending = activeTab.sortAscending
-        newTab.foldersOnTop = activeTab.foldersOnTop
         newTab.searchScope = activeTab.searchScope
         newTab.fuzzyEnabled = activeTab.fuzzyEnabled
         // Apply inherited display preferences without discarding shared analysis.

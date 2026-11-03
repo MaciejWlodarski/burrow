@@ -333,13 +333,14 @@ public struct FilePaneView: View {
 
     private func sortableHeaderButton(title: String, field: SortField) -> some View {
         Button {
-            if pane.sortField == field {
-                pane.sortAscending.toggle()
+            var sort = pane.currentSort
+            if sort.field == field {
+                sort.ascending.toggle()
             } else {
-                pane.sortField = field
-                pane.sortAscending = (field == .name || field == .kind)
+                sort.field = field
+                sort.ascending = (field == .name || field == .kind)
             }
-            pane.applySortChange()
+            pane.setSort(sort)
         } label: {
             HStack(spacing: 4) {
                 Text(title)

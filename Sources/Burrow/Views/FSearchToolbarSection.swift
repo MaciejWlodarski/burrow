@@ -6,6 +6,7 @@ public struct FSearchToolbarSection: View {
     @ObservedObject var appState: AppState
     @ObservedObject var activeTab: PaneTabState
     @ObservedObject var fileOps = FileOperationsManager.shared
+    @ObservedObject var folderSorts = FolderSortPreferences.shared
     @FocusState private var isSearchFocused: Bool
 
     public init(appState: AppState, activeTab: PaneTabState) {
@@ -101,20 +102,39 @@ public struct FSearchToolbarSection: View {
             }
             ToolbarItem {
                 Menu {
-                    Picker("Sortuj według", selection: $activeTab.sortField) {
+                    Picker("Sortuj według", selection: Binding(
+                        get: { activeTab.sortField },
+                        set: { field in var sort = activeTab.currentSort; sort.field = field; activeTab.setSort(sort) }
+                    )) {
                         ForEach(SortField.allCases) { field in
                             Text(field.displayName).tag(field)
                         }
                     }
                     Divider()
-                    Toggle("Rosnąco", isOn: $activeTab.sortAscending)
-                    Toggle("Foldery na górze", isOn: $activeTab.foldersOnTop)
+                    Toggle("Rosnąco", isOn: Binding(
+                        get: { activeTab.sortAscending },
+                        set: { value in var sort = activeTab.currentSort; sort.ascending = value; activeTab.setSort(sort) }
+                    ))
+                    Toggle("Foldery na górze", isOn: Binding(
+                        get: { activeTab.foldersOnTop },
+                        set: { value in var sort = activeTab.currentSort; sort.foldersOnTop = value; activeTab.setSort(sort) }
+                    ))
+                    Divider()
+                    Section(folderSorts.hasCustomSort(for: activeTab.currentURL)
+                            ? "Ten folder ma własne sortowanie" : "Ten folder używa sortowania domyślnego") {
+                        Button("Przywróć domyślne dla tego folderu") {
+                            folderSorts.resetSort(for: activeTab.currentURL)
+                        }
+                        .disabled(!folderSorts.hasCustomSort(for: activeTab.currentURL))
+                        Button("Ustaw jako domyślne dla wszystkich folderów") {
+                            folderSorts.setDefaultSort(activeTab.currentSort)
+                            folderSorts.resetSort(for: activeTab.currentURL)
+                        }
+                        .disabled(activeTab.currentSort == folderSorts.defaultSort)
+                    }
                 } label: {
                     Label("Sortuj", systemImage: "arrow.up.arrow.down")
                 }
-                .onChange(of: activeTab.sortField) { _, _ in activeTab.applySortChange() }
-                .onChange(of: activeTab.sortAscending) { _, _ in activeTab.applySortChange() }
-                .onChange(of: activeTab.foldersOnTop) { _, _ in activeTab.applySortChange() }
                 .help("Sortowanie i kolejność folderów")
             }
             ToolbarItem {

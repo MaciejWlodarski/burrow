@@ -68,6 +68,7 @@ func expect(_ condition: @autoclosure () -> Bool, file: StaticString = #filePath
             try await SessionRestorationRegressionTests().runAll()
             try await QuickLookOwnershipRegressionTests().runAll()
             try FolderAddressRegressionTests.runAll()
+            try await FolderSortRegressionTests().runAll()
             try GUIPresentationRegressionTests().runAll()
             try AnalysisViewBindingRegressionTests().runAll()
             try AnalysisRequestSafetyRegressionTests().runAll()

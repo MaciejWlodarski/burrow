@@ -30,7 +30,7 @@ public enum FinderViewMode: String, CaseIterable, Identifiable {
     }
 }
 
-public enum SortField: String, CaseIterable, Identifiable {
+public enum SortField: String, CaseIterable, Identifiable, Codable, Sendable {
     case name = "Name"
     case size = "Size"
     case dateModified = "Date Modified"
@@ -60,6 +60,8 @@ public final class PaneTabState: ObservableObject, Identifiable {
             if oldValue != currentURL {
                 navigationRevision &+= 1
                 cancelSavedSearchActivation()
+                // Each folder opens with its own sort, or the default.
+                applyFolderSort()
             }
         }
     }
@@ -86,6 +88,38 @@ public final class PaneTabState: ObservableObject, Identifiable {
     @Published public var sortField: SortField = .name
     @Published public var sortAscending: Bool = true
     @Published public var foldersOnTop: Bool = true
+    private var folderSortSubscription: AnyCancellable?
+
+    public var currentSort: FolderSort {
+        FolderSort(field: sortField, ascending: sortAscending, foldersOnTop: foldersOnTop)
+    }
+
+    /// Loads the current folder's sort without re-sorting; callers that install
+    /// a new listing sort it afterwards.
+    func applyFolderSort() {
+        let sort = FolderSortPreferences.shared.sort(for: currentURL)
+        if sortField != sort.field { sortField = sort.field }
+        if sortAscending != sort.ascending { sortAscending = sort.ascending }
+        if foldersOnTop != sort.foldersOnTop { foldersOnTop = sort.foldersOnTop }
+    }
+
+    /// Follows changes made in Settings or in another tab showing this folder.
+    private func refreshFolderSort() {
+        guard FolderSortPreferences.shared.sort(for: currentURL) != currentSort else { return }
+        applyFolderSort()
+        applySortChange()
+    }
+
+    /// A sort chosen by the user applies to this folder only. Sorting results
+    /// of a whole-index search does not change the folder behind them.
+    public func setSort(_ sort: FolderSort) {
+        let isGlobalSearch = !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && searchScope == .wholeIndex
+        sortField = sort.field
+        sortAscending = sort.ascending
+        foldersOnTop = sort.foldersOnTop
+        applySortChange()
+        if !isGlobalSearch { FolderSortPreferences.shared.setSort(sort, for: currentURL) }
+    }
     @Published public var showHiddenFiles: Bool = false {
         didSet { if oldValue != showHiddenFiles { cancelSavedSearchActivation() } }
     }
@@ -315,6 +349,11 @@ public final class PaneTabState: ObservableObject, Identifiable {
         self.initialLocationEstablished = !loadImmediately
         self.currentURL = initialURL.standardizedFileURL
         self.columnTrailURLs = [initialURL.standardizedFileURL]
+        applyFolderSort()
+        folderSortSubscription = FolderSortPreferences.shared.objectWillChange.sink { [weak self] _ in
+            // objectWillChange precedes the new values; read them on the next turn.
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.refreshFolderSort() } }
+        }
         if loadImmediately {
             // A new pane is a snapshot consumer, not an explicit filesystem refresh.
             reloadDirectory(invalidateCaches: false)

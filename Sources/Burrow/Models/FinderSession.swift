@@ -52,9 +52,7 @@ struct FinderPaneSession: Codable, Equatable, Sendable {
     @MainActor func makePausedPane() -> PaneTabState {
         let pane = PaneTabState(initialURL: URL(fileURLWithPath: path, isDirectory: true), loadImmediately: false)
         pane.viewMode = ["icons": FinderViewMode.icons, "columns": .columns, "wiztree": .wiztree][view] ?? .list
-        pane.sortField = ["size": SortField.size, "modified": .dateModified, "kind": .kind][sort] ?? .name
-        pane.sortAscending = ascending
-        pane.foldersOnTop = foldersOnTop
+        // Sorting comes from the folder's own or default sort, not the session.
         pane.showHiddenFiles = hidden
         pane.fuzzyEnabled = fuzzy
         pane.searchQuery = query

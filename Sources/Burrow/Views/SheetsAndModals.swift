@@ -1064,6 +1064,9 @@ public struct FSearchSettingsSheetView: View {
             DefaultFileViewerSettingsSection()
             Divider()
 
+            FolderSortSettingsSection()
+            Divider()
+
             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
                 Toggle("Zapisuj i przywracaj sesję", isOn: Binding(
                     get: { appState.restoreSessionEnabled },
@@ -1300,5 +1303,88 @@ struct DefaultFileViewerSettingsSection: View {
         }
         if makeDefault { DefaultFileViewer.makeDefault(completion: finish) }
         else { DefaultFileViewer.restoreFinder(completion: finish) }
+    }
+}
+
+/// Default sort for every folder, plus the folders that keep their own.
+/// Changes apply at once, like the session settings.
+struct FolderSortSettingsSection: View {
+    @ObservedObject private var preferences = FolderSortPreferences.shared
+
+    private func binding<Value>(_ keyPath: WritableKeyPath<FolderSort, Value>) -> Binding<Value> {
+        Binding(
+            get: { preferences.defaultSort[keyPath: keyPath] },
+            set: { value in
+                var sort = preferences.defaultSort
+                sort[keyPath: keyPath] = value
+                preferences.setDefaultSort(sort)
+            }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
+            Text("Sortowanie folderów")
+                .font(FinderUI.bodyFont.weight(.medium))
+            HStack(spacing: FinderUI.rowSpacing) {
+                Picker("Domyślnie sortuj według", selection: binding(\.field)) {
+                    ForEach(SortField.allCases) { field in
+                        Text(field.displayName).tag(field)
+                    }
+                }
+                .fixedSize()
+                Picker("Kierunek", selection: binding(\.ascending)) {
+                    Text("Rosnąco").tag(true)
+                    Text("Malejąco").tag(false)
+                }
+                .labelsHidden()
+                .fixedSize()
+            }
+            Toggle("Foldery na górze", isOn: binding(\.foldersOnTop))
+            Text("Zmiana sortowania w kolumnach lub w menu Sortuj dotyczy tylko bieżącego folderu i jest zapamiętywana. Pozostałe foldery używają ustawienia domyślnego.")
+                .font(FinderUI.captionFont).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !preferences.folderSorts.isEmpty {
+                Text("Foldery z własnym sortowaniem")
+                    .font(FinderUI.detailFont.weight(.medium))
+                    .padding(.top, 4)
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(preferences.folderSorts.keys.sorted(), id: \.self) { path in
+                            HStack {
+                                Image(systemName: "folder.fill")
+                                    .foregroundStyle(Color.accentColor)
+                                    .accessibilityHidden(true)
+                                Text(path)
+                                    .font(FinderUI.detailFont)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .help(path)
+                                Spacer()
+                                Text(preferences.folderSorts[path]?.summary ?? "")
+                                    .font(FinderUI.captionFont)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                Button {
+                                    preferences.resetSort(for: URL(fileURLWithPath: path))
+                                } label: {
+                                    Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Przywróć domyślne sortowanie dla tego folderu")
+                                .accessibilityLabel("Przywróć domyślne sortowanie dla \(path)")
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
+                        }
+                    }
+                }
+                .frame(maxHeight: 130)
+                Button("Przywróć domyślne we wszystkich folderach") { preferences.resetAllFolders() }
+                    .buttonStyle(.bordered)
+            }
+        }
     }
 }
