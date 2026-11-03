@@ -29,10 +29,25 @@ struct FullDiskAccessSheetView: View {
             if !granted {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("1. Click Open System Settings.")
-                    Text("2. Turn on Burrow in the list. If it is missing, click + and choose Burrow in Applications.")
+                    Text("2. Turn on Burrow in the list. If it is missing, drag this icon into the list.")
                     Text("3. If System Settings offers Quit & Reopen, choose it.")
                 }
                 .fixedSize(horizontal: false, vertical: true)
+
+                // Dropping the app onto the Full Disk Access list adds it, the
+                // same as choosing it with +.
+                HStack(spacing: 10) {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+                        .resizable()
+                        .frame(width: 48, height: 48)
+                        .onDrag { NSItemProvider(contentsOf: Bundle.main.bundleURL) ?? NSItemProvider() }
+                        .help("Drag Burrow into the Full Disk Access list")
+                        .accessibilityLabel("Burrow app icon, drag it into the Full Disk Access list")
+                    Text("Drag me")
+                        .font(FinderUI.captionFont)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.leading, 18)
 
                 if openedSettings {
                     Label("Burrow notices the change when you come back.", systemImage: "arrow.uturn.backward")

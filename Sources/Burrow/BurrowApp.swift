@@ -279,7 +279,7 @@ struct BurrowApp: App {
             CommandGroup(replacing: .help) {
                 Button("Burrow Guide") { Self.openProjectPage("blob/main/docs/GUIDE.md") }
                 Button("Release Notes") { Self.openProjectPage("releases") }
-                Button("Check for Updates…") { Self.openProjectPage("releases/latest") }
+                Button("Check for Updates…") { UpdateChecker.shared.checkNow() }
                 Divider()
                 Button("Full Disk Access…") { appState.showFullDiskAccessSheet = true }
                 Divider()

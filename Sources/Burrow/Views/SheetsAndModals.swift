@@ -1094,6 +1094,9 @@ public struct FSearchSettingsSheetView: View {
             FolderSortSettingsSection()
             Divider()
 
+            UpdateSettingsSection()
+            Divider()
+
             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
                 Toggle("Save and restore session", isOn: Binding(
                     get: { appState.restoreSessionEnabled },
@@ -1457,6 +1460,21 @@ struct FolderSortSettingsSection: View {
                 Button("Restore Defaults in All Folders") { preferences.resetAllFolders() }
                     .buttonStyle(.bordered)
             }
+        }
+    }
+}
+
+struct UpdateSettingsSection: View {
+    @ObservedObject private var updates = UpdateChecker.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
+            Toggle("Check for updates automatically", isOn: Binding(
+                get: { updates.automaticChecksEnabled },
+                set: { updates.automaticChecksEnabled = $0 }
+            ))
+            Text("Once a day Burrow asks GitHub for the latest version number. Nothing about you or your files is sent.")
+                .font(FinderUI.captionFont).foregroundStyle(.secondary)
         }
     }
 }

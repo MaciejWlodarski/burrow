@@ -4,6 +4,7 @@ import AppKit
 public struct MainWindowView: View {
     @ObservedObject var appState = AppState.shared
     @ObservedObject var fileOps = FileOperationsManager.shared
+    @ObservedObject var updates = UpdateChecker.shared
     @Environment(\.openWindow) private var openWindow
 
     @ViewState private var terminalHeight = TerminalDrawerLayout.defaultHeight
@@ -96,6 +97,34 @@ public struct MainWindowView: View {
         .sheet(isPresented: $appState.showCompareSheet) { FolderCompareSheetView(appState: appState) }
         .sheet(isPresented: $appState.showSettingsSheet) { FSearchSettingsSheetView(appState: appState) }
         .sheet(isPresented: $appState.showFullDiskAccessSheet) { FullDiskAccessSheetView() }
+        .alert(updateAlertTitle, isPresented: Binding(
+            get: { updates.presented != nil },
+            set: { if !$0 { updates.presented = nil } }
+        ), presenting: updates.presented) { outcome in
+            switch outcome {
+            case .available(let release):
+                Button("Download") { NSWorkspace.shared.open(release.pageURL) }
+                Button("Copy Homebrew Command") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(UpdateChecker.homebrewCommand, forType: .string)
+                }
+                Button("Later", role: .cancel) {}
+            case .upToDate:
+                Button("OK", role: .cancel) {}
+            case .failed:
+                Button("Open Releases Page") { NSWorkspace.shared.open(UpdateChecker.releasesPage) }
+                Button("OK", role: .cancel) {}
+            }
+        } message: { outcome in
+            switch outcome {
+            case .available(let release):
+                Text("Burrow \(release.version) is available. With Homebrew, run “\(UpdateChecker.homebrewCommand)”; otherwise download it from GitHub.")
+            case .upToDate(let version):
+                Text("Version \(version) is the latest.")
+            case .failed:
+                Text("Check your internet connection, or open the releases page.")
+            }
+        }
         .sheet(item: windowConflict) { ConflictResolutionSheetView(conflict: $0) }
     }
 
@@ -117,6 +146,15 @@ public struct MainWindowView: View {
                     availableHeight: availableHeight)
             }
             .onEnded { _ in terminalDragStart = nil })
+    }
+
+    private var updateAlertTitle: String {
+        switch updates.presented {
+        case .available: return String(localized: "A new version of Burrow is available")
+        case .upToDate: return String(localized: "Burrow is up to date")
+        case .failed: return String(localized: "Could not check for updates")
+        case nil: return ""
+        }
     }
 
     // A conflict requested from comparison belongs to that sheet, not its window.
@@ -241,6 +279,7 @@ private struct FinderStatusBar: View {
     @ObservedObject var activeTab: PaneTabState
     @ObservedObject var fileOps = FileOperationsManager.shared
     @ObservedObject var folderSizes = FolderSizeCache.shared
+    @ObservedObject var updates = UpdateChecker.shared
     private var availableBytes: Int64? {
         let path = activeTab.currentURL.path
         return appState.mountedVolumes.filter {
@@ -280,6 +319,11 @@ private struct FinderStatusBar: View {
                 Text(message).lineLimit(1).truncationMode(.middle).help(message).textSelection(.enabled)
             }
             Spacer(minLength: 8)
+            if let release = updates.available {
+                Button("Burrow \(release.version) is available") { updates.presented = .available(release) }
+                    .buttonStyle(.link)
+                    .help("Show how to update")
+            }
             if activeTab.viewMode == .icons {
                 Image(systemName: "square.grid.2x2").foregroundStyle(.secondary).accessibilityHidden(true)
                 Slider(value: $appState.iconGridSize, in: 44...136)

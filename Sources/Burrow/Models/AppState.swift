@@ -239,6 +239,7 @@ public final class AppState: ObservableObject {
             defaults.set(true, forKey: offeredKey)
             showFullDiskAccessSheet = !FullDiskAccess.isGranted()
         }
+        UpdateChecker.shared.checkIfDue()
         #endif
 
         setupSidebarLocations()
