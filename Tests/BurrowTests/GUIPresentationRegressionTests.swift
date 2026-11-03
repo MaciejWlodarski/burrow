@@ -38,7 +38,6 @@ struct GUIPresentationRegressionTests {
         print("PASS status summary follows production analysis/list selection and pending search")
         try testPaneActionRouting(root: root, files: files)
         try testQuickSearchSelection()
-        try testBreadcrumbLayoutMetrics()
     }
     @MainActor private func testPaneActionRouting(root: URL, files: [FileItem]) throws {
         // The same synchronous routing helper is invoked by mouse and AX view
@@ -104,41 +103,6 @@ struct GUIPresentationRegressionTests {
         try expect(QuickSearchSelection.movedIndex(from: 99, count: 100, direction: .down) == 99)
         try expect(QuickSearchSelection.movedIndex(from: 98, count: 100, direction: .down) == 99)
         print("PASS production quick-search selection boundaries for the visible result list")
-    }
-
-    private func testBreadcrumbLayoutMetrics() throws {
-        try expect(BreadcrumbLayoutMetrics.finiteWidth(nil) == 280)
-        try expect(BreadcrumbLayoutMetrics.finiteWidth(.infinity) == 280)
-        try expect(BreadcrumbLayoutMetrics.finiteWidth(.nan) == 280)
-        try expect(BreadcrumbLayoutMetrics.finiteWidth(-10) == 0)
-        let unbounded = BreadcrumbLayoutMetrics(availableWidth: .infinity, idealCurrentWidth: .nan, hasAncestors: true)
-        try expect(unbounded.currentWidth.isFinite && unbounded.ancestorWidth.isFinite)
-        let regular = BreadcrumbLayoutMetrics(availableWidth: 800, idealCurrentWidth: 100, hasAncestors: true)
-        try expect(regular.currentWidth == 100)
-        try expect(regular.ancestorWidth == 698)
-        try expect(regular.spacing == 2)
-        let long = BreadcrumbLayoutMetrics(availableWidth: 800, idealCurrentWidth: 2000, hasAncestors: true)
-        try expect(long.currentWidth == 280)
-        let compact = BreadcrumbLayoutMetrics(availableWidth: 200, idealCurrentWidth: 2000, hasAncestors: true)
-        try expect(abs(compact.currentWidth - 118.8) < 0.001)
-        try expect(abs(compact.ancestorWidth - 79.2) < 0.001)
-        let root = BreadcrumbLayoutMetrics(availableWidth: 200, idealCurrentWidth: 2000, hasAncestors: false)
-        try expect(root.currentWidth == 200)
-        try expect(root.ancestorWidth == 0 && root.spacing == 0)
-        for width in [CGFloat(0), 1, 40, 120, 279, 280, 281, 1000] {
-            for ideal in [CGFloat(0), 30, 100, 2000] {
-                for ancestors in [false, true] {
-                    let layout = BreadcrumbLayoutMetrics(availableWidth: width, idealCurrentWidth: ideal, hasAncestors: ancestors)
-                    try expect(layout.currentWidth >= 0 && layout.currentWidth <= 280)
-                    try expect(layout.ancestorWidth >= 0)
-                    try expect(layout.currentWidth + layout.ancestorWidth + layout.spacing <= width + 0.001)
-                    if ancestors {
-                        try expect(abs(layout.currentWidth + layout.ancestorWidth + layout.spacing - width) < 0.001)
-                    }
-                }
-            }
-        }
-        print("PASS pinned breadcrumb width allocation, long names, root and narrow viewports")
     }
 
 }

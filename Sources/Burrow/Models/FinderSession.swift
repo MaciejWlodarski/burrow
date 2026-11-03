@@ -109,24 +109,8 @@ final class FinderSessionStore {
             canWrite = false
             return FinderSessionLoad(snapshot: nil, canWrite: false, notice: Self.protectedNotice)
         }
-        guard let legacy = defaults.array(forKey: "bf.openTabPaths"), !legacy.isEmpty else {
-            canWrite = defaults.object(forKey: "bf.openTabPaths") == nil || defaults.array(forKey: "bf.openTabPaths") != nil
-            return FinderSessionLoad(snapshot: nil, canWrite: canWrite, notice: canWrite ? nil : Self.protectedNotice)
-        }
-        let originalIndex = defaults.integer(forKey: "bf.activeTabIndex")
-        let candidates: [(Int, FinderPaneSession)] = legacy.prefix(128).enumerated().compactMap {
-            guard let path = $0.element as? String else { return nil }
-            return ($0.offset, FinderPaneSession(path: path))
-        }
-        let valid = candidates.filter { $0.1.isValid }
-        let preserved = valid.map { $0.1 }
-        let clamped = max(0, min(originalIndex, legacy.count - 1))
-        let active = valid.lastIndex { $0.0 <= clamped } ?? 0
-        canWrite = valid.count == legacy.count
-        return FinderSessionLoad(snapshot: preserved.isEmpty || !isEnabled ? nil : FinderSessionSnapshot(
-            tabs: preserved, right: FinderPaneSession(path: defaultRightPath), activeIndex: active,
-            dualPane: defaults.bool(forKey: "bf.isDualPane"), activeSide: "left"), canWrite: canWrite,
-            notice: canWrite ? nil : Self.protectedNotice)
+        canWrite = true
+        return FinderSessionLoad(snapshot: nil, canWrite: true, notice: nil)
     }
 
     static let protectedNotice = "Zapis sesji zawiera nieobsługiwane lub uszkodzone dane. Nie zostanie nadpisany. Możesz wyczyścić tylko zapis sesji w ustawieniach."
@@ -180,12 +164,10 @@ final class FinderSessionStore {
     }
 
     /// Clearing also disables future saves, so observers cannot recreate it.
-    /// Bookmarks, smart folders and ordinary view preferences are untouched.
+    /// Favorites and ordinary view preferences are untouched.
     func clearAndDisable() {
         setEnabled(false)
         defaults.removeObject(forKey: Self.dataKey)
-        defaults.removeObject(forKey: "bf.openTabPaths")
-        defaults.removeObject(forKey: "bf.activeTabIndex")
         canWrite = true
         lastWritten = nil
     }
@@ -205,7 +187,7 @@ enum FinderSessionReadError: LocalizedError {
 }
 
 enum FinderSessionPreparation {
-    static func prepare(path: String, hidden: Bool, isCancelled: @Sendable () -> Bool) throws -> PreparedSavedSearch {
+    static func prepare(path: String, hidden: Bool, isCancelled: @Sendable () -> Bool) throws -> PreparedFolder {
         if isCancelled() { throw CancellationError() }
         var info = stat()
         guard stat(path, &info) == 0 else {
@@ -218,6 +200,6 @@ enum FinderSessionPreparation {
         if isCancelled() { throw CancellationError() }
         if result.errorCode == EACCES || result.errorCode == EPERM { throw FinderSessionReadError.permissionDenied }
         guard result.isComplete else { throw FinderSessionReadError.incomplete }
-        return PreparedSavedSearch(root: URL(fileURLWithPath: path, isDirectory: true), entries: result.entries)
+        return PreparedFolder(root: URL(fileURLWithPath: path, isDirectory: true), entries: result.entries)
     }
 }

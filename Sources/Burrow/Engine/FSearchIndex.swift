@@ -181,16 +181,6 @@ public final class FSearchIndex: @unchecked Sendable {
         get { stateLock.lock(); defer { stateLock.unlock() }; return _loadedFromMMapCache }
         set { stateLock.lock(); defer { stateLock.unlock() }; _loadedFromMMapCache = newValue }
     }
-    private var _externalFSearchAvailable: Bool = false
-    public private(set) var externalFSearchAvailable: Bool {
-        get { stateLock.lock(); defer { stateLock.unlock() }; return _externalFSearchAvailable }
-        set { stateLock.lock(); defer { stateLock.unlock() }; _externalFSearchAvailable = newValue }
-    }
-    private var _preferExternalDaemonIfAvailable: Bool = false
-    public var preferExternalDaemonIfAvailable: Bool {
-        get { stateLock.lock(); defer { stateLock.unlock() }; return _preferExternalDaemonIfAvailable }
-        set { stateLock.lock(); defer { stateLock.unlock() }; _preferExternalDaemonIfAvailable = newValue }
-    }
     private var _onIndexUpdated: (@Sendable (Int, Double) -> Void)? = nil
     public var onIndexUpdated: (@Sendable (Int, Double) -> Void)? {
         get { stateLock.lock(); defer { stateLock.unlock() }; return _onIndexUpdated }
@@ -248,7 +238,6 @@ public final class FSearchIndex: @unchecked Sendable {
             .filter { FileManager.default.fileExists(atPath: $0) }
         #endif
         self.skippedDirectoryNames = BulkCrawler.defaultSkippedDirectoryNames
-        checkExternalFSearchDaemon()
     }
 
     deinit {
@@ -261,16 +250,6 @@ public final class FSearchIndex: @unchecked Sendable {
         trigramLock.lock()
         defer { trigramLock.unlock() }
         return trigramBloomCache.count
-    }
-
-    public func checkExternalFSearchDaemon() {
-        let socketPath = ("~/Library/Application Support/FSearch/fsearch.sock" as NSString).expandingTildeInPath
-        let binPath1 = ("~/.local/bin/fsearch" as NSString).expandingTildeInPath
-        let binPath2 = "/opt/homebrew/bin/fsearch"
-        let fm = FileManager.default
-        externalFSearchAvailable = fm.fileExists(atPath: socketPath) ||
-                                   fm.isExecutableFile(atPath: binPath1) ||
-                                   fm.isExecutableFile(atPath: binPath2)
     }
 
     public func recordGitStatuses(_ map: [String: GitFileStatus], repositoryRoot: String) {
@@ -728,17 +707,6 @@ public final class FSearchIndex: @unchecked Sendable {
                 backendName: "fsearch-native",
                 isPartial: isCancelled(),
                 diagnostic: parsed.validationError ?? (isCancelled() ? "Search cancelled." : nil)
-            )
-        }
-
-        if preferExternalDaemonIfAvailable && scope == .wholeIndex,
-           let extItems = queryExternalFSearchSocket(rawQuery: rawQuery, limit: parsed.limit) {
-            let t1 = DispatchTime.now().uptimeNanoseconds
-            return FSearchResultBundle(
-                items: extItems,
-                elapsedMilliseconds: Double(t1 - t0) / 1_000_000.0,
-                totalIndexedCount: indexedCount,
-                backendName: "fsearch.sock"
             )
         }
 
@@ -1482,123 +1450,5 @@ public final class FSearchIndex: @unchecked Sendable {
             FSEventStreamRelease(stream)
             eventStream = nil
         }
-    }
-
-    // MARK: - Optional Bridge to External `noahdunnagan/fsearch` Unix Socket
-
-    func queryExternalFSearchSocket(rawQuery: String, limit: Int, socketPath explicitSocketPath: String? = nil) -> [FileItem]? {
-        let socketPath = explicitSocketPath ?? ("~/Library/Application Support/FSearch/fsearch.sock" as NSString).expandingTildeInPath
-        guard FileManager.default.fileExists(atPath: socketPath) else { return nil }
-
-        let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return nil }
-        defer { Darwin.close(fd) }
-
-        let oldFlags = fcntl(fd, F_GETFL, 0)
-        guard oldFlags >= 0, fcntl(fd, F_SETFL, oldFlags | O_NONBLOCK) == 0 else { return nil }
-        var noSigPipe: Int32 = 1
-        _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
-        let deadline = DispatchTime.now().uptimeNanoseconds + 2_000_000_000
-        func waitFor(_ events: Int16) -> Bool {
-            while true {
-                let now = DispatchTime.now().uptimeNanoseconds
-                guard now < deadline else { return false }
-                var descriptor = pollfd(fd: fd, events: events, revents: 0)
-                let milliseconds = Int32(max(1, min(2000, (deadline - now) / 1_000_000)))
-                let result = poll(&descriptor, 1, milliseconds)
-                if result < 0 && errno == EINTR { continue }
-                guard result > 0, descriptor.revents & Int16(POLLNVAL | POLLERR) == 0 else { return false }
-                return descriptor.revents & (events | Int16(POLLHUP)) != 0
-            }
-        }
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let pathBytes = Array(socketPath.utf8CString)
-        guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else { return nil }
-        withUnsafeMutableBytes(of: &addr.sun_path) { ptr in
-            for (idx, b) in pathBytes.enumerated() {
-                ptr[idx] = UInt8(bitPattern: b)
-            }
-        }
-
-        let connectResult = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        if connectResult != 0 {
-            guard errno == EINPROGRESS, waitFor(Int16(POLLOUT)) else { return nil }
-            var socketError: Int32 = 0
-            var length = socklen_t(MemoryLayout<Int32>.size)
-            guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &socketError, &length) == 0, socketError == 0 else { return nil }
-        }
-
-        let payload: [String: Any] = ["q": rawQuery, "limit": limit, "offset": 0]
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: payload),
-              var lineData = String(data: jsonData, encoding: .utf8)?.data(using: .utf8) else {
-            return nil
-        }
-        lineData.append(0x0A)
-
-        var written = 0
-        while written < lineData.count {
-            guard waitFor(Int16(POLLOUT)) else { return nil }
-            let count = lineData.withUnsafeBytes { ptr in
-                Darwin.write(fd, ptr.baseAddress!.advanced(by: written), ptr.count - written)
-            }
-            if count < 0 && (errno == EINTR || errno == EAGAIN) { continue }
-            guard count > 0 else { return nil }
-            written += count
-        }
-
-        // Protocol is one newline-delimited JSON response. Never decode a partial
-        // chunk, and never wait forever for an unresponsive or unbounded peer.
-        let responseLimit = 16 * 1024 * 1024
-        var responseData = Data()
-        var buffer = [UInt8](repeating: 0, count: 65_536)
-        var terminated = false
-        while responseData.count < responseLimit {
-            guard waitFor(Int16(POLLIN)) else { return nil }
-            let count = Darwin.read(fd, &buffer, min(buffer.count, responseLimit - responseData.count))
-            if count < 0 && (errno == EINTR || errno == EAGAIN) { continue }
-            guard count > 0 else { break }
-            if let newline = buffer[..<count].firstIndex(of: 0x0A) {
-                responseData.append(buffer, count: newline)
-                terminated = true
-                break
-            }
-            responseData.append(buffer, count: count)
-        }
-        guard terminated || responseData.count < responseLimit else { return nil }
-
-        guard let text = String(data: responseData, encoding: .utf8) else { return nil }
-        var items: [FileItem] = []
-        for line in text.split(separator: "\n") {
-            if let data = line.data(using: .utf8),
-               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let results = obj["results"] as? [[String: Any]] {
-                for r in results {
-                    if let p = r["path"] as? String {
-                        let url = URL(fileURLWithPath: p)
-                        var isDir: ObjCBool = false
-                        FileManager.default.fileExists(atPath: p, isDirectory: &isDir)
-                        items.append(FileItem(
-                            url: url,
-                            name: url.lastPathComponent,
-                            path: p,
-                            parentPath: url.deletingLastPathComponent().path,
-                            fileExtension: url.pathExtension.lowercased(),
-                            isDirectory: isDir.boolValue,
-                            isHidden: url.lastPathComponent.hasPrefix("."),
-                            size: (r["size"] as? Int64) ?? 0,
-                            modificationDate: Date()
-                        ))
-                    }
-                }
-            }
-        }
-        guard let object = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
-              object["results"] is [[String: Any]] else { return nil }
-        return Array(items.prefix(limit))
     }
 }

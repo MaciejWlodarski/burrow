@@ -13,8 +13,11 @@ struct NativePreview {
         for name in ["Notatki ze spotkania.md", "Plan projektu.txt", "README.md", "Szkice.svg", "Zestawienie.csv"] {
             try Data("Burrow preview\n".utf8).write(to: fixture.appendingPathComponent(name))
         }
+        let session = try JSONEncoder().encode(FinderSessionSnapshot(
+            tabs: [FinderPaneSession(path: fixture.path)], right: FinderPaneSession(path: fixture.path),
+            activeIndex: 0, dualPane: false, activeSide: "left"))
         UserDefaults.standard.setVolatileDomain([
-            "bf.openTabPaths": [fixture.path], "bf.showInspector": false,
+            FinderSessionStore.dataKey: session, "bf.showInspector": false,
             "bf.showSidebar": true, "bf.isDualPane": false
         ], forName: UserDefaults.argumentDomain)
         FSearchIndex.shared.configuredRoots = [fixture.path]

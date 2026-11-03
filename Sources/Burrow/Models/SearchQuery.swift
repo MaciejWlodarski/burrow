@@ -3,7 +3,7 @@ import Foundation
 public enum SearchScopeMode: String, CaseIterable, Identifiable, Sendable, Codable {
     case currentFolder = "Current Folder"
     case recursiveFolder = "Subfolders"
-    case wholeIndex = "Whole Disk (fsearch)"
+    case wholeIndex = "Whole Index"
 
     public var id: String { rawValue }
 

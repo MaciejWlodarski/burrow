@@ -9,89 +9,12 @@ public struct PathBreadcrumbSegment: Identifiable {
     public var symbol: String? = nil
 }
 
-/// Retained layout regression contract for the previous breadcrumb renderer.
-/// The visible address field now uses native NSTextField scrolling; these metrics
-/// are not evidence of the new field's native focus or layout correctness.
-struct BreadcrumbLayoutMetrics {
-    let currentWidth: CGFloat
-    let ancestorWidth: CGFloat
-    let spacing: CGFloat
-
-    static func finiteWidth(_ proposedWidth: CGFloat?) -> CGFloat {
-        guard let width = proposedWidth, width.isFinite else { return 280 }
-        return max(0, width)
-    }
-
-    init(availableWidth: CGFloat, idealCurrentWidth: CGFloat, hasAncestors: Bool) {
-        let width = Self.finiteWidth(availableWidth)
-        spacing = hasAncestors ? min(2, width) : 0
-        let usable = max(0, width - spacing)
-        currentWidth = min(Self.finiteWidth(idealCurrentWidth), 280, hasAncestors ? usable * 0.6 : usable)
-        ancestorWidth = hasAncestors ? max(0, usable - currentWidth) : 0
-    }
-}
-
-#if BURROW_TESTING
-/// Screenshot-only presentation. This does not exercise editing, keyboard routing,
-/// validation or native focus; interaction tests must leave the environment empty.
-struct FolderAddressVisualFixture: Sendable {
-    let draft: String
-    var validationMessage: String? = nil
-    var isFocused: Bool = true
-}
-
-private struct FolderAddressVisualFixturesKey: EnvironmentKey {
-    static let defaultValue: [UUID: FolderAddressVisualFixture] = [:]
-}
-
-extension EnvironmentValues {
-    var folderAddressVisualFixtures: [UUID: FolderAddressVisualFixture] {
-        get { self[FolderAddressVisualFixturesKey.self] }
-        set { self[FolderAddressVisualFixturesKey.self] = newValue }
-    }
-}
-#endif
-
 public struct PathBreadcrumbBar: View {
     @ObservedObject var appState: AppState
     @ObservedObject var pane: PaneTabState
     @ViewState private var editablePathText: String = ""
     @ViewState private var pathValidationMessage: String? = nil
     @ViewState private var isPathFieldFocused = false
-
-    #if BURROW_TESTING
-    @Environment(\.folderAddressVisualFixtures) private var visualFixtures
-    private var visualFixture: FolderAddressVisualFixture? { visualFixtures[pane.id] }
-    #endif
-
-    private var isVisualFixture: Bool {
-        #if BURROW_TESTING
-        return visualFixture != nil
-        #else
-        return false
-        #endif
-    }
-
-    private var displayedText: Binding<String> {
-        #if BURROW_TESTING
-        if let visualFixture { return .constant(visualFixture.draft) }
-        #endif
-        return $editablePathText
-    }
-
-    private var displayedValidationMessage: String? {
-        #if BURROW_TESTING
-        if let visualFixture { return visualFixture.validationMessage }
-        #endif
-        return pathValidationMessage
-    }
-
-    private var displayedFocus: Bool {
-        #if BURROW_TESTING
-        if let visualFixture { return visualFixture.isFocused }
-        #endif
-        return isPathFieldFocused
-    }
 
     public init(appState: AppState, pane: PaneTabState) {
         self.appState = appState
@@ -142,7 +65,7 @@ public struct PathBreadcrumbBar: View {
                 folderActionsMenu
             }
 
-            if pane.isEditingPathBar || isVisualFixture, let message = displayedValidationMessage {
+            if pane.isEditingPathBar, let message = pathValidationMessage {
                 Label(message, systemImage: "exclamationmark.circle")
                     .foregroundStyle(.red)
                     .font(FinderUI.captionFont)
@@ -158,7 +81,6 @@ public struct PathBreadcrumbBar: View {
         .overlay(alignment: .bottom) {
             Divider()
         }
-        .allowsHitTesting(!isVisualFixture)
         .onAppear { editablePathText = pane.currentURL.path }
         .onChange(of: pane.isEditingPathBar) { _, editing in
             if !editing { resetEditor() }
@@ -178,8 +100,6 @@ public struct PathBreadcrumbBar: View {
         }
     }
 
-    private var isShowingField: Bool { pane.isEditingPathBar || isVisualFixture }
-
     private var pathEditor: some View {
         HStack(spacing: 6) {
             Image(systemName: "folder")
@@ -188,12 +108,12 @@ public struct PathBreadcrumbBar: View {
                 .contentShape(Rectangle())
                 .onTapGesture { beginEditingFromBreadcrumbs() }
 
-            if isShowingField {
+            if pane.isEditingPathBar {
                 FolderAddressTextField(
-                    text: displayedText,
-                    isEditing: !isVisualFixture && pane.isEditingPathBar,
+                    text: $editablePathText,
+                    isEditing: pane.isEditingPathBar,
                     focusRequest: pane.pathEditRequest,
-                    mayFocus: { !isVisualFixture && pane.isEditingPathBar && appState.activeTab.id == pane.id },
+                    mayFocus: { pane.isEditingPathBar && appState.activeTab.id == pane.id },
                     beginEditing: {
                         activatePane()
                         pane.isEditingPathBar = true
@@ -222,12 +142,12 @@ public struct PathBreadcrumbBar: View {
             }
         }
         .padding(.leading, 10)
-        .padding(.trailing, isShowingField ? 10 : 0)
+        .padding(.trailing, pane.isEditingPathBar ? 10 : 0)
         .frame(minHeight: 32)
         .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: FinderUI.cornerRadius)
-                .strokeBorder(displayedValidationMessage != nil ? Color.red : (displayedFocus ? Color.accentColor : Color.secondary.opacity(0.25)), lineWidth: 1)
+                .strokeBorder(pathValidationMessage != nil ? Color.red : (isPathFieldFocused ? Color.accentColor : Color.secondary.opacity(0.25)), lineWidth: 1)
         }
     }
 
@@ -315,7 +235,6 @@ public struct PathBreadcrumbBar: View {
     }
 
     private func beginEditingFromBreadcrumbs() {
-        guard !isVisualFixture else { return }
         activatePane()
         editablePathText = pane.currentURL.path
         pathValidationMessage = nil

@@ -289,11 +289,11 @@ struct FileDropPaneContext {
     static func accepts(_ providers: [NSItemProvider], in pane: PaneTabState) -> Bool {
         // Global search results can be visible while the saved browsing root is
         // still paused. Every row/background target shares this admission rule.
-        !pane.isSessionBrowsingPaused && FileDropLoader.accepts(providers)
+        !pane.isSessionPaused && FileDropLoader.accepts(providers)
     }
 
     func matches(pane: PaneTabState) -> Bool {
-        !pane.isSessionBrowsingPaused && pane.id == paneID && pane.currentURL == browsingURL &&
+        !pane.isSessionPaused && pane.id == paneID && pane.currentURL == browsingURL &&
             pane.navigationRevision == navigationRevision
     }
 

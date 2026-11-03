@@ -13,7 +13,6 @@ struct SearchIndexRegressionTests {
         try grepBeyondCandidateBudgetAndPreservedMtime()
         try cacheRejectsTruncationAndConfigurationMismatch()
         try freshGitSnapshotClearsStatuses()
-        try socketHandlesFragmentationAndTimeout()
         #if BURROW_TESTING
         try refreshReadsAreSerialized()
         try await queuedRefreshDoesNotWaitForInitialCrawl()
@@ -274,75 +273,6 @@ struct SearchIndexRegressionTests {
         try expect(query(index, "git:modified", root, scope: .currentFolder).items.isEmpty)
         let snapshot = FileOperationsManager.fetchGitStatusSnapshot(for: root.path)
         try expect(snapshot != nil && snapshot?.statuses.isEmpty == true)
-    }
-
-    private static func socketHandlesFragmentationAndTimeout() throws {
-        let index = FSearchIndex(roots: [], enableMonitoring: false)
-        func serve(response: Data?, stall: Bool = false) throws -> [FileItem]? {
-            let directory = URL(fileURLWithPath: "/tmp/bf-sock-\(UUID().uuidString.prefix(12))", isDirectory: true)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
-            defer { try? FileManager.default.removeItem(at: directory) }
-            let path = directory.appendingPathComponent("s").path
-            let listener = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-            try expect(listener >= 0)
-            defer { Darwin.close(listener); unlink(path) }
-            var address = sockaddr_un()
-            address.sun_family = sa_family_t(AF_UNIX)
-            let bytes = Array(path.utf8CString)
-            try expect(bytes.count <= MemoryLayout.size(ofValue: address.sun_path))
-            withUnsafeMutableBytes(of: &address.sun_path) { pointer in
-                for (i, byte) in bytes.enumerated() { pointer[i] = UInt8(bitPattern: byte) }
-            }
-            let bound = withUnsafePointer(to: &address) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    Darwin.bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-                }
-            }
-            try expect(bound == 0 && Darwin.listen(listener, 1) == 0)
-            let completed = DispatchSemaphore(value: 0)
-            DispatchQueue.global().async {
-                defer { completed.signal() }
-                let client = Darwin.accept(listener, nil, nil)
-                guard client >= 0 else { return }
-                defer { Darwin.close(client) }
-                var noSigPipe: Int32 = 1
-                _ = setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
-                var request = [UInt8](repeating: 0, count: 1024)
-                // Tiny receives also exercise the production partial-write loop
-                // with a large request payload.
-                while true {
-                    let count = Darwin.read(client, &request, request.count)
-                    if count <= 0 || request[..<count].contains(10) { break }
-                }
-                if stall { Thread.sleep(forTimeInterval: 2.3); return }
-                guard let response = response else { return }
-                var offset = 0
-                while offset < response.count {
-                    let count = response.withUnsafeBytes {
-                        Darwin.write(client, $0.baseAddress!.advanced(by: offset), min(997, response.count - offset))
-                    }
-                    if count <= 0 { return }
-                    offset += count
-                }
-            }
-            let started = Date()
-            let result = index.queryExternalFSearchSocket(rawQuery: String(repeating: "x", count: 100_000), limit: 5000, socketPath: path)
-            if stall { try expect(Date().timeIntervalSince(started) < 3.5) }
-            try expect(completed.wait(timeout: .now() + 5) == .success)
-            return result
-        }
-        let rows: [[String: Any]] = (0..<2000).map { ["path": "/tmp/fake-result-\($0)-long-name.txt", "size": 12] }
-        var payload = try JSONSerialization.data(withJSONObject: ["results": rows])
-        payload.append(10)
-        try expect(payload.count > 65_536)
-        let fragmented = try serve(response: payload)
-        try expect(fragmented?.count == 2000)
-        let empty = try serve(response: Data("{\"results\":[]}\n".utf8))
-        try expect(empty?.isEmpty == true)
-        let malformed = try serve(response: Data("{\"results\":[".utf8))
-        try expect(malformed == nil)
-        let timeout = try serve(response: nil, stall: true)
-        try expect(timeout == nil)
     }
 
     #if BURROW_TESTING

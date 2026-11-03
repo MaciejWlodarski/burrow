@@ -214,9 +214,9 @@ public struct FSearchToolbarSection: View {
                     isSearchFocused = false
                 }
                 .accessibilityLabel("Szukaj plików i folderów")
-            if activeTab.isSearching || activeTab.isActivatingSavedSearch {
+            if activeTab.isSearching {
                 ProgressView().controlSize(.small)
-                    .accessibilityLabel(activeTab.isActivatingSavedSearch ? "Otwieranie zapisanego wyszukiwania" : "Wyszukiwanie plików")
+                    .accessibilityLabel("Wyszukiwanie plików")
             } else if !activeTab.searchQuery.isEmpty {
                 Button { activeTab.clearSearch() } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).frame(width: 24, height: 24)

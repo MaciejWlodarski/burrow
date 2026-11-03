@@ -65,7 +65,7 @@ public final class AppState: ObservableObject {
     @Published public var isDualPane: Bool = false {
         didSet {
             Self.preferences.set(isDualPane, forKey: "bf.isDualPane")
-            if !isDualPane { rightPane.cancelPendingSavedSearches() }
+            if !isDualPane { rightPane.cancelSessionRestoration() }
             synchronizeQuickLookOwnership()
         }
     }
@@ -150,12 +150,9 @@ public final class AppState: ObservableObject {
     @Published public var indexBuildDurationMs: Double = 0
     @Published public var isIndexing: Bool = true
 
-    // Sidebar Locations & Smart Folders
+    // Sidebar locations
     @Published public var favorites: [SidebarLocationItem] = []
     public var customBookmarks: [SidebarLocationItem] { favorites }
-    @Published public var savedSmartFolders: [SavedSmartFolderItem] = []
-    private var savedSearchArchive: SavedSearchArchive? = SavedSearchArchive()
-    private var savedSearchLaunchSerials: [UUID: UInt64] = [:]
     @Published public private(set) var volumeInventory = VolumeInventoryState()
     public var mountedVolumes: [VolumeInfoItem] { volumeInventory.items }
     public var localMountedVolumes: [VolumeInfoItem] { VolumeSidebarGroups.build(from: mountedVolumes).localVolumes }
@@ -164,7 +161,6 @@ public final class AppState: ObservableObject {
     private lazy var sidebarFavoritesStore = SidebarFavoritesStore(
         defaults: Self.initialSidebarFavorites,
         read: { Self.preferences.object(forKey: SidebarFavoritesStore.key) },
-        readLegacy: { Self.preferences.object(forKey: PinnedFolderStore.key) },
         write: { Self.preferences.set($0, forKey: SidebarFavoritesStore.key) })
     @Published public private(set) var pinnedFolderNotice: String?
 
@@ -220,7 +216,6 @@ public final class AppState: ObservableObject {
         if isDualPane { rightPane.retainInitialLocation() }
 
         setupSidebarLocations()
-        loadPersistedBookmarksAndSmartFolders()
         #if !BURROW_TESTING
         let volumes = VolumeRefreshService.production()
         volumeService = volumes
@@ -355,16 +350,7 @@ public final class AppState: ObservableObject {
 
     public func setupSidebarLocations() { updatePinnedFolderRows() }
 
-    // MARK: - UserDefaults Persistence for Bookmarks, Smart Folders & Tabs
-
-    private func loadPersistedBookmarksAndSmartFolders() {
-        let defaults = Self.preferences
-        updatePinnedFolderRows()
-        if let data = defaults.data(forKey: "bf.savedSmartFolders") {
-            savedSearchArchive = try? SavedSearchArchive(data: data)
-            savedSmartFolders = savedSearchArchive?.items ?? []
-        }
-    }
+    // MARK: - Session persistence
 
     public func persistTabsState() { scheduleSessionSave() }
 
@@ -403,7 +389,7 @@ public final class AppState: ObservableObject {
 
     public func addBookmark(for url: URL) {
         guard sidebarFavoritesStore.notice == nil else { updatePinnedFolderRows(); return }
-        guard url.isFileURL, PinnedFolderStore.validPath(url.path) else { return }
+        guard url.isFileURL, SidebarFavoritesStore.validPath(url.path) else { return }
         // Only a new, explicitly requested target is probed; restored favorites never are.
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
@@ -431,59 +417,6 @@ public final class AppState: ObservableObject {
 
     public func setFavoriteIcon(_ item: SidebarLocationItem, iconName: String) {
         finishFavoritesMutation(sidebarFavoritesStore.setIcon(item.id, iconName: iconName))
-    }
-
-    public func isCurrentSearchSaved(in pane: PaneTabState) -> Bool {
-        let candidate = SavedSmartFolderItem.capture(from: pane)
-        return savedSmartFolders.contains { $0.hasSameSearch(as: candidate) }
-    }
-
-    public func saveSmartFolder(from pane: PaneTabState, title: String? = nil) {
-        let item = SavedSmartFolderItem.capture(from: pane, title: title)
-        guard !item.query.isEmpty else { return }
-        guard !savedSmartFolders.contains(where: { $0.hasSameSearch(as: item) }) else { return }
-        guard persistSmartFolders(savedSmartFolders + [item]) else { return }
-        FileOperationsManager.shared.lastStatusMessage = "Zapisano inteligentny folder: \(item.title)"
-    }
-
-    public func openSmartFolder(_ item: SavedSmartFolderItem) {
-        let pane = activeTab
-        pane.cancelPendingSavedSearches()
-        let serial = (savedSearchLaunchSerials[pane.id] ?? 0) &+ 1
-        savedSearchLaunchSerials[pane.id] = serial
-        let context = pane.savedSearchActivationContext
-        Task { @MainActor in
-            guard self.savedSearchLaunchSerials[pane.id] == serial,
-                  pane.savedSearchActivationContext == context else { return }
-            do {
-                guard try await pane.applySavedSearch(item, shouldApply: { [weak self, weak pane] in
-                    guard let self, let pane else { return false }
-                    return self.savedSearchLaunchSerials[pane.id] == serial &&
-                        (self.tabs.contains { $0.id == pane.id } || (self.isDualPane && self.rightPane.id == pane.id))
-                }) else { return }
-                guard self.activeTab.id == pane.id else { return }
-                FileOperationsManager.shared.lastStatusMessage = "Wyszukiwanie: \(item.title) · \(item.scopeDescription)"
-            } catch {
-                guard self.activeTab.id == pane.id else { return }
-                FileOperationsManager.shared.lastStatusMessage = error.localizedDescription
-            }
-        }
-    }
-
-    public func removeSmartFolder(_ item: SavedSmartFolderItem) {
-        _ = persistSmartFolders(savedSmartFolders.filter { $0.id != item.id }, removingID: item.id)
-    }
-
-    private func persistSmartFolders(_ items: [SavedSmartFolderItem], removingID: String? = nil) -> Bool {
-        guard let archive = savedSearchArchive,
-              let data = try? archive.encoded(replacingItems: items, removingID: removingID) else {
-            FileOperationsManager.shared.lastStatusMessage = "Nie zapisano zmiany: dane inteligentnych folderów są uszkodzone lub nieobsługiwane. Oryginalny zapis pozostał nietknięty."
-            return false
-        }
-        Self.preferences.set(data, forKey: "bf.savedSmartFolders")
-        savedSmartFolders = items
-        savedSearchArchive = try? SavedSearchArchive(data: data)
-        return true
     }
 
     // MARK: - Volumes & Eject (`⏏`)
@@ -552,7 +485,7 @@ public final class AppState: ObservableObject {
         let resolvedTarget = target.resolvingSymlinksInPath().path
         // Paused restored tabs keep their deliberate Resume flow; open a live tab instead.
         func shows(_ pane: PaneTabState) -> Bool {
-            !pane.isSessionBrowsingPaused && pane.currentURL.resolvingSymlinksInPath().path == resolvedTarget
+            !pane.isSessionPaused && pane.currentURL.resolvingSymlinksInPath().path == resolvedTarget
         }
         if let existing = tabs.first(where: shows) {
             if isDualPane { activePaneSide = .left }
@@ -570,8 +503,7 @@ public final class AppState: ObservableObject {
     public func closeTab(_ id: UUID) {
         guard tabs.count > 1 else { return }
         if let idx = tabs.firstIndex(where: { $0.id == id }) {
-            tabs[idx].cancelPendingSavedSearches()
-            savedSearchLaunchSerials.removeValue(forKey: id)
+            tabs[idx].cancelSessionRestoration()
             recentlyClosedTabs.append(tabs[idx])
             if recentlyClosedTabs.count > 10 { recentlyClosedTabs.removeFirst() }
             tabs.remove(at: idx)

@@ -17,7 +17,7 @@ struct DirectoryNavigationRegressionTests {
         try await testRightPaneVisibility()
         try await testFailedNavigationCancelsResume()
         try testRetryRejectsReplacementFileAndChangedContext()
-        try await testRetryIsSupersededBySavedSearchAndResume()
+        try await testRetryIsSupersededByResume()
         try testRetainedRetryActionCannotRouteToReplacedPane()
         print("21 directory navigation/history regression groups passed")
     }
@@ -167,7 +167,7 @@ struct DirectoryNavigationRegressionTests {
         try expect(paused.isSessionPaused && reads == readCount)
         let savedPath = paused.currentURL
         let resumed = await paused.resumeSession { path, _ in
-            PreparedSavedSearch(root: URL(fileURLWithPath: path), entries: [])
+            PreparedFolder(root: URL(fileURLWithPath: path), entries: [])
         }
         try expect(resumed)
         app.toggleDualPane(); app.toggleDualPane()
@@ -184,7 +184,7 @@ struct DirectoryNavigationRegressionTests {
         let task = Task { @MainActor in
             await pane.resumeSession { path, _ in
                 entered.signal(); _ = release.wait(timeout: .now() + 5)
-                return PreparedSavedSearch(root: URL(fileURLWithPath: path), entries: [])
+                return PreparedFolder(root: URL(fileURLWithPath: path), entries: [])
             }
         }
         var started = false
@@ -229,24 +229,10 @@ struct DirectoryNavigationRegressionTests {
         try expect(pane.currentURL == a && pane.searchQuery == "new context" && pane.navigationDiagnostic == nil)
     }
 
-    @MainActor private func testRetryIsSupersededBySavedSearchAndResume() async throws {
+    @MainActor private func testRetryIsSupersededByResume() async throws {
         let root = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }
-        let a = root.appendingPathComponent("A").standardizedFileURL, b = root.appendingPathComponent("B").standardizedFileURL
-        for scope in [SearchScopeMode.currentFolder, .wholeIndex] {
-            let pane = PaneTabState(initialURL: a)
-            let target = root.appendingPathComponent(UUID().uuidString).standardizedFileURL
-            try expect(!pane.navigate(to: target))
-            let failureID = pane.navigationFailureID!
-            let search = SavedSmartFolderItem(title: "New context", query: "B", scope: scope,
-                rootPath: scope == .wholeIndex ? nil : b.path, includeHidden: false, fuzzyEnabled: false)
-            let applied = try await pane.applySavedSearch(search)
-            try expect(applied && pane.navigationDiagnostic == nil && pane.navigationFailureID == nil)
-            try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-            let location = pane.currentURL, back = pane.historyBack
-            pane.retryNavigation(expectedFailureID: failureID)
-            try expect(pane.currentURL == location && pane.historyBack == back && pane.searchQuery == "B")
-        }
+        let a = root.appendingPathComponent("A").standardizedFileURL
         let pane = FinderPaneSession(path: a.path).makePausedPane()
         let target = root.appendingPathComponent("resume-retry").standardizedFileURL
         try expect(!pane.navigate(to: target))

@@ -4,6 +4,8 @@ import Foundation
 @MainActor final class SidebarFavoritesStore {
     static let key = "bf.sidebarFavorites.v1"
     static let maximumCount = 1024
+    static let maximumPathBytes = 16_384
+    static let maximumPayloadBytes = 1_048_576
     struct Entry: Codable, Equatable {
         let path: String
         var title: String
@@ -16,8 +18,7 @@ import Foundation
     private let read: () -> Any?
     private let write: (Data) -> Void
 
-    init(defaults: [Entry], read: @escaping () -> Any?, readLegacy: () -> Any?,
-         write: @escaping (Data) -> Void) {
+    init(defaults: [Entry], read: @escaping () -> Any?, write: @escaping (Data) -> Void) {
         self.read = read; self.write = write
         if let raw = read() {
             guard let data = raw as? Data, let entries = Self.decode(data) else { protect(); return }
@@ -25,18 +26,13 @@ import Foundation
             return
         }
         var seed = defaults
-        if let legacy = readLegacy() {
-            guard let paths = legacy as? [String], paths.count <= PinnedFolderStore.maximumCount,
-                  paths.allSatisfy(PinnedFolderStore.validPath),
-                  paths.reduce(0, { $0 + $1.utf8.count }) <= PinnedFolderStore.maximumPayloadBytes else {
-                protect(); return
-            }
-            seed += paths.map { Entry(path: $0, title: Self.defaultTitle(for: $0), iconName: "bookmark.fill") }
-        }
         var seen = Set<String>()
         seed = seed.filter { seen.insert(Self.membershipKey($0.path)).inserted }
-        // Persist the initial order once. Keep legacy bytes intact for recovery.
+        // Persist the initial order once.
         guard save(seed) else { protect(); return }
+    }
+    static func validPath(_ path: String) -> Bool {
+        path.hasPrefix("/") && path.utf8.count <= maximumPathBytes && !path.utf8.contains(0)
     }
     /// Trailing separators do not change a folder, but do not resolve symlinks or dot components.
     private static func membershipKey(_ path: String) -> String {
@@ -62,14 +58,14 @@ import Foundation
     private static func valid(_ entries: [Entry]) -> Bool {
         guard entries.count <= maximumCount, Set(entries.map { membershipKey($0.path) }).count == entries.count else { return false }
         return entries.allSatisfy {
-            PinnedFolderStore.validPath($0.path) && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            Self.validPath($0.path) && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             $0.title.utf8.count <= 1024 && !$0.title.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) &&
             !$0.iconName.isEmpty && $0.iconName.utf8.count <= 128 &&
             $0.iconName.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) || $0 == "." || $0 == "-" }
         }
     }
     private static func decode(_ data: Data) -> [Entry]? {
-        guard data.count <= PinnedFolderStore.maximumPayloadBytes,
+        guard data.count <= Self.maximumPayloadBytes,
               let archive = try? JSONDecoder().decode(Archive.self, from: data),
               archive.version == 1, valid(archive.items) else { return nil }
         return archive.items
@@ -80,7 +76,7 @@ import Foundation
     @discardableResult private func save(_ entries: [Entry]) -> Bool {
         guard notice == nil, Self.valid(entries),
               let data = try? JSONEncoder().encode(Archive(version: 1, items: entries)),
-              data.count <= PinnedFolderStore.maximumPayloadBytes else { return false }
+              data.count <= Self.maximumPayloadBytes else { return false }
         let current = read()
         if let observedData {
             guard let current = current as? Data, current == observedData else { protect(); return false }
@@ -91,7 +87,7 @@ import Foundation
         return true
     }
     @discardableResult func add(_ path: String) -> Bool {
-        guard notice == nil, PinnedFolderStore.validPath(path) else { return false }
+        guard notice == nil, Self.validPath(path) else { return false }
         if items.contains(where: { Self.membershipKey($0.path) == Self.membershipKey(path) }) { return true }
         return save(items + [Entry(path: path, title: Self.defaultTitle(for: path), iconName: "bookmark.fill")])
     }

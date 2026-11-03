@@ -59,7 +59,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
         didSet {
             if oldValue != currentURL {
                 navigationRevision &+= 1
-                cancelSavedSearchActivation()
+                cancelSessionRestoration()
                 // Each folder opens with its own sort, or the default.
                 applyFolderSort()
             }
@@ -77,7 +77,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
     @Published public var viewMode: FinderViewMode = .list {
         didSet {
             guard oldValue != viewMode else { return }
-            cancelSavedSearchActivation()
+            cancelSessionRestoration()
             clearAnalysisSelection()
             if viewMode != .list { expandedFolderPaths.removeAll() }
             rebuildDisplayedItemsWithExpandedTree()
@@ -121,24 +121,20 @@ public final class PaneTabState: ObservableObject, Identifiable {
         if !isGlobalSearch { FolderSortPreferences.shared.setSort(sort, for: currentURL) }
     }
     @Published public var showHiddenFiles: Bool = false {
-        didSet { if oldValue != showHiddenFiles { cancelSavedSearchActivation() } }
+        didSet { if oldValue != showHiddenFiles { cancelSessionRestoration() } }
     }
 
     // Integrated fsearch state
     @Published public var searchQuery: String = "" {
-        didSet { if oldValue != searchQuery { cancelSavedSearchActivation(); revokeResultsIfSessionPaused() } }
+        didSet { if oldValue != searchQuery { cancelSessionRestoration(); revokeResultsIfSessionPaused() } }
     }
     @Published public var searchScope: SearchScopeMode = .wholeIndex {
-        didSet { if oldValue != searchScope { cancelSavedSearchActivation(); revokeResultsIfSessionPaused() } }
+        didSet { if oldValue != searchScope { cancelSessionRestoration(); revokeResultsIfSessionPaused() } }
     }
     @Published public var fuzzyEnabled: Bool = true {
-        didSet { if oldValue != fuzzyEnabled { cancelSavedSearchActivation() } }
+        didSet { if oldValue != fuzzyEnabled { cancelSessionRestoration() } }
     }
     @Published public var isSearching: Bool = false
-    @Published public private(set) var isActivatingSavedSearch: Bool = false
-    private var savedSearchActivationGeneration: UInt64 = 0
-    private var savedSearchPreparation: SavedSearchWork<PreparedSavedSearch>?
-    private var savedSearchBrowsingPreparation: SavedSearchWork<[IndexedFileEntry]>?
     @Published public var lastSearchLatencyMs: Double = 0
     @Published public var activeFilterPills: [ActiveFilterPill] = []
     @Published public var searchBackendName: String = "fsearch-native"
@@ -281,13 +277,8 @@ public final class PaneTabState: ObservableObject, Identifiable {
     }
     let wasRestoredFromSession: Bool
     @Published private(set) var sessionAvailability: SessionAvailability = .ready
-    private var sessionWork: SavedSearchWork<PreparedSavedSearch>?
-    private var permitsGlobalSearchWhileBrowsingPaused = false
-    var isSessionBrowsingPaused: Bool { sessionAvailability != .ready }
-    var isSessionPaused: Bool {
-        isSessionBrowsingPaused && !(permitsGlobalSearchWhileBrowsingPaused
-            && searchScope == .wholeIndex && !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-    }
+    private var sessionWork: BackgroundWork<PreparedFolder>?
+    var isSessionPaused: Bool { sessionAvailability != .ready }
 
     func cancelSessionRestoration() {
         sessionWork?.cancel()
@@ -304,17 +295,17 @@ public final class PaneTabState: ObservableObject, Identifiable {
         return true
     }
 
-    /// Opened by the user or automatically at launch. Reuses the saved-search queue (two bounded workers),
+    /// Opened by the user or automatically at launch. Runs on the background folder queue (two bounded workers),
     /// never adds roots to the index, and commits only the captured view context.
     @discardableResult
     func resumeSession(timeoutNanoseconds: UInt64 = 8_000_000_000,
-                       prepare: (@Sendable (String, Bool) throws -> PreparedSavedSearch)? = nil) async -> Bool {
-        guard isSessionBrowsingPaused else { return true }
-        cancelPendingSavedSearches()
-        let context = savedSearchActivationContext
+                       prepare: (@Sendable (String, Bool) throws -> PreparedFolder)? = nil) async -> Bool {
+        guard isSessionPaused else { return true }
+        cancelSessionRestoration()
+        let context = activationContext
         let path = currentURL.path
         let hidden = showHiddenFiles
-        let request = SavedSearchWork<PreparedSavedSearch>()
+        let request = BackgroundWork<PreparedFolder>()
         sessionWork = request
         sessionAvailability = .loading
         let timeout = Task { [weak self] in
@@ -328,23 +319,23 @@ public final class PaneTabState: ObservableObject, Identifiable {
             if sessionWork === request { sessionWork = nil }
         }
         do {
-            let prepared = try await SavedSearchPreparation.run({
+            let prepared = try await BackgroundFolderQueue.run({
                 if let prepare { return try prepare(path, hidden) }
                 return try FinderSessionPreparation.prepare(path: path, hidden: hidden, isCancelled: { request.isCancelled })
             }, request: request)
             guard !Task.isCancelled, !request.isCancelled, sessionWork === request,
-                  context == savedSearchActivationContext else { return false }
+                  context == activationContext else { return false }
             sessionWork = nil
             clearNavigationFailure()
             sessionAvailability = .ready
             directoryLoadGeneration &+= 1
             directoryItems = sortItems(prepared.entries.map { $0.toFileItem(treeDepth: 0, loadTags: false) })
             directoryRevision &+= 1
-            // The Resume action explicitly authorizes this saved search/analysis.
+            // Resuming re-runs the search the pane was saved with.
             triggerSearch()
             return true
         } catch {
-            guard sessionWork === request, context == savedSearchActivationContext else { return false }
+            guard sessionWork === request, context == activationContext else { return false }
             if sessionAvailability == .loading {
                 sessionAvailability = request.isCancelled ? .paused : .unavailable((error as? FinderSessionReadError)?.errorDescription
                     ?? "Folder jest niedostępny lub nie można odczytać jego zawartości. Ścieżka i ustawienia zostały zachowane.")
@@ -434,7 +425,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
     private func navigateDirectory(to url: URL, transition: NavigationTransition) -> Bool {
         // Invalidate a Resume even when this attempt fails: its late completion
         // must not publish over the user's newer intent. Browsing state is retained.
-        cancelPendingSavedSearches()
+        cancelSessionRestoration()
         let standardized = url.standardizedFileURL
         let entries: [IndexedFileEntry]
         do {
@@ -484,7 +475,6 @@ public final class PaneTabState: ObservableObject, Identifiable {
         clearNavigationFailure()
         initialLocationEstablished = true
         sessionAvailability = .ready
-        permitsGlobalSearchWhileBrowsingPaused = false
         searchTask?.cancel()
         searchGeneration &+= 1
         isSearching = false
@@ -511,133 +501,10 @@ public final class PaneTabState: ObservableObject, Identifiable {
         return true
     }
 
-    var savedSearchActivationContext: String {
-        "\(currentURL.path)\u{0}\(searchQuery)\u{0}\(searchScope.rawValue)\u{0}\(showHiddenFiles)\u{0}\(fuzzyEnabled)\u{0}\(viewMode.rawValue)\u{0}\(directoryLoadGeneration)\u{0}\(savedSearchActivationGeneration)"
-    }
-
-    /// Validate and list off the main actor. Commit only if this exact request
-    /// still owns the captured pane context; navigation and newer queries win.
-    @discardableResult
-    func applySavedSearch(
-        _ item: SavedSmartFolderItem,
-        prepare: (@Sendable (SavedSmartFolderItem) throws -> PreparedSavedSearch)? = nil,
-        shouldApply: @escaping @MainActor () -> Bool = { true }
-    ) async throws -> Bool {
-        cancelPendingSavedSearches()
-        savedSearchActivationGeneration &+= 1
-        let generation = savedSearchActivationGeneration
-        let context = savedSearchActivationContext
-        isActivatingSavedSearch = true
-        let request = SavedSearchWork<PreparedSavedSearch>()
-        savedSearchPreparation = request
-        defer {
-            if generation == savedSearchActivationGeneration {
-                isActivatingSavedSearch = false
-                savedSearchPreparation = nil
-            }
-        }
-        let prepared: PreparedSavedSearch
-        do {
-            // Global activation requires no directory probe/listing. A changed
-            // hidden-file option refreshes its browsing snapshot separately.
-            if item.scope == .wholeIndex {
-                prepared = PreparedSavedSearch(root: nil, entries: [])
-            } else {
-                prepared = try await SavedSearchPreparation.run({
-                    if let prepare { return try prepare(item) }
-                    return try SavedSearchPreparation.prepare(item, isCancelled: { request.isCancelled })
-                }, request: request)
-            }
-        } catch {
-            guard generation == savedSearchActivationGeneration,
-                  context == savedSearchActivationContext, !Task.isCancelled, shouldApply() else { return false }
-            throw error
-        }
-        guard generation == savedSearchActivationGeneration,
-              context == savedSearchActivationContext, !Task.isCancelled, shouldApply() else { return false }
-        clearNavigationFailure()
-        initialLocationEstablished = true
-        let hiddenChanged = showHiddenFiles != item.includeHidden
-        if let root = prepared.root, root.path != currentURL.path {
-            historyBack.append(currentURL)
-            historyForward.removeAll()
-        }
-        searchTask?.cancel()
-        searchGeneration &+= 1
-        clearAnalysisSelection()
-        displayedItems.removeAll()
-        selectedPaths.removeAll()
-        selectionCursorPath = nil
-        selectionAnchorPath = nil
-        expandedFolderPaths.removeAll()
-        renamingItemPath = nil
-        searchContext = nil
-        directoryLoadGeneration &+= 1
-        metadataGeneration &+= 1
-        for operation in tagOperations { operation.cancel() }
-        tagOperations.removeAll()
-        tagCache.removeAll()
-        pendingTagPaths.removeAll()
-        if prepared.root != nil {
-            sessionAvailability = .ready
-            permitsGlobalSearchWhileBrowsingPaused = false
-        } else if isSessionBrowsingPaused {
-            // Explicit whole-index search may run without activating the saved
-            // browsing location. Clearing it must reveal the paused folder again.
-            permitsGlobalSearchWhileBrowsingPaused = true
-        }
-        if viewMode == .wiztree { viewMode = .list }
-        searchScope = item.scope
-        showHiddenFiles = item.includeHidden
-        fuzzyEnabled = item.fuzzyEnabled
-        searchQuery = item.query
-        if let root = prepared.root {
-            currentURL = root
-            updateColumnTrail(for: root)
-            FileIconCache.shared.invalidate(containing: root.path)
-            FolderSizeCache.shared.invalidate(containing: root.path)
-            directoryItems = sortItems(prepared.entries.map { $0.toFileItem(treeDepth: 0, loadTags: false) })
-            AppState.shared.persistTabsState()
-        } else if hiddenChanged && !isSessionBrowsingPaused {
-            directoryItems.removeAll()
-            refreshSavedSearchBrowsingSnapshot()
-        }
-        triggerSearch()
-        return true
-    }
-
-    func cancelPendingSavedSearches() {
-        cancelSavedSearchActivation()
-        savedSearchBrowsingPreparation?.cancel()
-        savedSearchBrowsingPreparation = nil
-    }
-
-    private func cancelSavedSearchActivation() {
-        cancelSessionRestoration()
-        savedSearchActivationGeneration &+= 1
-        savedSearchPreparation?.cancel()
-        savedSearchPreparation = nil
-        isActivatingSavedSearch = false
-    }
-
-    private func refreshSavedSearchBrowsingSnapshot() {
-        savedSearchBrowsingPreparation?.cancel()
-        let request = SavedSearchWork<[IndexedFileEntry]>()
-        savedSearchBrowsingPreparation = request
-        let path = currentURL.path
-        let hidden = showHiddenFiles
-        let generation = directoryLoadGeneration
-        Task { @MainActor [weak self] in
-            guard let entries = try? await SavedSearchPreparation.run({
-                BulkCrawler.readDirectoryResult(at: path, includeHidden: hidden,
-                                                isCancelled: { request.isCancelled }).entries
-            }, request: request), let self, self.directoryLoadGeneration == generation,
-                  self.currentURL.path == path, self.showHiddenFiles == hidden else { return }
-            self.directoryItems = self.sortItems(entries.map { $0.toFileItem(treeDepth: 0, loadTags: false) })
-            if self.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                self.triggerSearch()
-            }
-        }
+    /// Everything a late background result must still match before it may
+    /// commit: navigation, a new query or a view change makes it stale.
+    var activationContext: String {
+        "\(currentURL.path)\u{0}\(searchQuery)\u{0}\(searchScope.rawValue)\u{0}\(showHiddenFiles)\u{0}\(fuzzyEnabled)\u{0}\(viewMode.rawValue)\u{0}\(directoryLoadGeneration)"
     }
 
     public func goBack() {
@@ -676,12 +543,12 @@ public final class PaneTabState: ObservableObject, Identifiable {
     }
 
     public func reloadDirectory(invalidateCaches: Bool = true) {
-        guard !isSessionBrowsingPaused else {
-            // Refresh an explicitly opened global query, never the paused root.
+        guard !isSessionPaused else {
+            // Never re-read the paused root; the search shows nothing until Resume.
             triggerSearch()
             return
         }
-        cancelPendingSavedSearches()
+        cancelSessionRestoration()
         let result = BulkCrawler.readDirectoryResult(at: currentURL.path, includeHidden: showHiddenFiles)
         guard result.isComplete, result.errorCode == nil else {
             // A failed refresh (deleted folder, dropped share) must not look like
@@ -786,7 +653,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
             revokeResultsIfSessionPaused()
             return
         }
-        cancelSavedSearchActivation()
+        cancelSessionRestoration()
         searchTask?.cancel()
         searchGeneration &+= 1
         let generation = searchGeneration

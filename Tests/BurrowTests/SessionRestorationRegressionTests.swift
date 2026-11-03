@@ -3,11 +3,9 @@ import Foundation
 struct SessionRestorationRegressionTests {
     @MainActor func runAll() async throws {
         try testRoundTripBothPanesAndOptions()
-        try testLegacyMigrationPreservesOfflineOrderDuplicatesAndClamps()
-        try testInvalidLegacyProtectsOriginal()
         try testUnknownCorruptAndPartialDataAreProtected()
         try testDisabledFutureDataCannotBeOverwritten()
-        try testClearDisablesWritesAndPreservesSmartFolders()
+        try testClearDisablesWrites()
         try testLimitsAndExternalChanges()
         try testPausedConstructionAndRefreshAreInert()
         try await testExplicitActivationAndUnavailablePath()
@@ -17,10 +15,9 @@ struct SessionRestorationRegressionTests {
         try await testAppCloseCancelsRestoration()
         try await testResumedRightPaneSurvivesVisibilityToggle()
         try await testClearBeatsPendingAppDebounce()
-        try await testGlobalSearchPreservesPausedBrowsing()
         try testSuccessfulSaveClearsTransientNotice()
         try testAutomaticResumeRules()
-        print("18 session restoration regression groups passed")
+        print("15 session restoration regression groups passed")
     }
 
     private func withStore(_ body: (UserDefaults, FinderSessionStore) throws -> Void) throws {
@@ -49,31 +46,6 @@ struct SessionRestorationRegressionTests {
         try expect(Set(fields.keys) == Set(["version", "tabs", "right", "activeIndex", "dualPane", "activeSide"]))
         let pane = (fields["tabs"] as! [[String: Any]])[0]
         try expect(Set(pane.keys) == Set(["path", "view", "sort", "ascending", "foldersOnTop", "hidden", "fuzzy", "query", "scope"]))
-    }
-
-    private func testLegacyMigrationPreservesOfflineOrderDuplicatesAndClamps() throws {
-        try withStore { defaults, store in
-            let paths = ["/Volumes/Absent/One", "/Volumes/Absent/Two", "/Volumes/Absent/One"]
-            defaults.set(paths, forKey: "bf.openTabPaths")
-            defaults.set(999, forKey: "bf.activeTabIndex")
-            let result = store.load(defaultRightPath: "/home/test")
-            try expect(result.snapshot?.tabs.map(\.path) == paths)
-            try expect(result.snapshot?.activeIndex == 2 && result.canWrite)
-            try expect(store.save(result.snapshot!))
-            try expect(store.load(defaultRightPath: "/different").snapshot?.tabs.map(\.path) == paths)
-        }
-    }
-
-    private func testInvalidLegacyProtectsOriginal() throws {
-        try withStore { defaults, store in
-            let paths = ["/valid", "relative", "/also-valid"]
-            defaults.set(paths, forKey: "bf.openTabPaths")
-            defaults.set(2, forKey: "bf.activeTabIndex")
-            let result = store.load(defaultRightPath: "/home")
-            try expect(result.snapshot?.tabs.map(\.path) == ["/valid", "/also-valid"])
-            try expect(result.snapshot?.activeIndex == 1 && !result.canWrite)
-            try expect(!store.save(sample()) && defaults.stringArray(forKey: "bf.openTabPaths") == paths)
-        }
     }
 
     private func testUnknownCorruptAndPartialDataAreProtected() throws {
@@ -106,18 +78,16 @@ struct SessionRestorationRegressionTests {
         }
     }
 
-    private func testClearDisablesWritesAndPreservesSmartFolders() throws {
+    private func testClearDisablesWrites() throws {
         try withStore { defaults, store in
-            let saved = Data("smart-folder archive".utf8)
-            defaults.set(saved, forKey: "bf.savedSmartFolders")
-            defaults.set(["/legacy"], forKey: "bf.openTabPaths")
+            let favorites = Data("favorites".utf8)
+            defaults.set(favorites, forKey: SidebarFavoritesStore.key)
             _ = store.load(defaultRightPath: "/home")
             try expect(store.save(sample()))
             store.clearAndDisable()
             try expect(!store.isEnabled && !store.save(sample()))
             try expect(defaults.object(forKey: FinderSessionStore.dataKey) == nil)
-            try expect(defaults.object(forKey: "bf.openTabPaths") == nil)
-            try expect(defaults.data(forKey: "bf.savedSmartFolders") == saved)
+            try expect(defaults.data(forKey: SidebarFavoritesStore.key) == favorites)
             store.setEnabled(true)
             try expect(store.save(sample()))
         }
@@ -154,11 +124,11 @@ struct SessionRestorationRegressionTests {
         let applied = await pane.resumeSession { capturedPath, hidden in
             if Thread.isMainThread { throw RegressionFailure(description: "Session I/O ran on main actor") }
             guard capturedPath == path, !hidden else { throw RegressionFailure(description: "Wrong restoration context") }
-            return PreparedSavedSearch(root: URL(fileURLWithPath: path, isDirectory: true), entries: [])
+            return PreparedFolder(root: URL(fileURLWithPath: path, isDirectory: true), entries: [])
         }
         try expect(applied && !pane.isSessionPaused)
         let unavailable = FinderPaneSession(path: path).makePausedPane()
-        let failed = await unavailable.resumeSession { _, _ in throw SavedSearchError.unavailableRoot(path) }
+        let failed = await unavailable.resumeSession { _, _ in throw FinderSessionReadError.unavailable }
         try expect(!failed && unavailable.isSessionPaused && unavailable.currentURL.path == path)
         guard case .unavailable = unavailable.sessionAvailability else { throw RegressionFailure(description: "Missing explicit unavailable state") }
     }
@@ -191,7 +161,7 @@ struct SessionRestorationRegressionTests {
             await pane.resumeSession { path, _ in
                 entered.signal()
                 _ = release.wait(timeout: .now() + 5)
-                return PreparedSavedSearch(root: URL(fileURLWithPath: path, isDirectory: true), entries: [])
+                return PreparedFolder(root: URL(fileURLWithPath: path, isDirectory: true), entries: [])
             }
         }
         try await waitForWorker(entered)
@@ -207,7 +177,7 @@ struct SessionRestorationRegressionTests {
         defer { release.signal() }
         let result = await pane.resumeSession(timeoutNanoseconds: 30_000_000) { path, _ in
             _ = release.wait(timeout: .now() + 5)
-            return PreparedSavedSearch(root: URL(fileURLWithPath: path, isDirectory: true), entries: [])
+            return PreparedFolder(root: URL(fileURLWithPath: path, isDirectory: true), entries: [])
         }
         try expect(!result && pane.currentURL.path == "/Volumes/Slow")
         guard case .unavailable(let reason) = pane.sessionAvailability else { throw RegressionFailure(description: "Timeout must remain visible") }
@@ -227,7 +197,7 @@ struct SessionRestorationRegressionTests {
             await pane.resumeSession { path, _ in
                 entered.signal()
                 _ = release.wait(timeout: .now() + 5)
-                return PreparedSavedSearch(root: URL(fileURLWithPath: path, isDirectory: true), entries: [])
+                return PreparedFolder(root: URL(fileURLWithPath: path, isDirectory: true), entries: [])
             }
         }
         try await waitForWorker(entered)
@@ -242,7 +212,7 @@ struct SessionRestorationRegressionTests {
         defer { app.rightPane = oldRight; app.isDualPane = oldDual; app.activePaneSide = oldSide }
         let pane = FinderPaneSession(path: "/Volumes/Retained-Right").makePausedPane()
         let resumed = await pane.resumeSession { path, _ in
-            PreparedSavedSearch(root: URL(fileURLWithPath: path, isDirectory: true), entries: [])
+            PreparedFolder(root: URL(fileURLWithPath: path, isDirectory: true), entries: [])
         }
         try expect(resumed)
         app.rightPane = pane
@@ -268,51 +238,6 @@ struct SessionRestorationRegressionTests {
         try await Task.sleep(for: .milliseconds(350))
         app.flushSessionState()
         try expect(!app.restoreSessionEnabled && !app.hasPersistedSessionForTesting)
-    }
-
-    @MainActor private func testGlobalSearchPreservesPausedBrowsing() async throws {
-        let fixtures = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BURROW_TEST_ROOT"]!, isDirectory: true)
-        let root = fixtures.appendingPathComponent("session-global-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        try Data("visible".utf8).write(to: root.appendingPathComponent("visible.txt"))
-        defer { try? FileManager.default.removeItem(at: root) }
-        for hidden in [false, true] {
-            let offline = FinderPaneSession(path: "/Volumes/Unavailable-Session-Global/Offline").makePausedPane()
-            let offlineGlobal = SavedSmartFolderItem(title: "Offline global", query: "session-global-no-match", scope: .wholeIndex,
-                rootPath: nil, includeHidden: hidden, fuzzyEnabled: true)
-            let offlineApplied = try await offline.applySavedSearch(offlineGlobal, prepare: { _ in
-                throw RegressionFailure(description: "Global search must not prepare restored location")
-            })
-            try expect(offlineApplied && offline.sessionAvailability == .paused)
-            offline.clearSearch()
-            try expect(offline.isSessionPaused && offline.directoryItems.isEmpty)
-            let pane = FinderPaneSession(path: root.path).makePausedPane()
-            let global = SavedSmartFolderItem(title: "Global", query: "session-global-no-match", scope: .wholeIndex,
-                rootPath: nil, includeHidden: hidden, fuzzyEnabled: true)
-            let applied = try await pane.applySavedSearch(global)
-            try expect(applied && !pane.isSessionPaused && pane.sessionAvailability == .paused)
-            try await Task.sleep(for: .milliseconds(50))
-            // Even changing hidden must not start a background browsing read.
-            try expect(pane.directoryItems.isEmpty)
-            pane.refresh()
-            try expect(pane.directoryItems.isEmpty)
-            let file = root.appendingPathComponent("visible.txt")
-            let result = FileItem(url: file, name: "visible.txt", path: file.path,
-                parentPath: root.path, fileExtension: "txt", isDirectory: false,
-                isHidden: false, size: 7, modificationDate: .distantPast)
-            pane.displayedItems = [result]
-            pane.selectedPaths = [file.path]
-            pane.searchScope = .currentFolder
-            try expect(pane.isSessionPaused && pane.displayedItems.isEmpty && pane.selectedPaths.isEmpty)
-            pane.searchScope = .wholeIndex
-            pane.displayedItems = [result]
-            pane.selectedPaths = [file.path]
-            pane.clearSearch()
-            try expect(pane.isSessionPaused && pane.selectableItems.isEmpty && pane.displayedItems.isEmpty)
-            try expect(pane.currentURL.path == root.path)
-            let resumed = await pane.resumeSession()
-            try expect(resumed && pane.directoryItems.contains(where: { $0.name == "visible.txt" }))
-        }
     }
 
     @MainActor private func testSuccessfulSaveClearsTransientNotice() throws {

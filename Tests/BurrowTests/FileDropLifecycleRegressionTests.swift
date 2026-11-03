@@ -34,7 +34,7 @@ struct FileDropLifecycleRegressionTests {
         try await testCancellationAndReplacementCannotCommitLateResults()
         try await testCancellationBeforeStartAndProviderLimit()
         try await testCommitRevalidatesPaneBeforeDeferredViewObservers()
-        try await testPausedGlobalResultsRejectRowDropsAtAdmissionAndCommit()
+        try await testPausedPaneRejectsRowDropsAtAdmissionAndCommit()
         print("PASS bounded external drop lifecycle, cancellation, ordering and fail-closed batches")
     }
 
@@ -226,14 +226,9 @@ struct FileDropLifecycleRegressionTests {
         try expect(committedCopyChoices == [true] && !modifierChoice)
     }
 
-    private func testPausedGlobalResultsRejectRowDropsAtAdmissionAndCommit() async throws {
+    private func testPausedPaneRejectsRowDropsAtAdmissionAndCommit() async throws {
         let pane = FinderPaneSession(path: "/Volumes/Unavailable-Drop-Session/Root").makePausedPane()
-        let global = SavedSmartFolderItem(title: "Global drop regression", query: "drop-session-no-match",
-            scope: .wholeIndex, rootPath: nil, includeHidden: false, fuzzyEnabled: true)
-        let applied = try await pane.applySavedSearch(global, prepare: { _ in
-            throw RegressionFailure(description: "Global query must not load the paused browsing root")
-        })
-        try expect(applied && !pane.isSessionPaused && pane.isSessionBrowsingPaused)
+        try expect(pane.isSessionPaused)
         let source = URL(fileURLWithPath: "/tmp/drop-source")
         let providers = [NSItemProvider(object: source as NSURL)]
         try expect(FileDropLoader.accepts(providers))
@@ -242,7 +237,7 @@ struct FileDropLifecycleRegressionTests {
         for mode in [FinderViewMode.list, .icons] {
             pane.viewMode = mode
             pane.displayedItems = [file]
-            try expect(!pane.selectableItems.isEmpty && pane.isSessionBrowsingPaused)
+            try expect(pane.selectableItems.isEmpty && pane.isSessionPaused)
             // List/grid regular-file rows use currentURL as fallback destination.
             // Their common handler must reject before activating/loading anything.
             let rowDestination = file.isDirectory ? file.url : pane.currentURL
@@ -273,7 +268,7 @@ struct FileDropLifecycleRegressionTests {
         try await waitUntil { probe.callbacks.count == 1 }
         probe.complete(0, .success(source))
         try await waitUntil { !controller.isLoading }
-        try expect(commits == 0 && pane.isSessionBrowsingPaused)
+        try expect(commits == 0 && pane.isSessionPaused)
     }
 
     private func testCancellationBeforeStartAndProviderLimit() async throws {

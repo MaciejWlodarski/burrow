@@ -198,11 +198,11 @@ public struct FilePaneView: View {
                     .allowsHitTesting(false)
             )
             .onDrop(of: [.fileURL], isTargeted: $isPaneDropTargeted) { providers in
-                guard !pane.isSessionBrowsingPaused else { return false }
+                guard !pane.isSessionPaused else { return false }
                 return handleDropProviders(providers: providers, into: pane.currentURL)
             }
             .contextMenu {
-                if !pane.isSessionBrowsingPaused { paneBackgroundContextMenu }
+                if !pane.isSessionPaused { paneBackgroundContextMenu }
             }
         }
         .overlay(
@@ -264,7 +264,7 @@ public struct FilePaneView: View {
                 }.buttonStyle(.borderedProminent)
                 Button("Wybierz inną lokalizację…") {
                     activatePane()
-                    let context = pane.savedSearchActivationContext
+                    let context = pane.activationContext
                     let panel = NSOpenPanel()
                     panel.canChooseFiles = false
                     panel.canChooseDirectories = true
@@ -273,7 +273,7 @@ public struct FilePaneView: View {
                     panel.begin { response in
                         guard response == .OK, let url = panel.url else { return }
                         Task { @MainActor in
-                            guard pane.savedSearchActivationContext == context,
+                            guard pane.activationContext == context,
                                   appState.tabs.contains(where: { $0.id == pane.id }) || appState.rightPane.id == pane.id else { return }
                             pane.navigate(to: url)
                         }
