@@ -42,6 +42,7 @@
 | **Indexed search** | Results as you type over an in-memory index, with fsearch-style filters, typo tolerance and content grep. |
 | **Whole-disk map** | A full-depth treemap and size tree of the entire disk in about 20 seconds. APFS clones and hard links count once. |
 | **`burrow` CLI** | The same scanner from the terminal, with JSON output, regenerable-clutter detection and a Trash-only `trash` command. |
+| **Cloud storage** | iCloud Drive, Google Drive, OneDrive, Dropbox and other File Provider apps appear under **Cloud** in the sidebar. A cloud badge marks files stored only online; **Download Now** and **Remove Download** are in the context menu. Searching, folder sizes and previews never download anything by themselves. |
 | **Per-folder sorting** | One default in Settings; sort Downloads by date and only Downloads remembers it. |
 | **Replaces Finder** | Optionally the default folder viewer: folders opened from the Dock, Spotlight, `open` and “Show in Finder” land in Burrow. |
 | **Everyday file work** | Copy, move, rename, duplicate, tags, archives, Quick Look, checksums, Git status, duplicate finder, undo/redo, a command drawer. |
@@ -56,7 +57,7 @@ Press **⌘4** and choose **Whole Disk**, or map any folder. Burrow works like W
 
 - **Fast whole-disk scans.** Eight parallel `getattrlistbulk` workers. On the author's Mac a scan of about 3.9 million entries takes around 20 seconds.
 - **Every level at once.** The treemap shows the full depth, not just the top folders. Hover for details, click to reveal an item in the tree, double-click to zoom in without rescanning.
-- **Honest numbers.** Sizes are on-disk bytes. Hard links and unmodified APFS clones (Finder copies, system images) are counted once. Other disks, snapshots, iCloud-only files and grafted cryptex images are skipped.
+- **Honest numbers.** Sizes are on-disk bytes. Hard links and unmodified APFS clones (Finder copies, system images) are counted once. Other disks, snapshots, cloud-only files and grafted cryptex images are skipped.
 - **Nothing hidden.** Space the scan could not attribute, such as protected system data or folders without access, appears as one “unscanned” block, so the total matches the used space on the disk.
 - **Cleanup in place.** Move items to the Trash from the map; the tree updates without a rescan.
 

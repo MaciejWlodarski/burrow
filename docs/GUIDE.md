@@ -109,6 +109,18 @@ Inspector preview work is limited to two running and two queued requests. Cancel
 
 Icon-grid thumbnails have separate limits for active requests, queued work, and cached results, with timeouts, delayed bounded retries, and stale-callback rejection. Thumbnail provider cancellation is best effort. Releasing a timed-out request's logical slot does not guarantee that the system provider has stopped its underlying work. Quick Look depends on macOS and installed preview providers; a preview is not a guarantee that a file is safe to open.
 
+## Cloud storage
+
+Burrow works with cloud storage through macOS itself, without its own accounts or cloud APIs. iCloud Drive and every File Provider app (Google Drive, OneDrive, Dropbox, Box, pCloud and others) appear under **Cloud** in the sidebar as soon as their folder exists in `~/Library/CloudStorage`. The path bar starts at the provider: **Google Drive › My Drive**, not `~/Library/CloudStorage/GoogleDrive-…`. The first visit may show a macOS prompt asking to let Burrow access the provider's files.
+
+Files whose content is stored only online carry a cloud badge in every view, and the inspector shows the provider and the status:
+
+- **Download Now** (context menu or the inspector button) asks the provider to download the selected files or folders. A spinner shows progress; the badge clears when the download finishes.
+- **Remove Download** frees the local copy. The item stays in the cloud. Providers refuse this for files with changes that have not been uploaded yet.
+- Opening a cloud-only file downloads it, as in Finder.
+
+Nothing else downloads cloud files. Indexing, folder sizes, content search (`grep:`), the duplicate finder, checksums, previews and thumbnails read with downloading turned off (`IOPOL_MATERIALIZE_DATALESS_FILES_OFF`). Cloud-only files are skipped and reported: search shows how many files were not searched, a folder size containing cloud-only folders is shown as a minimum (`≥`), and the checksum and preview panels ask you to download the file first. Folder sizes count the full size of cloud-only files, as Finder does; the disk map counts only bytes stored on this Mac.
+
 ## Data, permissions, and safety
 
 ### Local data and access

@@ -14,6 +14,8 @@ public struct IndexedFileEntry: Sendable {
     public let isDirectory: Bool
     public let isSymlink: Bool
     public let isHidden: Bool
+    /// Content stored only in the cloud (iCloud Drive or a File Provider app).
+    public let isDataless: Bool
 
     public init(
         name: String,
@@ -26,7 +28,8 @@ public struct IndexedFileEntry: Sendable {
         isDirectory: Bool,
         isSymlink: Bool,
         isHidden: Bool,
-        mtimeNanoseconds: Int64 = 0
+        mtimeNanoseconds: Int64 = 0,
+        isDataless: Bool = false
     ) {
         self.name = name
         self.lowerNameUTF8 = lowerNameUTF8
@@ -39,6 +42,7 @@ public struct IndexedFileEntry: Sendable {
         self.isDirectory = isDirectory
         self.isSymlink = isSymlink
         self.isHidden = isHidden
+        self.isDataless = isDataless
     }
 
     public var fullPath: String {
@@ -80,7 +84,8 @@ public struct IndexedFileEntry: Sendable {
             grepMatch: grepMatch,
             tags: tags,
             treeDepth: treeDepth,
-            searchScore: score
+            searchScore: score,
+            isCloudOnly: isDataless
         )
     }
 }
@@ -106,6 +111,8 @@ public enum BulkCrawler {
         public let unreadableDirectoryCount: Int
         public let wasCancelled: Bool
         public let reachedEntryLimit: Bool
+        /// Cloud folders whose contents are not on this Mac; never downloaded.
+        public var cloudOnlyDirectoryCount: Int = 0
     }
 
     /// Compatibility listing; callers needing completeness use readDirectoryResult.
@@ -127,7 +134,7 @@ public enum BulkCrawler {
         var attrList = attrlist()
         attrList.bitmapcount = UInt16(ATTR_BIT_MAP_COUNT)
         attrList.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS) | attrgroup_t(ATTR_CMN_NAME) |
-            attrgroup_t(ATTR_CMN_OBJTYPE) | attrgroup_t(ATTR_CMN_MODTIME)
+            attrgroup_t(ATTR_CMN_OBJTYPE) | attrgroup_t(ATTR_CMN_MODTIME) | attrgroup_t(ATTR_CMN_FLAGS)
         attrList.fileattr = attrgroup_t(ATTR_FILE_TOTALSIZE)
         let bufSize = 128 * 1024
         let rawBuf = UnsafeMutableRawPointer.allocate(byteCount: bufSize, alignment: 8)
@@ -188,6 +195,12 @@ public enum BulkCrawler {
                     mtime = entryPtr.advanced(by: offset).loadUnaligned(as: timespec.self)
                     offset += MemoryLayout<timespec>.size
                 }
+                var fileFlags: UInt32 = 0
+                if (returned.commonattr & attrgroup_t(ATTR_CMN_FLAGS)) != 0 {
+                    guard offset + 4 <= entryLength else { return DirectoryReadResult(entries: results, isComplete: false, errorCode: EIO) }
+                    fileFlags = entryPtr.advanced(by: offset).loadUnaligned(as: UInt32.self)
+                    offset += 4
+                }
                 var size: Int64 = 0
                 if (returned.fileattr & attrgroup_t(ATTR_FILE_TOTALSIZE)) != 0 {
                     guard offset + 8 <= entryLength else { return DirectoryReadResult(entries: results, isComplete: false, errorCode: EIO) }
@@ -201,7 +214,8 @@ public enum BulkCrawler {
                     results.append(IndexedFileEntry(name: name, lowerNameUTF8: lower, parentPath: parent,
                         ext: ext, charMask: ParsedFSearchQuery.computeAsciiBitmask(lower), size: objType == 2 ? 0 : size,
                         mtimeEpoch: Int64(mtime.tv_sec), isDirectory: objType == 2, isSymlink: objType == 5,
-                        isHidden: name.hasPrefix("."), mtimeNanoseconds: Int64(mtime.tv_nsec)))
+                        isHidden: name.hasPrefix("."), mtimeNanoseconds: Int64(mtime.tv_nsec),
+                        isDataless: fileFlags & UInt32(SF_DATALESS) != 0))
                 }
                 entryOffset += entryLength
             }
@@ -235,6 +249,14 @@ public enum BulkCrawler {
         var skippedCount = 0
         var unreadableCount = 0
         var reachedLimit = false
+        var cloudOnlyCount = 0
+        // Recursion must not pull cloud folders down: a dataless folder fails
+        // with EDEADLK and is reported instead of downloaded.
+        let previousPolicy = getiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD)
+        setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD, IOPOL_MATERIALIZE_DATALESS_FILES_OFF)
+        defer {
+            if previousPolicy >= 0 { setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD, previousPolicy) }
+        }
         while head < queue.count && !isCancelled() {
             guard entries.count < maxEntries else { reachedLimit = true; break }
             let path = queue[head]
@@ -248,9 +270,12 @@ public enum BulkCrawler {
             let read = readDirectoryResult(at: path, includeHidden: includeHidden,
                 maxEntries: maxEntries - entries.count, isCancelled: isCancelled)
             entries.append(contentsOf: read.entries)
-            if read.errorCode != nil { unreadableCount += 1 }
+            if let code = read.errorCode {
+                if CloudFiles.isNotDownloadedError(code) { cloudOnlyCount += 1 } else { unreadableCount += 1 }
+            }
             if !read.isComplete && read.errorCode == nil && !isCancelled() { reachedLimit = true }
             for item in read.entries where item.isDirectory && !item.isSymlink {
+                if item.isDataless { cloudOnlyCount += 1; continue }
                 if skipHeavyDevDirs && (skipped.contains(item.name) || (item.name == "Library" && item.parentPath == NSHomeDirectory())) {
                     skippedCount += 1
                 } else {
@@ -262,9 +287,9 @@ public enum BulkCrawler {
         }
         let cancelled = isCancelled()
         return CrawlResult(entries: entries,
-            isComplete: !cancelled && !reachedLimit && unreadableCount == 0 && skippedCount == 0,
+            isComplete: !cancelled && !reachedLimit && unreadableCount == 0 && skippedCount == 0 && cloudOnlyCount == 0,
             skippedDirectoryCount: skippedCount, unreadableDirectoryCount: unreadableCount,
-            wasCancelled: cancelled, reachedEntryLimit: reachedLimit)
+            wasCancelled: cancelled, reachedEntryLimit: reachedLimit, cloudOnlyDirectoryCount: cloudOnlyCount)
     }
 
     public static func crawlTree(

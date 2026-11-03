@@ -101,9 +101,10 @@ struct DuplicateFileSnapshot: Equatable, Sendable {
 }
 
 enum DuplicateSafetyError: LocalizedError {
-    case changed, unreadable, cancelled
+    case changed, unreadable, cancelled, cloudOnly
     var errorDescription: String? {
         switch self {
+        case .cloudOnly: return String(localized: "The file is stored only in the cloud. Download it to compare it.")
         case .changed: return String(localized: "A file or the original being kept has changed. Nothing more was removed; run a new scan.")
         case .unreadable: return String(localized: "The file can't be read safely. Run a new scan.")
         case .cancelled: return String(localized: "The scan was canceled.")
@@ -135,10 +136,11 @@ enum DuplicateFileSafety {
         try hooks.beforeSnapshot?()
         let before = try snapshot(at: url)
         guard before.size >= 0 else { throw DuplicateSafetyError.changed }
+        guard !CloudFiles.isDataless(path: url.path) else { throw DuplicateSafetyError.cloudOnly }
         try hooks.beforeOpen?()
         if isCancelled() { throw DuplicateSafetyError.cancelled }
-        let fd = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
-        guard fd >= 0 else { throw DuplicateSafetyError.unreadable }
+        let fd = CloudFiles.withoutDownloading { Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK) }
+        guard fd >= 0 else { throw errno == EDEADLK ? DuplicateSafetyError.cloudOnly : DuplicateSafetyError.unreadable }
         defer { Darwin.close(fd) }
         var info = stat()
         guard fstat(fd, &info) == 0, try DuplicateFileSnapshot(info) == before else { throw DuplicateSafetyError.changed }
@@ -199,7 +201,8 @@ enum DuplicateFileSafety {
         for sameSize in bySize.values where sameSize.count > 1 {
             var byHash: [String: [(FileItem, DuplicateFileSnapshot)]] = [:]
             var seenIdentities = Set<String>()
-            for entry in sameSize.sorted(by: { $0.fullPath < $1.fullPath }) {
+            // Hashing a cloud-only file would download it; such files are left out.
+            for entry in sameSize.sorted(by: { $0.fullPath < $1.fullPath }) where !entry.isDataless {
                 if token.isCancelled { return ([], failed) }
                 do {
                     let item = entry.toFileItem(loadTags: false)

@@ -133,11 +133,14 @@ final class FileChecksumService: @unchecked Sendable {
             throw FileChecksumFailure.io(NSError(domain: NSPOSIXErrorDomain, code: Int(errno)).localizedDescription)
         }
         guard entry.st_mode & S_IFMT == S_IFREG else { throw FileChecksumFailure.notRegular }
+        guard entry.st_flags & UInt32(SF_DATALESS) == 0 else {
+            throw FileChecksumFailure.io(String(localized: "The file is stored only in the cloud. Download it first, then calculate the checksum."))
+        }
         try hooks.beforeOpen?()
         try checkCancellation(request)
         // NONBLOCK also protects the lstat/open race if a regular entry is
         // replaced by a FIFO. NOFOLLOW rejects a replacement leaf symlink.
-        let fd = url.path.withCString { Darwin.open($0, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC | O_NOCTTY) }
+        let fd = CloudFiles.withoutDownloading { url.path.withCString { Darwin.open($0, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC | O_NOCTTY) } }
         guard fd >= 0 else {
             throw FileChecksumFailure.io(NSError(domain: NSPOSIXErrorDomain, code: Int(errno)).localizedDescription)
         }

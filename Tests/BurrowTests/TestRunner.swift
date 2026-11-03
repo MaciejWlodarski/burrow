@@ -62,6 +62,7 @@ func expect(_ condition: @autoclosure () -> Bool, file: StaticString = #filePath
             try await SearchIndexRegressionTests.runAll()
             print("Search/index regression suite passed")
             try SidebarFavoritesRegressionTests.runAll()
+            try CloudFilesRegressionTests.runAll()
             try await VolumeRefreshRegressionTests.runAll()
             try await SessionRestorationRegressionTests().runAll()
             try await QuickLookOwnershipRegressionTests().runAll()

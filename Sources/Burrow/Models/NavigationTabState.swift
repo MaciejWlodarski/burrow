@@ -182,6 +182,9 @@ public final class PaneTabState: ObservableObject, Identifiable {
             return searchQuery
         }
         let name = currentURL.lastPathComponent
+        if currentURL.deletingLastPathComponent().path.hasSuffix("/Library/CloudStorage") {
+            return CloudFiles.describe(folderName: name).0
+        }
         return name.isEmpty || name == "/" ? "Macintosh HD" : name
     }
 

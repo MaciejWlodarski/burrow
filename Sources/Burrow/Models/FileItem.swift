@@ -226,6 +226,8 @@ public struct FileItem: Identifiable, Hashable, Sendable {
     public var tags: [FinderTagColor]
     public var treeDepth: Int
     public var searchScore: Int
+    /// Content stored only in the cloud; opening it downloads it.
+    public let isCloudOnly: Bool
 
     public init(
         url: URL,
@@ -244,7 +246,8 @@ public struct FileItem: Identifiable, Hashable, Sendable {
         grepMatch: GrepMatchSnippet? = nil,
         tags: [FinderTagColor] = [],
         treeDepth: Int = 0,
-        searchScore: Int = 0
+        searchScore: Int = 0,
+        isCloudOnly: Bool = false
     ) {
         self.url = url
         self.name = name
@@ -263,6 +266,7 @@ public struct FileItem: Identifiable, Hashable, Sendable {
         self.tags = tags
         self.treeDepth = treeDepth
         self.searchScore = searchScore
+        self.isCloudOnly = isCloudOnly
     }
 
     /// Application bundles are directories on disk but must never receive drops as folders.
@@ -315,7 +319,8 @@ public struct FileItem: Identifiable, Hashable, Sendable {
         lhs.gitStatus == rhs.gitStatus &&
         lhs.grepMatch == rhs.grepMatch &&
         lhs.tags == rhs.tags &&
-        lhs.treeDepth == rhs.treeDepth
+        lhs.treeDepth == rhs.treeDepth &&
+        lhs.isCloudOnly == rhs.isCloudOnly
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -472,7 +477,8 @@ public final class FileIconCache: ObservableObject {
     }
 
     public func requestThumbnailIfNeeded(for item: FileItem) {
-        guard item.supportsRichThumbnail else { return }
+        // A thumbnail of a cloud-only file could make macOS download it.
+        guard item.supportsRichThumbnail, !item.isCloudOnly else { return }
         synchronizeThumbnailVersion(for: item)
         let path = item.path
         let retry = thumbnailFailures[path]

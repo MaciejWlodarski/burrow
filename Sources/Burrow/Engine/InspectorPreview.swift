@@ -134,9 +134,12 @@ final class InspectorPreviewService: @unchecked Sendable {
               entry.st_mode & S_IFMT == S_IFREG else {
             return .unavailable(String(localized: "Quick preview supports only regular files, not symbolic links or devices."))
         }
+        guard entry.st_flags & UInt32(SF_DATALESS) == 0 else {
+            return .unavailable(String(localized: "This file is stored only in the cloud. Download it to preview its contents."))
+        }
         try hooks.beforeOpen?()
         try check(request)
-        let fd = input.url.path.withCString { Darwin.open($0, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC | O_NOCTTY) }
+        let fd = CloudFiles.withoutDownloading { input.url.path.withCString { Darwin.open($0, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC | O_NOCTTY) } }
         guard fd >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
         let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         defer { try? handle.close() }

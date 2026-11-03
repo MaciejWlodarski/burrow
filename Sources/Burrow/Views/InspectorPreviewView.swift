@@ -195,6 +195,7 @@ public struct InspectorPreviewView: View {
                                     .font(FinderUI.captionFont)
                             }
                             metadataRow(label: "Modified", value: FormatHelpers.formatDate(item.modificationDate))
+                            CloudInspectorRow(item: item)
 
                             // The editable value has its own line so the narrow inspector stays readable.
                             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {

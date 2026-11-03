@@ -420,7 +420,7 @@ public final class FSearchIndex: @unchecked Sendable {
             var nameLen = UInt16(nameUTF8.count)
             var parentLen = UInt16(parentUTF8.count)
             let extLen = UInt8(extUTF8.count)
-            let flags: UInt8 = (item.isDirectory ? 1 : 0) | (item.isSymlink ? 2 : 0) | (item.isHidden ? 4 : 0)
+            let flags: UInt8 = (item.isDirectory ? 1 : 0) | (item.isSymlink ? 2 : 0) | (item.isHidden ? 4 : 0) | (item.isDataless ? 8 : 0)
             var mask = item.charMask
             var size = item.size
             var mtime = item.mtimeEpoch
@@ -523,7 +523,8 @@ public final class FSearchIndex: @unchecked Sendable {
                     isDirectory: (flags & 1) != 0,
                     isSymlink: (flags & 2) != 0,
                     isHidden: (flags & 4) != 0,
-                    mtimeNanoseconds: nanoseconds
+                    mtimeNanoseconds: nanoseconds,
+                    isDataless: (flags & 8) != 0
                 ))
             }
             guard offset == totalBytes, result.count == expectedCount else { return nil }
@@ -669,11 +670,11 @@ public final class FSearchIndex: @unchecked Sendable {
     static func changedDirectoryPaths(previous: [IndexedFileEntry], replacement: [IndexedFileEntry]) -> Set<String> {
         struct Stamp: Equatable {
             let size: Int64; let seconds: Int64; let nanos: Int64
-            let directory: Bool; let symlink: Bool; let hidden: Bool
+            let directory: Bool; let symlink: Bool; let hidden: Bool; let dataless: Bool
         }
         func stamp(_ e: IndexedFileEntry) -> Stamp {
             Stamp(size: e.size, seconds: e.mtimeEpoch, nanos: e.mtimeNanoseconds,
-                  directory: e.isDirectory, symlink: e.isSymlink, hidden: e.isHidden)
+                  directory: e.isDirectory, symlink: e.isSymlink, hidden: e.isHidden, dataless: e.isDataless)
         }
         var old: [String: IndexedFileEntry] = [:]
         for entry in previous { old[entry.fullPath] = entry }
@@ -706,7 +707,7 @@ public final class FSearchIndex: @unchecked Sendable {
                 totalIndexedCount: indexedCount,
                 backendName: "fsearch-native",
                 isPartial: isCancelled(),
-                diagnostic: parsed.validationError ?? (isCancelled() ? "Search canceled." : nil)
+                diagnostic: parsed.validationError ?? (isCancelled() ? String(localized: "Search canceled.") : nil)
             )
         }
 
@@ -731,13 +732,16 @@ public final class FSearchIndex: @unchecked Sendable {
                 maxEntries: 500_000, includeHidden: includeHidden, isCancelled: isCancelled)
             candidateEntries = crawl.entries
             partial = !crawl.isComplete
+            if crawl.cloudOnlyDirectoryCount > 0 {
+                diagnostics.append(String(localized: "\(crawl.cloudOnlyDirectoryCount) cloud folders are not downloaded and were not searched."))
+            }
         case .wholeIndex:
             pthread_rwlock_rdlock(lockPtr)
             candidateEntries = entries
             partial = indexIsPartial
             pthread_rwlock_unlock(lockPtr)
         }
-        if partial { diagnostics.append("Partial search: some directories were skipped, unreadable, exceeded the scan limit, or could not be monitored.") }
+        if partial { diagnostics.append(String(localized: "Partial search: some folders were skipped, unreadable, over the scan limit, or could not be monitored.")) }
 
         let totalCount = candidateEntries.count
         if totalCount == 0 {
@@ -756,7 +760,7 @@ public final class FSearchIndex: @unchecked Sendable {
             do { compiledRegex = try NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) }
             catch {
                 return FSearchResultBundle(items: [], elapsedMilliseconds: 0, totalIndexedCount: indexedCount,
-                    backendName: "fsearch-native", diagnostic: "Invalid regular expression: \(error.localizedDescription)")
+                    backendName: "fsearch-native", diagnostic: String(localized: "Invalid regular expression: \(error.localizedDescription)"))
             }
         } else {
             compiledRegex = nil
@@ -861,12 +865,15 @@ public final class FSearchIndex: @unchecked Sendable {
         if let grepPattern = parsed.grepPattern, !grepPattern.isEmpty {
             var matches: [FileItem] = []
             var skippedContentFiles = 0
+            var cloudOnlyFiles = 0
             // Candidates are already ranked. Apply the limit to actual matches,
             // not to the first 1500 names, and stop without allocating a task/file.
             for candidate in allScored {
                 if isCancelled() || matches.count >= parsed.limit { break }
                 let entry = candidateEntries[candidate.index]
                 if entry.isDirectory { continue }
+                // Searching inside a cloud-only file would download it.
+                if entry.isDataless || CloudFiles.isDataless(path: entry.fullPath) { cloudOnlyFiles += 1; continue }
                 var skipped = false
                 if let snippet = grepFileContentWithTrigramCache(path: entry.fullPath,
                     mtimeEpoch: entry.mtimeEpoch, pattern: grepPattern,
@@ -879,7 +886,11 @@ public final class FSearchIndex: @unchecked Sendable {
             }
             if skippedContentFiles > 0 {
                 partial = true
-                diagnostics.append("Content was not searched in \(skippedContentFiles) unreadable, binary, or over-15-MiB files.")
+                diagnostics.append(String(localized: "Content was not searched in \(skippedContentFiles) unreadable, binary, or over-15-MiB files."))
+            }
+            if cloudOnlyFiles > 0 {
+                partial = true
+                diagnostics.append(String(localized: "Content was not searched in \(cloudOnlyFiles) files stored only in the cloud. Download them to include them."))
             }
             finalItems = matches
         } else {
@@ -902,7 +913,7 @@ public final class FSearchIndex: @unchecked Sendable {
             totalIndexedCount: indexedCount,
             backendName: loadedFromMMapCache ? "fsearch-mmap" : "fsearch-native",
             isPartial: partial || isCancelled(),
-            diagnostic: isCancelled() ? "Search canceled." : (diagnostics.isEmpty ? nil : diagnostics.joined(separator: " "))
+            diagnostic: isCancelled() ? String(localized: "Search canceled.") : (diagnostics.isEmpty ? nil : diagnostics.joined(separator: " "))
         )
     }
 
@@ -1243,6 +1254,12 @@ public final class FSearchIndex: @unchecked Sendable {
         isCancelled: @Sendable () -> Bool,
         wasSkipped: inout Bool
     ) -> GrepMatchSnippet? {
+        // Never download a cloud file to search it; such a read fails instead.
+        let previousPolicy = getiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD)
+        setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD, IOPOL_MATERIALIZE_DATALESS_FILES_OFF)
+        defer {
+            if previousPolicy >= 0 { setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD, previousPolicy) }
+        }
         let fd = Darwin.open(path, O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW)
         guard fd >= 0 else { wasSkipped = true; return nil }
         defer { Darwin.close(fd) }

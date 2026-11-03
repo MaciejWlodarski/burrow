@@ -12,6 +12,7 @@ public struct PathBreadcrumbSegment: Identifiable {
 public struct PathBreadcrumbBar: View {
     @ObservedObject var appState: AppState
     @ObservedObject var pane: PaneTabState
+    @ObservedObject private var cloud = CloudActivity.shared
     @ViewState private var editablePathText: String = ""
     @ViewState private var pathValidationMessage: String? = nil
     @ViewState private var isPathFieldFocused = false
@@ -24,11 +25,23 @@ public struct PathBreadcrumbBar: View {
     /// Like an Explorer address bar, a path on another volume starts at that
     /// volume (`_WIZUALIZACJE › _ARCHIWUM`), not at `Macintosh HD › Volumes`.
     private var segments: [PathBreadcrumbSegment] {
-        Self.segments(for: pane.currentURL, volumes: appState.mountedVolumes)
+        Self.segments(for: pane.currentURL, volumes: appState.mountedVolumes, clouds: cloud.locations)
     }
 
-    static func segments(for url: URL, volumes: [VolumeInfoItem]) -> [PathBreadcrumbSegment] {
+    static func segments(for url: URL, volumes: [VolumeInfoItem], clouds: [CloudFiles.Location] = []) -> [PathBreadcrumbSegment] {
         let path = url.standardizedFileURL.path
+        // Cloud storage starts at the provider, as Finder shows it:
+        // "Google Drive › My Drive", not "… › CloudStorage › GoogleDrive-me@…".
+        if let cloud = clouds.first(where: { path == $0.url.path || path.hasPrefix($0.url.path + "/") }) {
+            var runningURL = URL(fileURLWithPath: cloud.url.path, isDirectory: true)
+            var result = [PathBreadcrumbSegment(name: cloud.provider, url: runningURL, isRoot: true,
+                                                symbol: cloud.provider == "iCloud Drive" ? "icloud" : "cloud")]
+            for component in path.dropFirst(cloud.url.path.count).split(separator: "/") {
+                runningURL = runningURL.appendingPathComponent(String(component), isDirectory: true)
+                result.append(PathBreadcrumbSegment(name: String(component), url: runningURL, isRoot: false))
+            }
+            return result
+        }
         let volume = volumes
             .filter { $0.url.path != "/" && (path == $0.url.path || path.hasPrefix($0.url.path + "/")) }
             .max { $0.url.path.count < $1.url.path.count }

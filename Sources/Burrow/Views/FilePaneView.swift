@@ -430,6 +430,8 @@ public struct FilePaneView: View {
                         if let git = item.gitStatus {
                             gitStatusBadge(git, isSelected: isSelected)
                         }
+
+                        CloudStatusBadge(item: item, isSelected: isSelected, selectionColor: selectionForegroundColor)
                     }
 
                     if showSubpath {
@@ -591,6 +593,7 @@ public struct FilePaneView: View {
                                     .foregroundStyle(isSelected ? selectionForegroundColor : Color.primary)
                                     .lineLimit(2)
                                     .multilineTextAlignment(.center)
+                                CloudStatusBadge(item: item, isSelected: isSelected, selectionColor: selectionForegroundColor)
                             }
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
@@ -930,6 +933,8 @@ public struct FilePaneView: View {
             }
         }
 
+        CloudContextMenuItems(item: item, targets: targetItems)
+
         Divider()
 
         // Native macOS Color Tags Menu
@@ -1178,6 +1183,7 @@ private struct MillerColumnSingleListView: View {
                                 .foregroundStyle(isInTrail ? selectionForegroundColor : Color.primary)
                                 .lineLimit(1)
                             Spacer()
+                            CloudStatusBadge(item: item, isSelected: isInTrail, selectionColor: selectionForegroundColor)
                             let tags = pane.cachedTags(for: item.path) ?? item.tags
                             if let firstTag = tags.first {
                                 Circle()

@@ -6,6 +6,7 @@ public struct SidebarView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var activeTab: PaneTabState
     @StateObject private var dropLoad = FileDropLoadController()
+    @ObservedObject private var cloud = CloudActivity.shared
     @Environment(\.controlActiveState) private var controlActiveState
 
     @ViewState private var dropTargetedPath: String? = nil
@@ -39,6 +40,7 @@ public struct SidebarView: View {
                     favoritesSection
                     favoriteSectionSpacing
                     placesSection
+                    cloudSection
                     tagsSection.padding(.top, FinderUI.sidebarSectionGap)
                 }
                 .padding(.horizontal, FinderUI.sidebarInset)
@@ -100,6 +102,62 @@ public struct SidebarView: View {
                 }
             }
         }
+    }
+
+    /// iCloud Drive and File Provider accounts (Google Drive, OneDrive,
+    /// Dropbox…), found in ~/Library/CloudStorage.
+    @ViewBuilder
+    private var cloudSection: some View {
+        if !cloud.locations.isEmpty {
+            VStack(alignment: .leading, spacing: FinderUI.sidebarRowGap) {
+                sidebarSectionHeader("Cloud")
+                ForEach(cloud.locations) { location in
+                    cloudRow(location)
+                }
+            }
+            .padding(.top, FinderUI.sidebarSectionGap)
+        }
+    }
+
+    private func cloudRow(_ location: CloudFiles.Location) -> some View {
+        let isSelected = isLocationSelected(location.url)
+        return Button {
+            navigate(to: location.url)
+        } label: {
+            HStack(spacing: FinderUI.rowSpacing) {
+                Group {
+                    if let icon = cloud.icon(for: location) {
+                        Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                    } else {
+                        Image(systemName: location.provider == "iCloud Drive" ? "icloud" : "cloud")
+                            .foregroundStyle(isSelected ? selectedTextColor : Color.secondary)
+                    }
+                }
+                .frame(width: FinderUI.sidebarIconWidth)
+                .accessibilityHidden(true)
+                Text(location.title)
+                    .lineLimit(1)
+                // The account matters only when one provider has several.
+                if let account = location.account,
+                   cloud.locations.filter({ $0.provider == location.provider }).count > 1 {
+                    Text(account)
+                        .font(FinderUI.captionFont)
+                        .foregroundStyle(isSelected ? selectedTextColor.opacity(0.8) : Color.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(isSelected ? selectedTextColor : Color.primary)
+            .padding(.leading, FinderUI.sidebarRowInset)
+            .frame(minHeight: FinderUI.sidebarRowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(rowBackground(isSelected: isSelected))
+        .help(location.account.map { "\(location.provider) – \($0)" } ?? location.provider)
+        .accessibilityLabel(location.account.map { "\(location.title), \($0)" } ?? location.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var tagsAreExpanded: Bool {

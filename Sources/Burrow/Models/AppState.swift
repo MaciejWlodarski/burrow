@@ -219,7 +219,11 @@ public final class AppState: ObservableObject {
         #if !BURROW_TESTING
         let volumes = VolumeRefreshService.production()
         volumeService = volumes
-        volumes.start { [weak self] result in self?.volumeInventory.apply(result) }
+        volumes.start { [weak self] result in
+            self?.volumeInventory.apply(result)
+            // Signing in to a cloud app mounts a File Provider domain.
+            CloudActivity.shared.refreshLocations()
+        }
         #endif
         setupIndexCallbacks()
         #if !BURROW_TESTING
@@ -327,6 +331,18 @@ public final class AppState: ObservableObject {
         FileIconCache.shared.invalidate(containing: path)
         FolderSizeCache.shared.revalidate(containing: path)
         for tab in tabs + [rightPane] where tab.isAffectedByDirectoryChanges([path]) {
+            tab.reloadDirectory(invalidateCaches: false)
+        }
+    }
+
+    /// A cloud download or eviction changed items in these folders.
+    func refreshFolders(containing paths: Set<String>) {
+        for path in paths {
+            FSearchIndex.shared.enqueueDirectoryRefresh(path)
+            FileIconCache.shared.invalidate(containing: path)
+            FolderSizeCache.shared.revalidate(containing: path)
+        }
+        for tab in tabs + [rightPane] where tab.isAffectedByDirectoryChanges(paths) {
             tab.reloadDirectory(invalidateCaches: false)
         }
     }

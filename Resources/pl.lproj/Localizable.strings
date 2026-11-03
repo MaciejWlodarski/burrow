@@ -830,3 +830,29 @@
 "Check for Updates…" = "Sprawdź uaktualnienia…";
 "Report an Issue…" = "Zgłoś problem…";
 "Burrow on GitHub" = "Burrow w serwisie GitHub";
+"%lld cloud folders are not downloaded and were not searched." = "Nie przeszukano %lld folderów w chmurze, które nie są pobrane.";
+"Partial search: some folders were skipped, unreadable, over the scan limit, or could not be monitored." = "Wyniki częściowe: część folderów pominięto, była nieczytelna, przekroczyła limit skanowania lub nie można jej było monitorować.";
+"Content was not searched in %lld unreadable, binary, or over-15-MiB files." = "Nie przeszukano treści %lld plików: nieczytelnych, binarnych lub większych niż 15 MiB.";
+"Content was not searched in %lld files stored only in the cloud. Download them to include them." = "Nie przeszukano treści %lld plików przechowywanych tylko w chmurze. Pobierz je, aby je uwzględnić.";
+"Search canceled." = "Anulowano wyszukiwanie.";
+"Invalid regular expression: %@" = "Nieprawidłowe wyrażenie regularne: %@";
+"The file is stored only in the cloud. Download it to compare it." = "Plik jest przechowywany tylko w chmurze. Pobierz go, aby go porównać.";
+"The file is stored only in the cloud. Download it first, then calculate the checksum." = "Plik jest przechowywany tylko w chmurze. Najpierw go pobierz, a potem oblicz sumę kontrolną.";
+"This file is stored only in the cloud. Download it to preview its contents." = "Ten plik jest przechowywany tylko w chmurze. Pobierz go, aby zobaczyć podgląd zawartości.";
+
+/* Cloud storage */
+"Downloading “%@”…" = "Pobieranie „%@”…";
+"Downloading %lld items…" = "Pobieranie %lld rzeczy…";
+"Could not download: %@" = "Nie udało się pobrać: %@";
+"Removed the downloaded copy of %lld items. They stay in the cloud." = "Usunięto pobraną kopię (%lld). Pliki zostają w chmurze.";
+"Could not remove the download: %@" = "Nie udało się usunąć pobranej kopii: %@";
+"Download finished." = "Pobieranie zakończone.";
+"Downloading…" = "Pobieranie…";
+"Stored only in the cloud" = "Tylko w chmurze";
+"Stored only in %@. Opening it downloads it; Download Now keeps a copy on this Mac." = "Tylko w %@. Otwarcie pobierze plik; „Pobierz teraz” zachowa kopię na tym Macu.";
+"Stored only in the cloud. Opening it downloads it; Download Now keeps a copy on this Mac." = "Tylko w chmurze. Otwarcie pobierze plik; „Pobierz teraz” zachowa kopię na tym Macu.";
+"Download Now" = "Pobierz teraz";
+"Remove Download" = "Usuń pobraną kopię";
+"Download" = "Pobierz";
+"Cloud folder" = "Folder w chmurze";
+"Downloaded to this Mac" = "Pobrane na ten Mac";
