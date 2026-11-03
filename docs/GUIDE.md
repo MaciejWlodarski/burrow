@@ -61,8 +61,8 @@ Type a query into the search bar or open quick search with **⌘P**.
 | Query | Purpose |
 | --- | --- |
 | `report ext:pdf` | Find PDFs matching “report” |
-| `size:>10mb mtime:<7d` | Find files over 10 MiB modified within the last 7 days |
-| `size:=1.5kb` | Match exactly 1,536 bytes |
+| `size:>10mb mtime:<7d` | Find files over 10 MB modified within the last 7 days |
+| `size:=1.5kb` | Match exactly 1,500 bytes |
 | `type:image` | Filter by image type |
 | `in:Sources grep:TODO` | Look for TODO content in matching source paths |
 | `git:modified` | Filter by recorded Git status |
@@ -73,7 +73,7 @@ Additional syntax includes `regex:`, `tag:`, `^prefix`, and `suffix$`. The Filte
 
 - **Exclusions:** `!` or `-` can exclude ordinary terms and extension filters (`!ext:log` or `-ext:log`). Negating other recognized filters, such as `!type:image`, shows a diagnostic and returns no results rather than ignoring the restriction.
 - **Invalid values:** malformed filter values, such as `size:huge`, `sym:maybe`, or `ext:pdf,`, show a diagnostic and return no results. Unknown keys and empty values, such as `unknown:value` and `ext:`, remain ordinary search terms rather than active filters.
-- **Sizes:** `kb`, `mb`, and `gb` use binary units, as do `kib`, `mib`, and `gib`. Use `=` for an exact byte count; a bare value means “at least.” Decimal quantities are scaled without floating-point rounding, then fractional bytes are discarded. Out-of-range values are rejected.
+- **Sizes:** `kb`, `mb`, and `gb` are decimal (1 MB = 1,000,000 bytes), matching the size column, Finder and the `burrow` CLI; `kib`, `mib`, and `gib` are binary. Use `=` for an exact byte count; a bare value means “at least.” Decimal quantities are scaled without floating-point rounding, then fractional bytes are discarded. Out-of-range values are rejected.
 - **Filename matching:** name terms are lowercased and normalized to Unicode NFC, so composed and decomposed spellings match without changing the original filenames or paths. This normalization does not apply to regex, content, or path predicates. Fuzzy typo tolerance and subsequence matching still operate on normalized UTF-8 bytes, not full Unicode character edit distance.
 
 **The index is not the entire disk.** Even with the “Indeks plików” (file index) scope, it covers configured roots, subject to exclusions, permissions, and search limits. On first use, default roots include existing Desktop, Documents, Downloads, `dev`, `Projects`, and `Developer` folders in your home directory, plus `/Applications`. Review the indexing settings before relying on its coverage. After saving, your configured roots, excluded directory names, heavy-development-folder exclusion setting, and persistent-cache setting are retained across launches. An explicitly empty root list stays empty; saved offline locations are retained rather than replaced with defaults.

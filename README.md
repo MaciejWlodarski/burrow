@@ -67,7 +67,7 @@ Search the current folder, its subfolders, or the whole index. Burrow's engine u
 
 ```text
 report ext:pdf                 PDFs matching "report"
-size:>10mb mtime:<7d           over 10 MiB, changed in the last week
+size:>10mb mtime:<7d           over 10 MB, changed in the last week
 type:image in:~/Pictures       images under a folder
 in:Sources grep:TODO           TODO inside files under Sources
 git:modified                   files with uncommitted changes

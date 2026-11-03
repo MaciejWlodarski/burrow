@@ -26,13 +26,14 @@ public enum FormatHelpers {
         let units = ["B", "KB", "MB", "GB", "TB"]
         var value = Double(bytes)
         var unitIndex = 0
-        while value >= 1024 && unitIndex < units.count - 1 {
-            value /= 1024
+        // Decimal units, as Finder, About This Mac and the burrow CLI use.
+        while value >= 1000 && unitIndex < units.count - 1 {
+            value /= 1000
             unitIndex += 1
         }
-        // Rounding to the displayed precision can reach 1024 (e.g. 1023.7 KB -> "1024 KB").
-        if unitIndex > 0 && unitIndex < units.count - 1 && value.rounded() >= 1024 {
-            value /= 1024
+        // Rounding to the displayed precision can reach 1000 (e.g. 999.7 KB -> "1000 KB").
+        if unitIndex > 0 && unitIndex < units.count - 1 && value.rounded() >= 1000 {
+            value /= 1000
             unitIndex += 1
         }
         if unitIndex == 0 {

@@ -562,9 +562,13 @@ public struct ParsedFSearchQuery: Sendable {
         }
         let mult: Int64
         switch unitStr.lowercased() {
-        case "g", "gb", "gib": mult = 1024 * 1024 * 1024
-        case "m", "mb", "mib": mult = 1024 * 1024
-        case "k", "kb", "kib": mult = 1024
+        // Decimal like Finder and the size column; kib/mib/gib stay binary.
+        case "g", "gb": mult = 1_000_000_000
+        case "m", "mb": mult = 1_000_000
+        case "k", "kb": mult = 1_000
+        case "gib": mult = 1024 * 1024 * 1024
+        case "mib": mult = 1024 * 1024
+        case "kib": mult = 1024
         case "b", "": mult = 1
         default: return nil
         }

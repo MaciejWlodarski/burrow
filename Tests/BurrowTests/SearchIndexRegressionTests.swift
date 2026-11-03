@@ -56,7 +56,7 @@ struct SearchIndexRegressionTests {
         let maximum = ParsedFSearchQuery.parse("size:9223372036854775807")
         try expect(maximum.validationError == nil)
         try expect(maximum.sizeFilters.first?.bytes == Int64.max)
-        try expect(ParsedFSearchQuery.parse("size:1.5kb").sizeFilters.first?.bytes == 1536)
+        try expect(ParsedFSearchQuery.parse("size:1.5kb").sizeFilters.first?.bytes == 1500)
         try expect(ParsedFSearchQuery.parse("size:0").sizeFilters.first?.bytes == 0)
         let quoted = ParsedFSearchQuery.parse(#"grep:"hello world" in:'My Documents' regex:"\\d+ report""#)
         try expect(quoted.validationError == nil)

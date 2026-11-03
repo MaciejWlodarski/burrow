@@ -131,10 +131,11 @@ struct SearchQuerySafetyRegressionTests {
         try expect(ParsedFSearchQuery.parse(#""!type:image" "ext:pdf" "file:colon""#).terms == [.exact("!type:image"), .exact("ext:pdf"), .exact("file:colon")])
         try expect(ParsedFSearchQuery.parse(#"-"old draft" ^"my file""#).terms == [.excluded("old draft"), .prefix("my file")])
         try expect(ParsedFSearchQuery.parse(#"!"a b" "c d"$"#).terms == [.excluded("a b"), .suffix("c d")])
-        try expect(FormatHelpers.formatBytes(1_048_500) == "1.00 MB" && FormatHelpers.formatBytes(1023) == "1023 B")
+        try expect(FormatHelpers.formatBytes(999_500) == "1.00 MB" && FormatHelpers.formatBytes(999) == "999 B")
+        try expect(FormatHelpers.formatBytes(115_343_360) == "115 MB" && FormatHelpers.formatBytes(1_500) == "1.50 KB")
         try expect(ParsedFSearchQuery.parse("type:swift").typeFilters == ["swift"])
         try expect(ParsedFSearchQuery.parse("unknown:value ext:").validationError == nil)
-        for (value, bytes) in [("9007199254740993.0b", Int64(9007199254740993)), ("9223372036854775807.0b", Int64.max), ("1.5kb", 1536), (".5b", 0), ("0.999999999999999999999999b", 0), ("1.b", 1)] {
+        for (value, bytes) in [("9007199254740993.0b", Int64(9007199254740993)), ("9223372036854775807.0b", Int64.max), ("1.5kb", 1500), ("1.5kib", 1536), ("2mb", 2_000_000), ("2mib", 2_097_152), (".5b", 0), ("0.999999999999999999999999b", 0), ("1.b", 1)] {
             let parsed = ParsedFSearchQuery.parse("size:=\(value)")
             try expect(parsed.validationError == nil && parsed.sizeFilters.first?.bytes == bytes)
         }
@@ -142,6 +143,6 @@ struct SearchQuerySafetyRegressionTests {
             try expect(ParsedFSearchQuery.parse("size:\(value)").validationError != nil)
         }
         let range = ParsedFSearchQuery.parse("size:1.5kb..2kb").sizeFilters[0]
-        try expect(range.matches(1536) && range.matches(2048) && !range.matches(2049))
+        try expect(range.matches(1500) && range.matches(2000) && !range.matches(2001) && !range.matches(1499))
     }
 }
