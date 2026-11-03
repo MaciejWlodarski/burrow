@@ -61,10 +61,14 @@ jobs:
             echo 'brew install --cask burrow'
             echo '```'
             echo
-            echo "Burrow is not notarized by Apple, so macOS blocks the first launch. Open"
-            echo "**System Settings → Privacy & Security** and choose **Open Anyway**, or run"
-            echo '`xattr -dr com.apple.quarantine /Applications/Burrow.app`.'
-            echo "Grant **Full Disk Access** in the same place so the disk map can read everything."
+            echo "**First launch.** Burrow is not notarized by Apple, so macOS asks you to confirm it once:"
+            echo
+            echo "1. Open Burrow. macOS says it cannot check it for malicious software; click **Done**."
+            echo "2. Open **System Settings → Privacy & Security**, scroll to **Security** and click **Open Anyway**. Confirm with your password."
+            echo "3. Open Burrow again and choose **Open**. macOS remembers the choice for this copy."
+            echo
+            echo 'From Terminal: `xattr -dr com.apple.quarantine /Applications/Burrow.app`.'
+            echo "Burrow then offers to set up **Full Disk Access**, so folder sizes, search and the disk map need no further prompts."
             echo
             echo "Requires macOS 14 Sonoma or later. Universal: Apple silicon and Intel."
             echo

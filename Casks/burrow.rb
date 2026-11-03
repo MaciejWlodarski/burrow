@@ -19,8 +19,9 @@ cask "burrow" do
   ]
 
   caveats <<~EOS
-    Burrow is not notarized by Apple. If macOS refuses to open it, choose
-    Open Anyway in System Settings > Privacy & Security, or run:
+    Burrow is not notarized by Apple, so macOS asks you to confirm it once:
+    open Burrow, click Done, then choose Open Anyway in System Settings >
+    Privacy & Security and open it again. From Terminal:
       xattr -dr com.apple.quarantine #{appdir}/Burrow.app
   EOS
 end

@@ -120,7 +120,15 @@ brew tap maciejwlodarski/burrow https://github.com/MaciejWlodarski/burrow
 brew install --cask burrow
 ```
 
-**First launch.** Burrow is open source and not notarized by Apple, so macOS blocks it the first time. Open **System Settings → Privacy & Security** and choose **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Burrow.app`. On first launch Burrow offers to set up **Full Disk Access**: with it, folder sizes and the disk map cover protected folders without a prompt for each. You can skip it; protected folders are then sized when you ask. Releases from 0.1.1 on are signed with the same certificate, so updates keep that permission. Version 0.1.0 was signed ad hoc: after updating from it, grant Full Disk Access once more.
+**First launch.** Burrow is open source but not notarized by Apple (that needs a paid developer account), so macOS asks you to confirm it once:
+
+1. Open Burrow. macOS says it cannot check it for malicious software; click **Done**.
+2. Open **System Settings → Privacy & Security**, scroll to **Security** and click **Open Anyway** next to the message about Burrow. Confirm with your password.
+3. Open Burrow again and choose **Open**. macOS remembers the choice for this copy of the app.
+
+From Terminal the same is `xattr -dr com.apple.quarantine /Applications/Burrow.app`.
+
+On first launch Burrow offers to set up **Full Disk Access**: with it, folder sizes, search and the disk map cover protected folders without a prompt for each. You can skip it; protected folders are then sized when you ask. Releases from 0.1.1 on are signed with the same certificate, so updates keep that permission. Version 0.1.0 was signed ad hoc: after updating from it, grant Full Disk Access once more.
 
 The interface follows the macOS language (English or Polish). To choose one, open **Settings → Language**.
 
@@ -184,7 +192,7 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 - [ ] Duplicate search built on the disk-map scan, without the current 60,000-entry cap.
 - [ ] Per-folder view mode and columns, like per-folder sorting.
 - [ ] Count hard links once in search size totals and keep search crawls on one disk, as folder sizes and the disk map already do.
-- [ ] Move Trash and navigation work off the main thread; independent state for multiple windows.
+- [ ] Independent state for multiple windows; refresh an already open folder off the main thread, as opening one already is.
 - [ ] A full terminal emulator in the command drawer (it runs `zsh -c` today).
 
 Ideas and bug reports are welcome in [issues](https://github.com/MaciejWlodarski/burrow/issues).
