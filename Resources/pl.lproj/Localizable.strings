@@ -825,3 +825,8 @@
 "System Default" = "Systemowy";
 "Restart Burrow to apply the new language." = "Uruchom ponownie Burrow, aby zmienić język.";
 "Burrow uses the language of macOS unless you choose one here." = "Burrow używa języka systemu macOS, chyba że wybierzesz inny.";
+"Burrow Guide" = "Przewodnik po Burrow";
+"Release Notes" = "Informacje o wydaniach";
+"Check for Updates…" = "Sprawdź uaktualnienia…";
+"Report an Issue…" = "Zgłoś problem…";
+"Burrow on GitHub" = "Burrow w serwisie GitHub";

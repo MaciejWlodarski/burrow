@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Guide
+    url: https://github.com/MaciejWlodarski/burrow/blob/main/docs/GUIDE.md
+    about: Behavior, limits and safety checks in detail.

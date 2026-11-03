@@ -276,7 +276,20 @@ struct BurrowApp: App {
                     .keyboardShortcut("[", modifiers: [.command, .shift])
                     .disabled(appState.tabs.count < 2)
             }
+            CommandGroup(replacing: .help) {
+                Button("Burrow Guide") { Self.openProjectPage("blob/main/docs/GUIDE.md") }
+                Button("Release Notes") { Self.openProjectPage("releases") }
+                Button("Check for Updates…") { Self.openProjectPage("releases/latest") }
+                Divider()
+                Button("Report an Issue…") { Self.openProjectPage("issues/new/choose") }
+                Button("Burrow on GitHub") { Self.openProjectPage("") }
+            }
         }
+    }
+
+    private static func openProjectPage(_ path: String) {
+        guard let url = URL(string: "https://github.com/MaciejWlodarski/burrow/" + path) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private var canUseFileCommands: Bool { FinderCommandRouting.canUseFileCommands }
