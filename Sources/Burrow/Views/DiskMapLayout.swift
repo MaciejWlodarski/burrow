@@ -186,17 +186,21 @@ public enum DiskMapLayoutEngine {
                 && (x1 - x0) * (y1 - y0) <= parentArea * maximumHeaderedParentShare
             append(id, x0, y0, x1, y1, isFolder: directory, isRemainder: false, hasHeader: showsHeader, isCollapsed: collapses)
             guard isGroup, !collapses else { return }
-            // A wider inset than the gap between files, so folders read as groups.
+            // A wider inset than the gap between files, so folders read as groups. A nested
+            // named group keeps its children flush with its header strip's sides, so the
+            // edges inside one top-level group line up, and only a band of its tint below.
             let inset = (x1 - x0 > 12 && y1 - y0 > 12) ? (2 * scale).rounded() : 0
+            let flush = showsHeader && depth > 0
+            let sideInset = flush ? 0 : inset
             let header = showsHeader ? (DiskMapLayoutEngine.headerHeight(depth: depth) * scale).rounded() : 0
             // Children stay inside the group's drawn edge (its rect minus its own gutter),
             // with the same inset on all four sides once their own gutters are counted.
             let gap = Double(DiskMapLayoutEngine.tileGap(depth: depth, scale: scale))
             let childGap = Double(DiskMapLayoutEngine.tileGap(depth: depth + 1, scale: scale))
             depth += 1
-            placeChildren(of: id, x: x0 + inset, y: y0 + inset + header,
-                          width: x1 - gap - x0 - 2 * inset + childGap,
-                          height: y1 - gap - y0 - 2 * inset - header + childGap)
+            placeChildren(of: id, x: x0 + sideInset, y: y0 + sideInset + header,
+                          width: x1 - gap - x0 - 2 * sideInset + childGap,
+                          height: y1 - gap - y0 - sideInset - inset - header + childGap)
             depth -= 1
         }
 
@@ -300,14 +304,22 @@ public enum DiskMapRenderer {
                 // A hairline around a named group, header and body, so its children never
                 // read as part of a neighbouring group. A group without a header (one that
                 // fills its parent) gets none: an unnamed outline would look like a stray frame.
-                // Only a top-level group draws the outline: a nested group's own header strip
-                // marks it, and a second hairline 2 pt inside the first would stack borders.
+                // Only a top-level group draws the outline: a second hairline 2 pt inside the
+                // first would stack borders; a nested group gets a tinted block instead.
                 if tile.hasHeader && tile.depth == 0 {
                     fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderStroke)
                     let line = Int32(max(1, scale.rounded()))
                     if x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
                         fill(pixels, stride: stride, tile.x0 + line, tile.y0 + line, x1 - line, y1 - line, palette.folderBody)
                     }
+                } else if tile.hasHeader {
+                    // A nested group is a block a quarter step off its parent's body, so where
+                    // it ends is visible without a second hairline (a sibling below it, like a
+                    // collapsed folder, then clearly sits outside it).
+                    let tint = RGB((palette.folderHeader.red + 3 * palette.folderBody.red) / 4,
+                                   (palette.folderHeader.green + 3 * palette.folderBody.green) / 4,
+                                   (palette.folderHeader.blue + 3 * palette.folderBody.blue) / 4)
+                    fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, tint)
                 } else {
                     fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderBody)
                 }
@@ -347,11 +359,12 @@ public enum DiskMapRenderer {
                 continue
             }
             if tile.isCollapsed {
-                // A folder summary: the header-strip fill with a hairline inside, so a
-                // small folder reads as a folder.
-                fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderStroke)
+                // A folder summary: the header-strip fill, with a hairline inside only at the
+                // top level; inside an outlined group a second border would double that outline.
+                fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1,
+                     tile.depth == 0 ? palette.folderStroke : palette.folderHeader)
                 let line = Int32(max(1, scale.rounded()))
-                if x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
+                if tile.depth == 0, x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
                     fill(pixels, stride: stride, tile.x0 + line, tile.y0 + line, x1 - line, y1 - line, palette.folderHeader)
                 }
                 continue
@@ -459,7 +472,7 @@ public enum DiskMapRenderer {
             // A folder summary leads with a small inline folder glyph, so it never reads as a
             // header strip, wherever it still leaves a readable name width (the name wins).
             let labelInset = isCompact ? 6 * scale : inset
-            let glyph = tile.isCollapsed && width - labelInset * 2 - 15 * scale >= 46 * scale ? 15 * scale : 0
+            let glyph = tile.isCollapsed && width - labelInset * 2 - 18 * scale >= 46 * scale ? 18 * scale : 0
             func drawFolderGlyph(x: Double, top: Double) {
                 guard let symbol = NSImage(systemSymbolName: "folder.fill", accessibilityDescription: nil)?
                     .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: CGFloat(10 * scale), weight: .medium)

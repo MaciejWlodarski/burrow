@@ -364,7 +364,7 @@ private struct TerminalTabContent: View {
 
             // The hint a step lighter than the prompt, so the prompt reads as content.
             TextField("Enter a zsh command…", text: $terminal.commandInput,
-                      prompt: Text("Enter a zsh command…").foregroundColor(Color(nsColor: .tertiaryLabelColor)))
+                      prompt: Text("Enter a zsh command…").foregroundColor(Color(nsColor: .secondaryLabelColor).opacity(0.8)))
                 .textFieldStyle(.plain)
                 .font(Self.monoFont)
                 .focused($isInputFocused)
