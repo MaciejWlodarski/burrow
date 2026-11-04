@@ -312,6 +312,8 @@ private struct TerminalTabContent: View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
+                  // The prompt continues the transcript right after the last output, like a terminal.
+                  VStack(alignment: .leading, spacing: 8) {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         if outputLines.isEmpty {
                             Text(isRunning ? String(localized: "Running command…") : String(localized: "No output. Enter a command below."))
@@ -326,59 +328,61 @@ private struct TerminalTabContent: View {
                                 .id(line.id)
                         }
                     }
-                    .padding(.horizontal, FinderUI.sectionSpacing)
-                    .padding(.vertical, FinderUI.rowSpacing + 2)
+                    inputRow.id(Self.inputRowID)
+                  }
+                  .padding(.horizontal, FinderUI.sectionSpacing)
+                  .padding(.vertical, FinderUI.rowSpacing + 2)
                 }
+                .defaultScrollAnchor(.bottom)
                 .onChange(of: outputLines.last?.id) { _, _ in
-                    if let last = outputLines.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                    proxy.scrollTo(Self.inputRowID, anchor: .bottom)
                 }
             }
 
-            // The prompt continues the transcript, like a terminal, behind a hairline.
-            Divider().opacity(0.6)
-            HStack(spacing: FinderUI.rowSpacing) {
-                Text("\(terminal.directory.lastPathComponent) %")
-                    .font(Self.monoFont.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: 140, alignment: .leading)
-                    .fixedSize()
-                    .help(terminal.directory.path)
-                    .accessibilityHidden(true)
-
-                TextField("Enter a zsh command…", text: $terminal.commandInput)
-                    .textFieldStyle(.plain)
-                    .font(Self.monoFont)
-                    .focused($isInputFocused)
-                    .disabled(isRunning)
-                    .accessibilityLabel("Terminal command")
-                    .help("Press Return to run the command in the current folder. Interactive commands require an external terminal.")
-                    .onSubmit {
-                        let cmd = terminal.commandInput
-                        guard !isRunning, !cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                        terminal.commandInput = ""
-                        terminal.execute(cmd)
-                    }
-
-                if isRunning {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel("Running command")
-                    Button("Cancel") { terminal.cancel() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .help("Cancel the current command")
-                }
-            }
-            .padding(.horizontal, FinderUI.sectionSpacing)
-            .padding(.vertical, 8)
         }
         // One step off the file list's surface, so the two regions never blur together.
         .background(Color(nsColor: .textBackgroundColor).overlay(Color.primary.opacity(0.035)))
         .onAppear { isInputFocused = true }
+    }
+
+    private static let inputRowID = "terminal-input-row"
+
+    private var inputRow: some View {
+        HStack(spacing: FinderUI.rowSpacing) {
+            Text("\(terminal.directory.lastPathComponent) %")
+                .font(Self.monoFont)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 140, alignment: .leading)
+                .fixedSize()
+                .help(terminal.directory.path)
+                .accessibilityHidden(true)
+
+            TextField("Enter a zsh command…", text: $terminal.commandInput)
+                .textFieldStyle(.plain)
+                .font(Self.monoFont)
+                .focused($isInputFocused)
+                .disabled(isRunning)
+                .accessibilityLabel("Terminal command")
+                .help("Press Return to run the command in the current folder. Interactive commands require an external terminal.")
+                .onSubmit {
+                    let cmd = terminal.commandInput
+                    guard !isRunning, !cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                    terminal.commandInput = ""
+                    terminal.execute(cmd)
+                }
+
+            if isRunning {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Running command")
+                Button("Cancel") { terminal.cancel() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Cancel the current command")
+            }
+        }
     }
 
     /// Commands read "Studio % ls -lh": the prompt quiet, the command firm.

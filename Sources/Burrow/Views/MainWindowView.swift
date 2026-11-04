@@ -122,8 +122,11 @@ public struct MainWindowView: View {
                                 }
                                 .frame(minWidth: 260)
                             }
+                            .clipped()
                         } else {
+                            // Clipped, so no row peeks out over the terminal's split handle.
                             FilePaneView(appState: appState, pane: appState.leftTab, paneSide: .left, isFocusedPane: true)
+                                .clipped()
                         }
                         if appState.showTerminalDrawer {
                             terminalDivider(availableHeight: geometry.size.height)

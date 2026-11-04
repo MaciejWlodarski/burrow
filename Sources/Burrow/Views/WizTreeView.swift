@@ -872,16 +872,23 @@ public struct WizTreeAnalyzerView: View {
             ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
     }
 
-    static func treeNameWidth(_ availableWidth: CGFloat) -> CGFloat {
-        min(300, max(220, availableWidth * 0.24))
+    /// A short bar track, kept next to its percentage: a full-width track turns
+    /// the rows into a wall of progress bars that outweighs the names.
+    static func shareBarWidth(_ availableWidth: CGFloat) -> CGFloat {
+        min(200, max(120, availableWidth * 0.18))
+    }
+
+    /// The bar and its percentage, one column under one header.
+    static func shareColumnWidth(_ availableWidth: CGFloat) -> CGFloat {
+        shareBarWidth(availableWidth) + FinderUI.rowSpacing + 44
     }
 
     private func diskTreeHeader(availableWidth: CGFloat) -> some View {
         HStack(spacing: FinderUI.rowSpacing) {
             if availableWidth >= 650 {
-                Text("Name").padding(.leading, Self.treeNameInset).frame(width: Self.treeNameWidth(availableWidth), alignment: .leading)
-                // Ends over the percentages it names; the bars need no title of their own.
-                Text("Share of Total").frame(maxWidth: .infinity, alignment: .trailing)
+                Text("Name").padding(.leading, Self.treeNameInset).frame(maxWidth: .infinity, alignment: .leading)
+                // Starts over the bars and spans the percentages: one column, one title.
+                Text("Share of Total").frame(width: Self.shareColumnWidth(availableWidth), alignment: .leading)
             } else {
                 Text("Name").padding(.leading, Self.treeNameInset).frame(maxWidth: .infinity, alignment: .leading)
                 if availableWidth >= 480 { Text("Share of Total").frame(width: 48, alignment: .trailing) }
@@ -971,14 +978,12 @@ public struct WizTreeAnalyzerView: View {
                     .accessibilityLabel("No access")
             }
           }
-          // A compact name column: the share bar starts right after short names
-          // instead of across an empty band, and takes the remaining width.
-          .frame(maxWidth: availableWidth >= 650 ? Self.treeNameWidth(availableWidth) : .infinity, alignment: .leading)
+          .frame(maxWidth: .infinity, alignment: .leading)
 
             if availableWidth >= 650 {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.06))
+                        Capsule().fill(Color.primary.opacity(0.05))
                         Capsule()
                             // Neutral: category colour belongs to the summary bar and the map,
                             // and blue means selection. Never thinner than a short pill,
@@ -987,8 +992,7 @@ public struct WizTreeAnalyzerView: View {
                             .frame(width: max(10, geometry.size.width * CGFloat(barFraction)))
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 4)
+                .frame(width: Self.shareBarWidth(availableWidth), height: 4)
                 .accessibilityHidden(true)
             }
             if availableWidth >= 480 {

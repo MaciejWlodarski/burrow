@@ -91,7 +91,7 @@ public enum DiskMapLayoutEngine {
 
             // Items under 1% of their folder (and too small to label) merge
             // into one "smaller items" tile instead of a confetti of slivers.
-            let mergeArea = max(minimumArea, 44 * 30 * scale * scale, min(parentArea * 0.01, 48 * 48 * scale * scale))
+            let mergeArea = max(minimumArea, 56 * 36 * scale * scale, min(parentArea * 0.01, 48 * 48 * scale * scale))
             let kids = tree.children(of: parent)
             var index = 0
             while index < kids.count {
@@ -369,7 +369,9 @@ public enum DiskMapRenderer {
             if tile.isRemainder, let parent = tree.parent(tile.node) {
                 let rest = tree.children(of: parent).drop { $0 != tile.node }
                 bytes = rest.reduce(0) { $0 + tree.allocatedSize($1) }
+                // A compact summary tile says only how many it holds.
                 shownName = rest.count == 1 ? tree.name(tile.node)
+                    : isCompact ? "+\(rest.count.formatted())"
                     : String(localized: "\(rest.count.formatted()) smaller items")
             } else {
                 bytes = tree.allocatedSize(tile.node)
@@ -382,9 +384,9 @@ public enum DiskMapRenderer {
                 .font: sizeFont, .foregroundColor: textColor.withAlphaComponent(isGroup ? 0.7 : 0.85)])
             let name = NSAttributedString(string: shownName, attributes: [
                 .font: nameFont, .foregroundColor: textColor, .paragraphStyle: truncating])
-            // Collapsed folders lead with a small folder glyph, so they never read as a header strip.
-            // Only where it leaves room for a readable name.
-            let glyph = tile.isCollapsed && width - inset * 2 - 15 * scale >= 72 * scale ? 15 * scale : 0
+            // Collapsed folders lead with a small inline folder glyph, so they never read as a
+            // header strip. Only where it leaves room for a readable name.
+            let glyph = tile.isCollapsed && width - inset * 2 - 14 * scale >= minimumNameWidth ? 14 * scale : 0
             let available = width - inset * 2 - glyph
             let sizeWidth = size.size().width
             // A name cut to a few letters ("Brand…") says nothing; leave it to hover.
@@ -405,25 +407,16 @@ public enum DiskMapRenderer {
                 let available = width - 12 * scale
                 let compactName = NSAttributedString(string: shownName, attributes: [
                     .font: compactFont, .foregroundColor: textColor, .paragraphStyle: middleTruncating])
-                // Identity before size: a one-line name, shortened in the middle when needed.
-                // The whole name; else the size; else nothing (the hover callout names it).
+                // Identity, never a bare size: the name, shortened in the middle when needed;
+                // too narrow even for that, nothing (the hover callout names it).
                 let origin = CGPoint(x: Double(tile.x0) + 6 * scale, y: Double(tile.y0) + 4 * scale)
-                if compactName.size().width <= available {
-                    compactName.draw(in: CGRect(x: origin.x, y: origin.y, width: available, height: lineHeight))
-                } else if sizeWidth <= available {
-                    size.draw(at: origin)
-                } else {
-                    continue
-                }
+                guard compactName.size().width <= available || available >= 30 * scale else { continue }
+                compactName.draw(in: CGRect(x: origin.x, y: origin.y, width: available, height: lineHeight))
             } else {
                 // The name always leads; the size follows when it fits whole.
                 // One rule for every leaf: the label starts at the tile's own top inset.
-                var top = Double(tile.y0) + inset - 2 * scale
-                var room = tileHeight - 2 * (inset - 2 * scale)
-                // A narrow folder summary puts its glyph on a line of its own, so
-                // every summary tile carries one.
-                let glyphAbove = tile.isCollapsed && glyph == 0 && room >= lineHeight * 4
-                if glyphAbove { top += lineHeight; room -= lineHeight }
+                let top = Double(tile.y0) + inset - 2 * scale
+                let room = tileHeight - 2 * (inset - 2 * scale)
                 // Tall tiles may give a long name a second line, broken between words only;
                 // otherwise one line, shortened in the middle.
                 let wrapped = NSAttributedString(string: shownName, attributes: [
@@ -436,13 +429,12 @@ public enum DiskMapRenderer {
                                             options: [.usesLineFragmentOrigin]).height <= lineHeight * 2 + scale
                 guard available >= minimumNameWidth, nameFits || twoLines || available >= truncatedNameWidth else { continue }
                 let nameLines: Double = twoLines ? 2 : 1
-                if glyph > 0 || glyphAbove,
+                if glyph > 0,
                    let symbol = NSImage(systemSymbolName: "folder.fill", accessibilityDescription: nil)?
                     .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: CGFloat(10 * scale), weight: .medium)
                         .applying(NSImage.SymbolConfiguration(paletteColors: [textColor.withAlphaComponent(0.6)]))) {
                     let side = symbol.size
-                    let glyphTop = glyphAbove ? top - lineHeight : top
-                    symbol.draw(in: CGRect(x: x - glyph, y: glyphTop + (lineHeight - side.height) / 2, width: side.width, height: side.height),
+                    symbol.draw(in: CGRect(x: x - glyph, y: top + (lineHeight - side.height) / 2, width: side.width, height: side.height),
                                 from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
                 }
                 if twoLines {
@@ -453,8 +445,9 @@ public enum DiskMapRenderer {
                         .font: nameFont, .foregroundColor: textColor, .paragraphStyle: middleTruncating])
                         .draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
                 }
-                if sizeWidth <= available, room >= lineHeight * (nameLines + 1) {
-                    size.draw(at: CGPoint(x: x, y: top + lineHeight * nameLines))
+                // The size starts at the tile's inset, under the glyph, like every other tile.
+                if sizeWidth <= available + glyph, room >= lineHeight * (nameLines + 1) {
+                    size.draw(at: CGPoint(x: x - glyph, y: top + lineHeight * nameLines))
                 }
             }
             drawn += 1
