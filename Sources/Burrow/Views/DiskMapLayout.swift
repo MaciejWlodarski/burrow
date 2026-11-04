@@ -51,7 +51,9 @@ public enum DiskMapLayoutEngine {
     private static let minimumHeaderHeightPoints = 52.0
     /// A folder filling its parent repeats the same rectangle; stacked headers
     /// of `Users/me/dev/...` chains would only eat the map.
-    private static let maximumHeaderedParentShare = 0.75
+    /// Below this a nested folder gets its own named header strip, so a large
+    /// subfolder (most of its parent) still says what it is.
+    private static let maximumHeaderedParentShare = 0.9
 
     public static func layout(tree: DiskTree, scope: DiskTree.NodeID, width: Int, height: Int,
                               scale: Double, isCancelled: @escaping () -> Bool = { false }) -> DiskMapLayout? {
@@ -278,12 +280,17 @@ public enum DiskMapRenderer {
             let x1 = tile.x1 - tile.x0 > gap * 2 ? tile.x1 - gap : tile.x1
             let y1 = tile.y1 - tile.y0 > gap * 2 ? tile.y1 - gap : tile.y1
             if tile.isFolder && tree.childCount(tile.node) > 0 && !tile.isCollapsed {
-                // A hairline around the whole group, header and body, so its
-                // children never read as part of a neighbouring group.
-                fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderStroke)
-                let line = Int32(max(1, scale.rounded()))
-                if x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
-                    fill(pixels, stride: stride, tile.x0 + line, tile.y0 + line, x1 - line, y1 - line, palette.folderBody)
+                // A hairline around a named group, header and body, so its children never
+                // read as part of a neighbouring group. A group without a header (one that
+                // fills its parent) gets none: an unnamed outline would look like a stray frame.
+                if tile.hasHeader {
+                    fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderStroke)
+                    let line = Int32(max(1, scale.rounded()))
+                    if x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
+                        fill(pixels, stride: stride, tile.x0 + line, tile.y0 + line, x1 - line, y1 - line, palette.folderBody)
+                    }
+                } else {
+                    fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderBody)
                 }
                 if tile.hasHeader {
                     let header = Int32((DiskMapLayoutEngine.headerHeightPoints * scale).rounded())
@@ -292,8 +299,12 @@ public enum DiskMapRenderer {
                 continue
             }
             if tile.isRemainder {
-                // "Smaller items" is not a folder: a quiet fill inside a dashed outline.
-                fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderBody)
+                // "Smaller items" is not a folder: half the folder-summary fill inside a
+                // dashed outline, between a real tile and the canvas in both appearances.
+                let half = RGB((palette.folderHeader.red + palette.gutter.red) / 2,
+                               (palette.folderHeader.green + palette.gutter.green) / 2,
+                               (palette.folderHeader.blue + palette.gutter.blue) / 2)
+                fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, half)
                 let line = Int32(max(1, scale.rounded())), dash = Int32(max(2, (3 * scale).rounded()))
                 var x = tile.x0
                 while x < x1 {

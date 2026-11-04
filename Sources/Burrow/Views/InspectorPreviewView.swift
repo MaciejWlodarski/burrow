@@ -605,9 +605,9 @@ public struct InspectorPreviewView: View {
         VStack(alignment: .leading, spacing: 6) {
             // One quiet row, like the details above: the least-used action stays the lightest.
             HStack(spacing: FinderUI.rowSpacing) {
+                // A section header like Details and Tags, its action on the same line.
                 Text("Checksums")
-                    .font(FinderUI.detailFont)
-                    .foregroundStyle(FinderUI.metadataColor)
+                    .font(FinderUI.detailFont.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
                 if sha256Hash == nil {
