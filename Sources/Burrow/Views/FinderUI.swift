@@ -34,7 +34,7 @@ enum FinderUI {
     /// The active pane's path bar in dual pane: equally visible in both appearances.
     static let activePaneTint = Color(nsColor: NSColor(name: nil) { appearance in
         let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.18 : 0.10)
+        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.13 : 0.10)
     })
     /// Search matches: a wash strong enough to find in both appearances.
     static let matchHighlight = Color(nsColor: NSColor(name: nil) { appearance in

@@ -688,7 +688,9 @@ public struct SidebarView: View {
         }
         .padding(.leading, FinderUI.sidebarInset + FinderUI.sidebarRowInset)
         .padding(.trailing, FinderUI.sidebarInset)
-        .padding(.vertical, FinderUI.chromeInset)
+        // The same 30 pt band as the window's status bar, so both footers share
+        // one divider line and one baseline.
+        .frame(minHeight: 30)
     }
 }
 

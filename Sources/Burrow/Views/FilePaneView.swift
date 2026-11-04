@@ -563,7 +563,11 @@ public struct FilePaneView: View {
                 Image(nsImage: FileIconCache.shared.icon(for: item))
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: showSubpath ? 24 : 20, height: showSubpath ? 24 : 20)
+                    // System folder art fills its box more than document art; 2 pt less
+                    // keeps the two-line results optically even.
+                    .frame(width: showSubpath ? (item.isDirectory ? 21 : 24) : 20,
+                           height: showSubpath ? (item.isDirectory ? 21 : 24) : 20)
+                    .frame(width: showSubpath ? 24 : 20)
                     .opacity(item.isHidden || isCutItem ? 0.5 : 1.0)
 
                 VStack(alignment: .leading, spacing: 2) {

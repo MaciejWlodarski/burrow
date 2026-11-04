@@ -344,8 +344,6 @@ public enum DiskMapRenderer {
         let lineHeight = 15 * scale
         // Below this a label is noise; hovering still identifies the tile.
         let minimumLabelWidth = 60 * scale, minimumLabelHeight = 40 * scale, minimumNameWidth = 50 * scale
-        // File tiles beside headed folders start their label below the header line.
-        let alignsWithHeaders = layout.tiles.contains { $0.depth == 0 && $0.hasHeader }
         var drawn = 0
         for tile in layout.tiles where drawn < 800 {
             let width = Double(tile.x1 - tile.x0) - scale, tileHeight = Double(tile.y1 - tile.y0) - scale
@@ -408,15 +406,20 @@ public enum DiskMapRenderer {
                 let compactName = NSAttributedString(string: shownName, attributes: [
                     .font: compactFont, .foregroundColor: textColor, .paragraphStyle: middleTruncating])
                 // Identity before size: a one-line name, shortened in the middle when needed.
-                // Room for a few letters either side of the ellipsis, or the whole name.
-                guard compactName.size().width <= available || available >= 42 * scale else { continue }
-                compactName.draw(in: CGRect(x: Double(tile.x0) + 6 * scale, y: Double(tile.y0) + 4 * scale,
-                                            width: available, height: lineHeight))
+                // The whole name; else the size; else nothing (the hover callout names it).
+                let origin = CGPoint(x: Double(tile.x0) + 6 * scale, y: Double(tile.y0) + 4 * scale)
+                if compactName.size().width <= available {
+                    compactName.draw(in: CGRect(x: origin.x, y: origin.y, width: available, height: lineHeight))
+                } else if sizeWidth <= available {
+                    size.draw(at: origin)
+                } else {
+                    continue
+                }
             } else {
                 // The name always leads; the size follows when it fits whole.
-                let offset = alignsWithHeaders && tile.depth == 0 && tileHeight >= header + lineHeight * 3 ? header + scale : 0
-                var top = Double(tile.y0) + offset + inset - 2 * scale
-                var room = tileHeight - offset - 2 * (inset - 2 * scale)
+                // One rule for every leaf: the label starts at the tile's own top inset.
+                var top = Double(tile.y0) + inset - 2 * scale
+                var room = tileHeight - 2 * (inset - 2 * scale)
                 // A narrow folder summary puts its glyph on a line of its own, so
                 // every summary tile carries one.
                 let glyphAbove = tile.isCollapsed && glyph == 0 && room >= lineHeight * 4
