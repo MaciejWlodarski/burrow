@@ -566,9 +566,11 @@ public struct FilePaneView: View {
                     .interpolation(.high)
                     // System folder art fills its box more than document art; 2 pt less
                     // keeps the two-line results optically even.
-                    .frame(width: showSubpath ? (item.isDirectory ? 21 : 24) : 20,
-                           height: showSubpath ? (item.isDirectory ? 21 : 24) : 20)
-                    .frame(width: showSubpath ? 24 : 20)
+                    // A 32 pt box across both lines anchors the row; folder art fills its box
+                    // more than document art, so it is drawn 4 pt smaller.
+                    .frame(width: showSubpath ? (item.isDirectory ? 28 : 32) : 20,
+                           height: showSubpath ? (item.isDirectory ? 28 : 32) : 20)
+                    .frame(width: showSubpath ? 32 : 20)
                     .opacity(item.isHidden || isCutItem ? 0.5 : 1.0)
 
                 VStack(alignment: .leading, spacing: 2) {

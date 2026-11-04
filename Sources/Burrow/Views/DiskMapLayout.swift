@@ -294,7 +294,12 @@ public enum DiskMapRenderer {
                 }
                 if tile.hasHeader {
                     let header = Int32((DiskMapLayoutEngine.headerHeightPoints * scale).rounded())
-                    fill(pixels, stride: stride, tile.x0, tile.y0, x1, min(y1, tile.y0 + header + 1), palette.folderHeader)
+                    // A nested header is one step quieter than its parent's: halfway to the body.
+                    let strip = tile.depth == 0 ? palette.folderHeader
+                        : RGB((palette.folderHeader.red + palette.folderBody.red) / 2,
+                              (palette.folderHeader.green + palette.folderBody.green) / 2,
+                              (palette.folderHeader.blue + palette.folderBody.blue) / 2)
+                    fill(pixels, stride: stride, tile.x0, tile.y0, x1, min(y1, tile.y0 + header + 1), strip)
                 }
                 continue
             }
