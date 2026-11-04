@@ -275,7 +275,7 @@ public enum DiskMapRenderer {
         let innerGap = Int32(max(1, (scale * 1.5).rounded()))
         // Top-level blocks stand further apart, so a folder never seems to run into
         // a neighbouring file of the same colour.
-        let outerGap = Int32(max(3, (scale * 4).rounded()))
+        let outerGap = Int32(max(4, (scale * 6).rounded()))
         for (index, tile) in layout.tiles.enumerated() {
             if index & 0xFFF == 0, isCancelled() { return nil }
             let gap = tile.depth == 0 ? outerGap : innerGap
@@ -396,7 +396,7 @@ public enum DiskMapRenderer {
         for tile in layout.tiles where drawn < 800 {
             // The drawn tile stops short of its gutter (see the fill above); labels must too,
             // or a header's size sits against the edge.
-            let gutter = (tile.depth == 0 ? 4 : 1.5) * scale
+            let gutter = (tile.depth == 0 ? 6 : 1.5) * scale
             let width = Double(tile.x1 - tile.x0) - gutter, tileHeight = Double(tile.y1 - tile.y0) - gutter
             // Roomier insets where the tile allows them; small tiles keep every point for text.
             let inset = (width >= 100 * scale && tileHeight >= 56 * scale ? 8 : 6) * scale

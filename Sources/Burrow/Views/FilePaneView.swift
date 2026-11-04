@@ -568,8 +568,8 @@ public struct FilePaneView: View {
                     // keeps the two-line results optically even.
                     // A 32 pt box across both lines anchors the row; folder art fills its box
                     // more than document art, so it is drawn 4 pt smaller.
-                    .frame(width: showSubpath ? (item.isDirectory ? 28 : 32) : 20,
-                           height: showSubpath ? (item.isDirectory ? 28 : 32) : 20)
+                    .frame(width: showSubpath ? (item.isDirectory ? 26 : 32) : 20,
+                           height: showSubpath ? (item.isDirectory ? 26 : 32) : 20)
                     .frame(width: showSubpath ? 32 : 20)
                     .opacity(item.isHidden || isCutItem ? 0.5 : 1.0)
 

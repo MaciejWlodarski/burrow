@@ -515,16 +515,14 @@ public struct WizTreeAnalyzerView: View {
                     Spacer(minLength: 12)
                     analysisModePicker
                         .fixedSize()
-                    wholeDiskButton
-                    refreshScanButton
+                    HStack(spacing: 6) { wholeDiskButton; refreshScanButton }
                 }
                 VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
                     HStack {
                         analysisModePicker
                             .fixedSize()
                         Spacer()
-                        wholeDiskButton
-                        refreshScanButton
+                        HStack(spacing: 6) { wholeDiskButton; refreshScanButton }
                     }
                     HStack(alignment: .firstTextBaseline, spacing: FinderUI.rowSpacing) { analysisTelemetry }
                         .font(FinderUI.detailFont)
@@ -643,6 +641,7 @@ public struct WizTreeAnalyzerView: View {
             Label("Scan Whole Disk", systemImage: "internaldrive")
         }
         .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
         .controlSize(.small)
         .help("Scan the whole disk that contains this folder")
     }
@@ -703,6 +702,7 @@ public struct WizTreeAnalyzerView: View {
                 .labelStyle(.iconOnly)
         }
         .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
         .controlSize(.small)
         .help("Refresh the disk space analysis")
         .accessibilityLabel("Refresh the disk space analysis")
