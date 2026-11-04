@@ -623,10 +623,8 @@ public struct WizTreeAnalyzerView: View {
             .fixedSize()
         Text(telemetryDetails)
             .fixedSize()
-        Image(systemName: "info.circle")
-            .foregroundStyle(.tertiary)
             .help(scanScopeNote)
-            .accessibilityLabel(scanScopeNote)
+            .accessibilityHint(scanScopeNote)
     }
 
     /// "used · 44 files · 213 GB free · scanned 1:04 PM"
@@ -874,11 +872,21 @@ public struct WizTreeAnalyzerView: View {
             .accessibilityHidden(true)
     }
 
+    /// Name column of the analysis tree: wide enough for long names, never so wide
+    /// that short ones sit far from their bars.
+    static func treeNameWidth(_ availableWidth: CGFloat) -> CGFloat {
+        min(380, max(240, availableWidth * 0.36))
+    }
+
     private func diskTreeHeader(availableWidth: CGFloat) -> some View {
         HStack(spacing: FinderUI.rowSpacing) {
-            Text("Name").padding(.leading, 22).frame(maxWidth: .infinity, alignment: .leading)
-            if availableWidth >= 480 { Text("Share of Total").frame(width: availableWidth >= 650 ? 160 + FinderUI.rowSpacing + 44 : 48,
-                                                                      alignment: availableWidth >= 650 ? .leading : .trailing) }
+            if availableWidth >= 650 {
+                Text("Name").padding(.leading, 22).frame(width: Self.treeNameWidth(availableWidth), alignment: .leading)
+                Text("Share of Total").frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text("Name").padding(.leading, 22).frame(maxWidth: .infinity, alignment: .leading)
+                if availableWidth >= 480 { Text("Share of Total").frame(width: 48, alignment: .trailing) }
+            }
             Text("Size").frame(width: 80, alignment: .trailing)
             if availableWidth >= 760 { Text("Files").frame(width: 64, alignment: .trailing) }
         }
@@ -958,20 +966,24 @@ public struct WizTreeAnalyzerView: View {
                     .accessibilityLabel("No access")
             }
           }
-          .frame(maxWidth: .infinity, alignment: .leading)
+          // A compact name column: the share bar starts right after short names
+          // instead of across an empty band, and takes the remaining width.
+          .frame(maxWidth: availableWidth >= 650 ? Self.treeNameWidth(availableWidth) : .infinity, alignment: .leading)
 
             if availableWidth >= 650 {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.1))
+                        Capsule().fill(Color.primary.opacity(0.07))
                         Capsule()
                             // Neutral: category colour belongs to the summary bar and the map,
-                            // and blue means selection.
-                            .fill(isSelected ? selectionForegroundColor.opacity(0.85) : Color.secondary.opacity(0.5))
-                            .frame(width: max(3, geometry.size.width * CGFloat(fraction)))
+                            // and blue means selection. Never thinner than a short pill,
+                            // so small shares don't read as bullets.
+                            .fill(isSelected ? selectionForegroundColor.opacity(0.85) : Color.primary.opacity(0.5))
+                            .frame(width: max(10, geometry.size.width * CGFloat(fraction)))
                     }
                 }
-                .frame(width: 160, height: 6)
+                .frame(maxWidth: .infinity)
+                .frame(height: 6)
                 .accessibilityHidden(true)
             }
             if availableWidth >= 480 {

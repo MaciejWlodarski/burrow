@@ -1063,8 +1063,9 @@ public struct FSearchSettingsSheetView: View {
 
     public var body: some View {
         TabView {
+            // Sized to its groups, so the window has no empty band below them.
             GeneralSettingsPane(appState: appState)
-                .frame(height: 452)
+                .frame(minHeight: 340, idealHeight: 340)
                 .tabItem { Label("General", systemImage: "gearshape") }
             BrowsingSettingsPane()
                 .frame(minHeight: 300, idealHeight: 300)
@@ -1342,21 +1343,26 @@ struct DefaultFileViewerSettingsSection: View {
 
     var body: some View {
         Section {
-            LabeledContent {
-                HStack(spacing: FinderUI.rowSpacing) {
-                    Text(isDefault ? "Currently Burrow" : "Currently Finder")
-                        .foregroundStyle(.secondary)
-                    if isDefault {
-                        Button("Restore Finder") { apply(makeDefault: false) }
-                            .disabled(isWorking)
-                    } else {
-                        Button("Use Burrow") { apply(makeDefault: true) }
-                            .disabled(isWorking)
+            // Title, state and button share one line; the explanation gets the
+            // full width of the group below them instead of a narrow column.
+            VStack(alignment: .leading, spacing: 4) {
+                LabeledContent("Default file browser") {
+                    HStack(spacing: FinderUI.rowSpacing) {
+                        Text(isDefault ? "Currently Burrow" : "Currently Finder")
+                            .foregroundStyle(.secondary)
+                        if isDefault {
+                            Button("Restore Finder") { apply(makeDefault: false) }
+                                .disabled(isWorking)
+                        } else {
+                            Button("Use Burrow") { apply(makeDefault: true) }
+                                .disabled(isWorking)
+                        }
                     }
                 }
-            } label: {
-                Text("Default file browser")
                 Text("Folders opened from other apps and “Show in Finder” open in Burrow. The Desktop and the Dock’s Trash stay with Finder.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let errorMessage {
                 Text(errorMessage).font(FinderUI.captionFont).foregroundStyle(.orange)

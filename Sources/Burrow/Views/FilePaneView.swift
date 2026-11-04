@@ -322,6 +322,49 @@ public struct FilePaneView: View {
         return relative.split(separator: "/").joined(separator: " › ")
     }
 
+    /// The name with matches in semibold on a rounded accent wash (macOS 15+),
+    /// or the flat attributed wash on older systems.
+    @ViewBuilder
+    private func highlightedNameText(_ name: String, isSelected: Bool) -> some View {
+        if #available(macOS 15.0, *) {
+            matchText(name, isSelected: isSelected)
+                .textRenderer(SearchMatchRenderer())
+        } else {
+            Text(highlightedName(name, isSelected: isSelected))
+        }
+    }
+
+    @available(macOS 15.0, *)
+    private func matchText(_ name: String, isSelected: Bool) -> Text {
+        var result = Text(verbatim: "")
+        var cursor = name.startIndex
+        for range in matchRanges(in: name) {
+            if cursor < range.lowerBound { result = result + Text(verbatim: String(name[cursor..<range.lowerBound])) }
+            let match = Text(verbatim: String(name[range])).fontWeight(.semibold)
+            result = result + (isSelected ? match : match.customAttribute(SearchMatchAttribute()))
+            cursor = range.upperBound
+        }
+        if cursor < name.endIndex { result = result + Text(verbatim: String(name[cursor...])) }
+        return result
+    }
+
+    /// Non-overlapping ranges of the typed terms inside a name, in order.
+    private func matchRanges(in name: String) -> [Range<String.Index>] {
+        let terms = pane.searchQuery.split(separator: " ").map(String.init)
+            .filter { !$0.isEmpty && !$0.contains(":") && $0.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." } }
+        guard hasSearchQuery, !terms.isEmpty else { return [] }
+        var ranges: [Range<String.Index>] = []
+        for term in terms {
+            var start = name.startIndex
+            while start < name.endIndex,
+                  let range = name.range(of: term, options: [.caseInsensitive, .diacriticInsensitive], range: start..<name.endIndex) {
+                if !ranges.contains(where: { $0.overlaps(range) }) { ranges.append(range) }
+                start = range.upperBound
+            }
+        }
+        return ranges.sorted { $0.lowerBound < $1.lowerBound }
+    }
+
     /// Search results show the typed text in bold within each name.
     private func highlightedName(_ name: String, isSelected: Bool) -> AttributedString {
         var text = AttributedString(name)
@@ -409,8 +452,10 @@ public struct FilePaneView: View {
                         .frame(width: 80, alignment: .trailing)
                         .padding(.trailing, 20)
                     if showDate {
+                        // As the last column the date hugs the trailing edge, so a narrow
+                        // pane has no dead strip after it.
                         sortableHeaderButton(title: String(localized: "Date Modified"), field: .dateModified)
-                            .frame(width: 170, alignment: .leading)
+                            .frame(width: 170, alignment: showKind ? .leading : .trailing)
                     }
                     if showKind {
                         sortableHeaderButton(title: String(localized: "Kind"), field: .kind)
@@ -459,7 +504,8 @@ public struct FilePaneView: View {
                 if pane.sortField == field {
                     Image(systemName: pane.sortAscending ? "chevron.up" : "chevron.down")
                         .font(.system(size: 8.5, weight: .bold))
-                        .foregroundStyle(Color.accentColor)
+                        // Grey like Finder: blue stays for selection and active state.
+                        .foregroundStyle(.secondary)
                 }
             }
             .contentShape(Rectangle())
@@ -514,7 +560,7 @@ public struct FilePaneView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(highlightedName(item.name, isSelected: isSelected))
+                        highlightedNameText(item.name, isSelected: isSelected)
                             .font(FinderUI.bodyFont)
                             .foregroundStyle(isSelected ? selectionForegroundColor : (item.isHidden ? Color.secondary : Color.primary))
                             .lineLimit(1)
@@ -593,7 +639,7 @@ public struct FilePaneView: View {
                     .font(FinderUI.bodyFont)
                     .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                     .lineLimit(1)
-                    .frame(width: 170, alignment: .leading)
+                    .frame(width: 170, alignment: showKind ? .leading : .trailing)
             }
             if showKind {
                 Text(item.kindDisplayString)

@@ -18,6 +18,14 @@ public struct InspectorPreviewView: View {
     @ViewState private var previewRequestID = UUID()
     @ViewState private var previewRequest: InspectorPreviewRequest?
     @ViewState private var posixPermissionsString: String = "—"
+
+    /// "Shared › Burrow Demo › Studio": the nearest folders by whole name, so a
+    /// shortened location never cuts a folder name in half. The tooltip has the full path.
+    static func locationTrail(_ path: String) -> String {
+        let components = (path as NSString).abbreviatingWithTildeInPath.split(separator: "/").map(String.init)
+        guard !components.isEmpty else { return path }
+        return components.suffix(3).joined(separator: " › ")
+    }
     @ViewState private var currentModeBits: UInt16 = 0
     @ViewState private var permissionSnapshot: PosixPermissionSnapshot?
     @ViewState private var permissionError: String?
@@ -119,11 +127,15 @@ public struct InspectorPreviewView: View {
                             .help("More actions")
                             .accessibilityLabel("More actions")
                             Spacer(minLength: 14)
+                            // Quieter than the routine actions, behind a hairline, same hit area.
+                            Divider().frame(height: 18)
                             Button(role: .destructive) { fileOps.moveToTrash([item]) } label: {
                                 Image(systemName: "trash")
-                                    .frame(minWidth: 22, minHeight: 22)
+                                    .foregroundStyle(FinderUI.metadataColor)
+                                    .frame(width: 32, height: 28)
+                                    .contentShape(Rectangle())
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.borderless)
                             .help("Move to Trash")
                             .accessibilityLabel("Move to Trash")
                         }
@@ -181,7 +193,8 @@ public struct InspectorPreviewView: View {
                                     Spacer()
                                     // One line like the other rows; editing lives in the "…" menu.
                                     Text(posixPermissionsString)
-                                        .font(FinderUI.detailFont.monospaced())
+                                        // Mono runs large; 11 pt matches the x-height of the 12 pt rows.
+                                        .font(.system(size: 11, design: .monospaced))
                                         .textSelection(.enabled)
                                     if showChmodEditor {
                                         Button("Done") { showChmodEditor = false }
@@ -212,10 +225,10 @@ public struct InspectorPreviewView: View {
                                 Button {
                                     _ = appState.activeTab.navigate(to: URL(fileURLWithPath: item.parentPath))
                                 } label: {
-                                    Label((item.parentPath as NSString).abbreviatingWithTildeInPath, systemImage: "folder")
+                                    Label(Self.locationTrail(item.parentPath), systemImage: "folder")
                                         .font(FinderUI.detailFont)
                                         .lineLimit(1)
-                                        .truncationMode(.middle)
+                                        .truncationMode(.head)
                                 }
                                 .buttonStyle(.borderless)
                                 .help(item.parentPath)
@@ -595,7 +608,7 @@ public struct InspectorPreviewView: View {
                             } else {
                                 Image(systemName: "number.square")
                             }
-                            Text(isComputingHash ? String(localized: "Calculating…") : (hashErrorMessage == nil ? String(localized: "Calculate Checksums") : String(localized: "Try Again")))
+                            Text(isComputingHash ? String(localized: "Calculating…") : (hashErrorMessage == nil ? String(localized: "Calculate SHA-256 and MD5") : String(localized: "Try Again")))
                                 .font(FinderUI.detailFont)
                         }
                         .frame(maxWidth: .infinity, minHeight: 22)
@@ -604,11 +617,6 @@ public struct InspectorPreviewView: View {
                     .controlSize(.regular)
                     .disabled(isComputingHash)
                     .accessibilityLabel(isComputingHash ? String(localized: "Calculating checksums") : String(localized: "Calculate SHA-256 and MD5 checksums"))
-                    if !isComputingHash && hashErrorMessage == nil {
-                        Text(verbatim: "SHA-256 · MD5")
-                            .font(FinderUI.captionFont)
-                            .foregroundStyle(.secondary)
-                    }
                     if isComputingHash {
                         Button("Cancel Calculation", systemImage: "xmark.circle") { cancelHashes() }
                             .buttonStyle(.borderless)

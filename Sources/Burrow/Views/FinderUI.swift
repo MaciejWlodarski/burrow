@@ -34,7 +34,7 @@ enum FinderUI {
     /// Search matches: a wash strong enough to find in both appearances.
     static let matchHighlight = Color(nsColor: NSColor(name: nil) { appearance in
         let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.35 : 0.22)
+        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.30 : 0.16)
     })
 }
 
@@ -63,5 +63,24 @@ struct FinderSelectionSummary: Equatable {
         // The disk map shows its own totals in its header.
         if isAnalysis { return analysisSummary ?? "" }
         return totalCount == 1 ? String(localized: "1 item") : String(localized: "\(totalCount.formatted()) items")
+    }
+}
+
+/// Marks the matched part of a search result name.
+@available(macOS 15.0, *)
+struct SearchMatchAttribute: TextAttribute {}
+
+/// Draws a soft rounded wash behind matched runs, slightly outset so it never
+/// clips the glyphs, then the text on top.
+@available(macOS 15.0, *)
+struct SearchMatchRenderer: TextRenderer {
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        for line in layout {
+            for run in line where run[SearchMatchAttribute.self] != nil {
+                let rect = run.typographicBounds.rect.insetBy(dx: -2, dy: -1)
+                context.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(FinderUI.matchHighlight))
+            }
+            for run in line { context.draw(run) }
+        }
     }
 }

@@ -14,6 +14,9 @@ public struct DiskMapTile: Sendable, Equatable {
     /// 0 for the map's direct children, so their labels can line up with
     /// the labels inside neighbouring folders.
     public let depth: UInt16
+    /// A folder too small for a header, drawn as one labelled tile instead of
+    /// a cluster of bare rectangles.
+    public var isCollapsed: Bool = false
 
     func contains(x: Int32, y: Int32) -> Bool { x >= x0 && x < x1 && y >= y0 && y < y1 }
 }
@@ -45,7 +48,7 @@ public enum DiskMapLayoutEngine {
     static let headerHeightPoints = 22.0
     /// A header strip narrower than its label would be an empty grey band.
     private static let minimumHeaderWidthPoints = 72.0
-    private static let minimumHeaderHeightPoints = 72.0
+    private static let minimumHeaderHeightPoints = 52.0
     /// A folder filling its parent repeats the same rectangle; stacked headers
     /// of `Users/me/dev/...` chains would only eat the map.
     private static let maximumHeaderedParentShare = 0.75
@@ -154,8 +157,12 @@ public enum DiskMapLayoutEngine {
             let showsHeader = isGroup && (x1 - x0) / scale >= minimumHeaderWidthPoints
                 && (y1 - y0) / scale >= minimumHeaderHeightPoints
                 && (x1 - x0) * (y1 - y0) <= parentArea * maximumHeaderedParentShare
-            append(id, x0, y0, x1, y1, isFolder: directory, isRemainder: false, hasHeader: showsHeader)
-            guard isGroup else { return }
+            // Headerless only because it is small (not because it fills its parent):
+            // one tile with the folder's name says more than its unnamed contents.
+            let collapses = isGroup && !showsHeader
+                && (x1 - x0) * (y1 - y0) <= parentArea * maximumHeaderedParentShare
+            append(id, x0, y0, x1, y1, isFolder: directory, isRemainder: false, hasHeader: showsHeader, isCollapsed: collapses)
+            guard isGroup, !collapses else { return }
             // A wider inset than the gap between files, so folders read as groups.
             let inset = (x1 - x0 > 12 && y1 - y0 > 12) ? (2 * scale).rounded() : 0
             let header = showsHeader ? (headerHeightPoints * scale).rounded() : 0
@@ -166,12 +173,13 @@ public enum DiskMapLayoutEngine {
         }
 
         private mutating func append(_ id: DiskTree.NodeID, _ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double,
-                                     isFolder: Bool, isRemainder: Bool, hasHeader: Bool) {
+                                     isFolder: Bool, isRemainder: Bool, hasHeader: Bool, isCollapsed: Bool = false) {
             let left = Int32(x0.rounded()), top = Int32(y0.rounded())
             let right = Int32(x1.rounded()), bottom = Int32(y1.rounded())
             guard right > left, bottom > top else { return }
             tiles.append(DiskMapTile(node: id, x0: left, y0: top, x1: right, y1: bottom,
-                                     isFolder: isFolder, isRemainder: isRemainder, hasHeader: hasHeader, depth: depth))
+                                     isFolder: isFolder, isRemainder: isRemainder, hasHeader: hasHeader, depth: depth,
+                                     isCollapsed: isCollapsed))
         }
     }
 }
@@ -261,7 +269,7 @@ public enum DiskMapRenderer {
             // Leave a gutter on the right and bottom edges of every tile.
             let x1 = tile.x1 - tile.x0 > gap * 2 ? tile.x1 - gap : tile.x1
             let y1 = tile.y1 - tile.y0 > gap * 2 ? tile.y1 - gap : tile.y1
-            if tile.isFolder && tree.childCount(tile.node) > 0 {
+            if tile.isFolder && tree.childCount(tile.node) > 0 && !tile.isCollapsed {
                 fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderBody)
                 if tile.hasHeader {
                     let header = Int32((DiskMapLayoutEngine.headerHeightPoints * scale).rounded())
@@ -270,7 +278,8 @@ public enum DiskMapRenderer {
                 continue
             }
             let base: RGB
-            if tile.isRemainder { base = palette.remainder }
+            if tile.isCollapsed { base = palette.folderHeader }
+            else if tile.isRemainder { base = palette.remainder }
             else if tree.isSynthetic(tile.node) { base = palette.synthetic }
             else { base = color(tree.category(tile.node)).adapted(dark: dark) }
             fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, base)
@@ -314,10 +323,10 @@ public enum DiskMapRenderer {
         middleTruncating.lineBreakMode = .byTruncatingMiddle
         let wrapping = NSMutableParagraphStyle()
         wrapping.lineBreakMode = .byWordWrapping
-        let nameFont = NSFont.systemFont(ofSize: CGFloat(12 * scale), weight: .semibold)
+        let nameFont = NSFont.systemFont(ofSize: CGFloat(12 * scale), weight: .medium)
         let sizeFont = NSFont.monospacedDigitSystemFont(ofSize: CGFloat(12 * scale), weight: .regular)
         let header = (DiskMapLayoutEngine.headerHeightPoints * scale).rounded()
-        let inset = 6 * scale, lineHeight = 15 * scale
+        let lineHeight = 15 * scale
         // Below this a label is noise; hovering still identifies the tile.
         let minimumLabelWidth = 60 * scale, minimumLabelHeight = 40 * scale, minimumNameWidth = 50 * scale
         // File tiles beside headed folders start their label below the header line.
@@ -325,11 +334,13 @@ public enum DiskMapRenderer {
         var drawn = 0
         for tile in layout.tiles where drawn < 800 {
             let width = Double(tile.x1 - tile.x0) - scale, tileHeight = Double(tile.y1 - tile.y0) - scale
-            let isGroup = tile.isFolder && tree.childCount(tile.node) > 0 && !tile.isRemainder
+            // Roomier insets where the tile allows them; small tiles keep every point for text.
+            let inset = (width >= 100 * scale && tileHeight >= 56 * scale ? 8 : 6) * scale
+            let isGroup = tile.isFolder && tree.childCount(tile.node) > 0 && !tile.isRemainder && !tile.isCollapsed
             if isGroup && !tile.hasHeader { continue }
             if !isGroup && (width < minimumLabelWidth || tileHeight < minimumLabelHeight) { continue }
             let textColor: NSColor
-            if isGroup {
+            if isGroup || tile.isCollapsed {
                 textColor = palette.folderText
             } else {
                 var base = tile.isRemainder ? palette.remainder
@@ -349,7 +360,7 @@ public enum DiskMapRenderer {
                 // Inside a coloured tile the colour already says the type.
                 let rawName = tree.name(tile.node)
                 let stem = (rawName as NSString).deletingPathExtension
-                shownName = isGroup || stem.isEmpty ? rawName : stem
+                shownName = isGroup || tile.isFolder || stem.isEmpty ? rawName : stem
             }
             let size = NSAttributedString(string: FormatHelpers.formatBytes(bytes), attributes: [
                 .font: sizeFont, .foregroundColor: textColor.withAlphaComponent(isGroup ? 0.7 : 0.85)])
@@ -374,8 +385,8 @@ public enum DiskMapRenderer {
             } else {
                 // The name always leads; the size follows when it fits whole.
                 let offset = alignsWithHeaders && tile.depth == 0 && tileHeight >= header + lineHeight * 3 ? header + scale : 0
-                let top = Double(tile.y0) + offset + 4 * scale
-                let room = tileHeight - offset - 8 * scale
+                let top = Double(tile.y0) + offset + inset - 2 * scale
+                let room = tileHeight - offset - 2 * (inset - 2 * scale)
                 // Tall tiles may give a long name a second line, broken between words only;
                 // otherwise one line, shortened in the middle.
                 let wrapped = NSAttributedString(string: shownName, attributes: [

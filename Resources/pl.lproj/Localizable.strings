@@ -628,7 +628,6 @@
 "Scope: all files including hidden ones, without other disks or symlink following. Size: space allocated on disk." = "Zakres: wszystkie pliki z ukrytymi, bez innych dysków i śledzenia dowiązań. Rozmiar: miejsce zajęte na dysku.";
 "Scope: excluding hidden files, without symlink following. Limit: 60,000 entries." = "Zakres: bez ukrytych plików, bez śledzenia dowiązań. Limit: 60 000 wpisów.";
 "Scope: including hidden files, without symlink following. Limit: 60,000 entries." = "Zakres: z ukrytymi plikami, bez śledzenia dowiązań. Limit: 60 000 wpisów.";
-"Search and app settings" = "Ustawienia wyszukiwania i aplikacji";
 "Search files and folders" = "Szukaj plików i folderów";
 "Search Files and Folders" = "Szukaj plików i folderów";
 "Search Results" = "Wyniki wyszukiwania";
@@ -974,6 +973,6 @@
 "%@ files · %@" = "Pliki: %1$@ · %2$@";
 "Burrow missing from the list?" = "Nie ma Burrow na liście?";
 "Drag this icon into the Full Disk Access list." = "Przeciągnij tę ikonę na listę Pełny dostęp do dysku.";
-"Calculate Checksums" = "Oblicz sumy kontrolne";
+"Calculate SHA-256 and MD5" = "Oblicz SHA-256 i MD5";
 "1 tab" = "1 karta";
 "%@ tabs" = "Karty: %@";

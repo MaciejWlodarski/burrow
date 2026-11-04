@@ -707,7 +707,8 @@ public struct SidebarView: View {
     private var indexFooter: some View {
         VStack(alignment: .leading, spacing: FinderUI.sidebarRowGap) {
             HStack(spacing: FinderUI.sidebarRowGap) {
-                // One line: how much is searchable, and the two index actions.
+                // One line: how much is searchable, and one unambiguous action. Settings
+                // stay in the app menu (⌘,).
                 Text("\(appState.indexedFileCount.formatted()) files indexed")
                     .font(FinderUI.detailFont)
                     .monospacedDigit()
@@ -717,9 +718,6 @@ public struct SidebarView: View {
                         ? String(localized: "Last indexing: \(FormatHelpers.formatLatency(appState.indexBuildDurationMs))")
                         : String(localized: "Number of files available for search"))
                 Spacer(minLength: 0)
-                sidebarActionButton(icon: "gearshape", label: "Search and app settings") {
-                    appState.showSettingsSheet = true
-                }
                 sidebarActionButton(icon: "arrow.clockwise", label: "Rebuild search index") {
                     FSearchIndex.shared.startIndexing()
                 }
