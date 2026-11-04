@@ -69,6 +69,8 @@ struct FinderSelectionSummary: Equatable {
     }
 }
 
+// TextRenderer and TextAttribute exist only in the macOS 15 SDK (Swift 6 toolchains).
+#if compiler(>=6.0)
 /// Marks the matched part of a search result name.
 @available(macOS 15.0, *)
 struct SearchMatchAttribute: TextAttribute {}
@@ -90,6 +92,7 @@ struct SearchMatchRenderer: TextRenderer {
         }
     }
 }
+#endif
 
 /// The one look for every draggable horizontal split (tree and map, files and
 /// terminal): a 10 pt strip on the window surface, a hairline along its top edge

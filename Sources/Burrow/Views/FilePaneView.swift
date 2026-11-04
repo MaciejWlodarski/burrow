@@ -327,14 +327,19 @@ public struct FilePaneView: View {
     /// or the flat attributed wash on older systems.
     @ViewBuilder
     private func highlightedNameText(_ name: String, isSelected: Bool) -> some View {
+        #if compiler(>=6.0)
         if #available(macOS 15.0, *) {
             matchText(name, isSelected: isSelected)
                 .textRenderer(SearchMatchRenderer())
         } else {
             Text(highlightedName(name, isSelected: isSelected))
         }
+        #else
+        Text(highlightedName(name, isSelected: isSelected))
+        #endif
     }
 
+    #if compiler(>=6.0)
     @available(macOS 15.0, *)
     private func matchText(_ name: String, isSelected: Bool) -> Text {
         var result = Text(verbatim: "")
@@ -348,6 +353,7 @@ public struct FilePaneView: View {
         if cursor < name.endIndex { result = result + Text(verbatim: String(name[cursor...])) }
         return result
     }
+    #endif
 
     /// Non-overlapping ranges of the typed terms inside a name, in order.
     private func matchRanges(in name: String) -> [Range<String.Index>] {

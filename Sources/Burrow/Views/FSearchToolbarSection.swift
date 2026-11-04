@@ -156,9 +156,12 @@ public struct FSearchToolbarSection: View {
                 .help("New folder, hidden files and other actions")
             }
             // A little air between "what to show" and "how the window is split".
+            // ToolbarSpacer exists only in the macOS 26 SDK (Swift 6.2 toolchains).
+            #if compiler(>=6.2)
             if #available(macOS 26.0, *) {
                 ToolbarSpacer(.fixed)
             }
+            #endif
             ToolbarItemGroup {
                 // On reads as an accent-coloured glyph on the normal capsule:
                 // visible, but quieter than a solid fill.
