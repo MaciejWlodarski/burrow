@@ -886,7 +886,8 @@ public struct WizTreeAnalyzerView: View {
         HStack(spacing: FinderUI.rowSpacing) {
             if availableWidth >= 650 {
                 Text("Name").padding(.leading, Self.treeNameInset).frame(width: Self.treeNameWidth(availableWidth), alignment: .leading)
-                Text("Share of Total").frame(maxWidth: .infinity, alignment: .leading)
+                // Ends over the percentages it names; the bars need no title of their own.
+                Text("Share of Total").frame(maxWidth: .infinity, alignment: .trailing)
             } else {
                 Text("Name").padding(.leading, Self.treeNameInset).frame(maxWidth: .infinity, alignment: .leading)
                 if availableWidth >= 480 { Text("Share of Total").frame(width: 48, alignment: .trailing) }

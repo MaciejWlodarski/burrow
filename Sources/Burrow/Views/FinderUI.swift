@@ -39,7 +39,7 @@ enum FinderUI {
     /// Search matches: a wash strong enough to find in both appearances.
     static let matchHighlight = Color(nsColor: NSColor(name: nil) { appearance in
         let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.42 : 0.16)
+        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.28 : 0.16)
     })
 }
 
@@ -80,7 +80,7 @@ struct SearchMatchRenderer: TextRenderer {
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
             for run in line where run[SearchMatchAttribute.self] != nil {
-                let rect = run.typographicBounds.rect.insetBy(dx: -2, dy: -1)
+                let rect = run.typographicBounds.rect.insetBy(dx: -1, dy: -1)
                 context.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(FinderUI.matchHighlight))
             }
             for run in line { context.draw(run) }

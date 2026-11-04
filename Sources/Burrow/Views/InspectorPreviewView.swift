@@ -21,6 +21,14 @@ public struct InspectorPreviewView: View {
 
     /// "Shared › Burrow Demo › Studio": the nearest folders by whole name, so a
     /// shortened location never cuts a folder name in half. The tooltip has the full path.
+    private var permissionsText: Text {
+        guard let split = posixPermissionsString.range(of: " (") else {
+            return Text(verbatim: posixPermissionsString).foregroundColor(.primary)
+        }
+        return Text(verbatim: String(posixPermissionsString[..<split.lowerBound])).foregroundColor(.primary)
+            + Text(verbatim: String(posixPermissionsString[split.lowerBound...])).foregroundColor(.secondary)
+    }
+
     static func locationTrail(_ path: String) -> String {
         let components = (path as NSString).abbreviatingWithTildeInPath.split(separator: "/").map(String.init)
         guard !components.isEmpty else { return path }
@@ -191,9 +199,10 @@ public struct InspectorPreviewView: View {
                                         .foregroundStyle(FinderUI.metadataColor)
                                     Spacer()
                                     // One line like the other rows; editing lives in the "…" menu.
-                                    Text(posixPermissionsString)
-                                        // Mono runs large; 11 pt matches the x-height of the 12 pt rows.
-                                        .font(.system(size: 11, design: .monospaced))
+                                    // The same size and colour as the other values; the octal
+                                    // form is the quieter echo.
+                                    permissionsText
+                                        .font(FinderUI.detailFont.monospaced())
                                         .textSelection(.enabled)
                                     if showChmodEditor {
                                         Button("Done") { showChmodEditor = false }

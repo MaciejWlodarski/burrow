@@ -371,7 +371,8 @@ private struct TerminalTabContent: View {
             .padding(.horizontal, FinderUI.sectionSpacing)
             .padding(.vertical, 8)
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        // One step off the file list's surface, so the two regions never blur together.
+        .background(Color(nsColor: .textBackgroundColor).overlay(Color.primary.opacity(0.035)))
         .onAppear { isInputFocused = true }
     }
 

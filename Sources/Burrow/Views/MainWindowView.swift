@@ -99,7 +99,7 @@ public struct MainWindowView: View {
             if appState.tabs.count > 1 { tabBar }
             FSearchToolbarSection(appState: appState, activeTab: activeTab)
 
-            HSplitView {
+            Group {
                 GeometryReader { geometry in
                     VStack(spacing: 0) {
                         if appState.isDualPane {
@@ -140,11 +140,6 @@ public struct MainWindowView: View {
                 }
                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(1)
-
-                if appState.showInspector {
-                    InspectorPreviewView(appState: appState, activeTab: activeTab)
-                        .frame(minWidth: 300, idealWidth: 320, maxWidth: 400)
-                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -154,6 +149,16 @@ public struct MainWindowView: View {
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
+        // The native inspector column: the toolbar runs across it unbroken.
+        .inspector(isPresented: $appState.showInspector) {
+            InspectorPreviewView(appState: appState, activeTab: activeTab)
+                // A hairline from below the toolbar down, like the sidebar's edge in
+                // Finder; the toolbar itself stays one continuous bar.
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1).allowsHitTesting(false)
+                }
+                .inspectorColumnWidth(min: 300, ideal: 320, max: 400)
+        }
     }
 
     private func terminalDivider(availableHeight: CGFloat) -> some View {
@@ -350,12 +355,12 @@ private struct FinderStatusBar: View {
             if activeTab.viewMode == .icons {
                 // Small and large glyphs at either end, set apart from the free space.
                 HStack(spacing: 6) {
-                    Image(systemName: "photo").font(.system(size: 9)).foregroundStyle(.secondary).accessibilityHidden(true)
+                    Image(systemName: "photo").font(.system(size: 9)).foregroundStyle(FinderUI.metadataColor).accessibilityHidden(true)
                     Slider(value: $appState.iconGridSize, in: 44...136)
                         .frame(width: 90)
                         .controlSize(.mini)
                         .accessibilityLabel("Icon size")
-                    Image(systemName: "photo").font(.system(size: 13)).foregroundStyle(.secondary).accessibilityHidden(true)
+                    Image(systemName: "photo").font(.system(size: 13)).foregroundStyle(FinderUI.metadataColor).accessibilityHidden(true)
                 }
                 .padding(.trailing, 10)
             }

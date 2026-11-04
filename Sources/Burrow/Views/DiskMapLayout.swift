@@ -281,8 +281,9 @@ public enum DiskMapRenderer {
                 }
                 continue
             }
-            if tile.isCollapsed {
-                // The header-strip fill with a hairline inside, so a small folder reads as a folder.
+            if tile.isCollapsed || tile.isRemainder {
+                // Folder summaries and "smaller items" share one neutral style: the
+                // header-strip fill with a hairline inside, so a small folder reads as a folder.
                 fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderStroke)
                 let line = Int32(max(1, scale.rounded()))
                 if x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
@@ -336,7 +337,9 @@ public enum DiskMapRenderer {
         let wrapping = NSMutableParagraphStyle()
         wrapping.lineBreakMode = .byWordWrapping
         let nameFont = NSFont.systemFont(ofSize: CGFloat(12 * scale), weight: .medium)
-        let sizeFont = NSFont.monospacedDigitSystemFont(ofSize: CGFloat(12 * scale), weight: .regular)
+        // Sizes a step below names, so a small tile's two lines don't compete.
+        let sizeFont = NSFont.monospacedDigitSystemFont(ofSize: CGFloat(11 * scale), weight: .regular)
+        let compactFont = NSFont.systemFont(ofSize: CGFloat(11 * scale), weight: .medium)
         let header = (DiskMapLayoutEngine.headerHeightPoints * scale).rounded()
         let lineHeight = 15 * scale
         // Below this a label is noise; hovering still identifies the tile.
@@ -350,9 +353,12 @@ public enum DiskMapRenderer {
             let inset = (width >= 100 * scale && tileHeight >= 56 * scale ? 8 : 6) * scale
             let isGroup = tile.isFolder && tree.childCount(tile.node) > 0 && !tile.isRemainder && !tile.isCollapsed
             if isGroup && !tile.hasHeader { continue }
-            if !isGroup && (width < minimumLabelWidth || tileHeight < minimumLabelHeight) { continue }
+            // Tiles too small for name and size still get a one-line name when one fits.
+            let isCompact = !isGroup && (width < minimumLabelWidth || tileHeight < minimumLabelHeight
+                || width - 12 * scale < minimumNameWidth)
+            if isCompact && (width < 40 * scale || tileHeight < 24 * scale) { continue }
             let textColor: NSColor
-            if isGroup || tile.isCollapsed {
+            if isGroup || tile.isCollapsed || tile.isRemainder {
                 textColor = palette.folderText
             } else {
                 var base = tile.isRemainder ? palette.remainder
@@ -397,11 +403,28 @@ public enum DiskMapRenderer {
                 } else {
                     name.draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
                 }
+            } else if isCompact {
+                let available = width - 12 * scale
+                let compactName = NSAttributedString(string: shownName, attributes: [
+                    .font: compactFont, .foregroundColor: textColor, .paragraphStyle: middleTruncating])
+                // The whole name, or else just the size: a name cut to "Ch…" says nothing.
+                let origin = CGPoint(x: Double(tile.x0) + 6 * scale, y: Double(tile.y0) + 4 * scale)
+                if compactName.size().width <= available {
+                    compactName.draw(in: CGRect(x: origin.x, y: origin.y, width: available, height: lineHeight))
+                } else if sizeWidth <= available {
+                    size.draw(at: origin)
+                } else {
+                    continue
+                }
             } else {
                 // The name always leads; the size follows when it fits whole.
                 let offset = alignsWithHeaders && tile.depth == 0 && tileHeight >= header + lineHeight * 3 ? header + scale : 0
-                let top = Double(tile.y0) + offset + inset - 2 * scale
-                let room = tileHeight - offset - 2 * (inset - 2 * scale)
+                var top = Double(tile.y0) + offset + inset - 2 * scale
+                var room = tileHeight - offset - 2 * (inset - 2 * scale)
+                // A narrow folder summary puts its glyph on a line of its own, so
+                // every summary tile carries one.
+                let glyphAbove = tile.isCollapsed && glyph == 0 && room >= lineHeight * 4
+                if glyphAbove { top += lineHeight; room -= lineHeight }
                 // Tall tiles may give a long name a second line, broken between words only;
                 // otherwise one line, shortened in the middle.
                 let wrapped = NSAttributedString(string: shownName, attributes: [
@@ -414,12 +437,13 @@ public enum DiskMapRenderer {
                                             options: [.usesLineFragmentOrigin]).height <= lineHeight * 2 + scale
                 guard available >= minimumNameWidth, nameFits || twoLines || available >= truncatedNameWidth else { continue }
                 let nameLines: Double = twoLines ? 2 : 1
-                if glyph > 0,
+                if glyph > 0 || glyphAbove,
                    let symbol = NSImage(systemSymbolName: "folder.fill", accessibilityDescription: nil)?
                     .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: CGFloat(10 * scale), weight: .medium)
                         .applying(NSImage.SymbolConfiguration(paletteColors: [textColor.withAlphaComponent(0.6)]))) {
                     let side = symbol.size
-                    symbol.draw(in: CGRect(x: x - glyph, y: top + (lineHeight - side.height) / 2, width: side.width, height: side.height),
+                    let glyphTop = glyphAbove ? top - lineHeight : top
+                    symbol.draw(in: CGRect(x: x - glyph, y: glyphTop + (lineHeight - side.height) / 2, width: side.width, height: side.height),
                                 from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
                 }
                 if twoLines {

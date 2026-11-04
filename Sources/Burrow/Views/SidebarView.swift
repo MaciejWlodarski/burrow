@@ -124,8 +124,9 @@ public struct SidebarView: View {
             HStack(spacing: FinderUI.rowSpacing) {
                 Group {
                     // A monochrome glyph like every other sidebar row; the name says the provider.
+                    // Accent like the Favorites glyphs, as Finder tints every sidebar icon.
                     Image(systemName: location.provider == "iCloud Drive" ? "icloud" : "cloud")
-                        .foregroundStyle(isSelected ? selectedTextColor : Color.secondary)
+                        .foregroundStyle(isSelected ? selectedTextColor : Color.accentColor)
                 }
                 .frame(width: FinderUI.sidebarIconWidth)
                 .accessibilityHidden(true)
@@ -485,7 +486,7 @@ public struct SidebarView: View {
                 } label: {
                     HStack(spacing: FinderUI.rowSpacing) {
                         Image(systemName: volume.isNetwork ? "folder" : (volume.isRemovable ? "externaldrive" : "internaldrive"))
-                            .foregroundStyle(isSelected ? selectedTextColor : Color.secondary)
+                            .foregroundStyle(isSelected ? selectedTextColor : Color.accentColor)
                             .frame(width: FinderUI.sidebarIconWidth)
                             .accessibilityHidden(true)
                         Text(volume.name)
