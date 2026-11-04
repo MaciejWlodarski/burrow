@@ -46,6 +46,9 @@ public struct DiskMapLayout: Sendable {
 /// rather than the number of files on disk.
 public enum DiskMapLayoutEngine {
     static let headerHeightPoints = 22.0
+    /// A nested folder's header strip is shorter than a top-level one, so nesting
+    /// reads as parent and child rather than two stacked bars.
+    static func headerHeight(depth: UInt16) -> Double { depth == 0 ? headerHeightPoints : 18 }
     /// A header strip narrower than its label would be an empty grey band.
     private static let minimumHeaderWidthPoints = 72.0
     private static let minimumHeaderHeightPoints = 52.0
@@ -171,7 +174,7 @@ public enum DiskMapLayoutEngine {
             guard isGroup, !collapses else { return }
             // A wider inset than the gap between files, so folders read as groups.
             let inset = (x1 - x0 > 12 && y1 - y0 > 12) ? (2 * scale).rounded() : 0
-            let header = showsHeader ? (headerHeightPoints * scale).rounded() : 0
+            let header = showsHeader ? (DiskMapLayoutEngine.headerHeight(depth: depth) * scale).rounded() : 0
             depth += 1
             placeChildren(of: id, x: x0 + inset, y: y0 + inset + header,
                           width: x1 - x0 - 2 * inset, height: y1 - y0 - 2 * inset - header)
@@ -293,7 +296,7 @@ public enum DiskMapRenderer {
                     fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderBody)
                 }
                 if tile.hasHeader {
-                    let header = Int32((DiskMapLayoutEngine.headerHeightPoints * scale).rounded())
+                    let header = Int32((DiskMapLayoutEngine.headerHeight(depth: tile.depth) * scale).rounded())
                     // A nested header is one step quieter than its parent's: halfway to the body.
                     let strip = tile.depth == 0 ? palette.folderHeader
                         : RGB((palette.folderHeader.red + palette.folderBody.red) / 2,
@@ -386,7 +389,6 @@ public enum DiskMapRenderer {
         // Sizes a step below names, so a small tile's two lines don't compete.
         let sizeFont = NSFont.monospacedDigitSystemFont(ofSize: CGFloat(11 * scale), weight: .regular)
         let compactFont = NSFont.systemFont(ofSize: CGFloat(11 * scale), weight: .medium)
-        let header = (DiskMapLayoutEngine.headerHeightPoints * scale).rounded()
         let lineHeight = 15 * scale
         // Below this a label is noise; hovering still identifies the tile.
         let minimumLabelWidth = 50 * scale, minimumLabelHeight = 40 * scale, minimumNameWidth = 50 * scale
@@ -452,7 +454,18 @@ public enum DiskMapRenderer {
             let truncatedNameWidth = 72 * scale
             let x = Double(tile.x0) + inset + glyph
             if isGroup {
-                let top = Double(tile.y0) + (header - lineHeight) / 2
+                let nested = tile.depth > 0
+                let strip = (DiskMapLayoutEngine.headerHeight(depth: tile.depth) * scale).rounded()
+                // A nested header steps down: smaller name, fainter size, on its shorter strip.
+                let name = nested ? NSAttributedString(string: shownName, attributes: [
+                    .font: NSFont.systemFont(ofSize: CGFloat(11 * scale), weight: .semibold),
+                    .foregroundColor: textColor, .paragraphStyle: truncating]) : name
+                let size = nested ? NSAttributedString(string: FormatHelpers.formatBytes(bytes), attributes: [
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: CGFloat(11 * scale), weight: .regular),
+                    .foregroundColor: textColor.withAlphaComponent(0.55)]) : size
+                let sizeWidth = size.size().width
+                let nameFits = name.size().width <= available
+                let top = Double(tile.y0) + (strip - lineHeight) / 2
                 let nameWidth = available - sizeWidth - 6 * scale
                 guard nameFits || available >= truncatedNameWidth else { continue }
                 if nameWidth >= minimumNameWidth && (name.size().width <= nameWidth || nameWidth >= truncatedNameWidth) {
