@@ -135,17 +135,6 @@ public enum FileKindCategory: String, CaseIterable, Sendable {
         }
     }
 
-    /// Shared by the disk map, its legend and the size bars.
-    public var treemapColor: Color {
-        let category = self
-        // Matches the map, which softens fills in Dark Mode.
-        return Color(nsColor: NSColor(name: nil) { appearance in
-            let rgb = DiskMapRenderer.color(category)
-            let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return rgb.adapted(dark: dark).nsColor
-        })
-    }
-
     public static func detect(extension ext: String, isDirectory: Bool) -> FileKindCategory {
         if isDirectory { return .folder }
         switch ext.lowercased() {

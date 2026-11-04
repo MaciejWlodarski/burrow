@@ -567,3 +567,17 @@ public enum DiskMapRenderer {
         }
     }
 }
+
+// Here rather than in FileItem.swift: the `burrow` CLI compiles that file without the renderer.
+extension FileKindCategory {
+    /// Shared by the disk map, its legend and the size bars.
+    public var treemapColor: Color {
+        let category = self
+        // Matches the map, which softens fills in Dark Mode.
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            let rgb = DiskMapRenderer.color(category)
+            let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return rgb.adapted(dark: dark).nsColor
+        })
+    }
+}
