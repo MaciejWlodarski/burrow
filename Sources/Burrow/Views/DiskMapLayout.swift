@@ -42,10 +42,10 @@ public struct DiskMapLayout: Sendable {
 /// Recursion stops at sub-pixel sizes, so tile count follows the bitmap's area
 /// rather than the number of files on disk.
 public enum DiskMapLayoutEngine {
-    static let headerHeightPoints = 18.0
+    static let headerHeightPoints = 20.0
     /// A header strip narrower than its label would be an empty grey band.
     private static let minimumHeaderWidthPoints = 72.0
-    private static let minimumHeaderHeightPoints = 56.0
+    private static let minimumHeaderHeightPoints = 72.0
     /// A folder filling its parent repeats the same rectangle; stacked headers
     /// of `Users/me/dev/...` chains would only eat the map.
     private static let maximumHeaderedParentShare = 0.75
@@ -88,7 +88,7 @@ public enum DiskMapLayoutEngine {
 
             // Items under 1% of their folder (and too small to label) merge
             // into one "smaller items" tile instead of a confetti of slivers.
-            let mergeArea = max(minimumArea, 144 * scale * scale, min(parentArea * 0.01, 24 * 24 * scale * scale))
+            let mergeArea = max(minimumArea, 28 * 20 * scale * scale, min(parentArea * 0.01, 32 * 32 * scale * scale))
             let kids = tree.children(of: parent)
             var index = 0
             while index < kids.count {
@@ -193,9 +193,15 @@ public enum DiskMapRenderer {
         }
         /// White reads better on the mid-tone fills (teal, slate, raspberry);
         /// only the light ones (orange, ochre) take near-black text.
-        var prefersDarkText: Bool { luminance > 0.3 }
+        func prefersDarkText(dark: Bool) -> Bool { luminance > (dark ? 0.3 : 0.18) }
         var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
         /// Dark backgrounds make saturated fills glare: pull them toward grey and down a little.
+        /// Light backgrounds: lift fills toward white so a big tile does not shout.
+        var forLightAppearance: RGB {
+            func lift(_ c: Double) -> Double { c * 0.8 + 0.2 }
+            return RGB(lift(red), lift(green), lift(blue))
+        }
+        func adapted(dark: Bool) -> RGB { dark ? forDarkAppearance : forLightAppearance }
         var forDarkAppearance: RGB {
             let gray = 0.299 * red + 0.587 * green + 0.114 * blue
             func soften(_ c: Double) -> Double { (c * 0.86 + gray * 0.14) * 0.88 }
@@ -244,7 +250,8 @@ public enum DiskMapRenderer {
         let pixels = data.bindMemory(to: UInt32.self, capacity: stride * height)
         fill(pixels, stride: stride, 0, 0, Int32(width), Int32(height), palette.gutter)
 
-        let gap = Int32(max(1, scale.rounded()))
+        // About 1.5 pt, so neighbouring blocks of one colour stay apart.
+        let gap = Int32(max(1, (scale * 1.5).rounded()))
         for (index, tile) in layout.tiles.enumerated() {
             if index & 0xFFF == 0, isCancelled() { return nil }
             // Leave a gutter on the right and bottom edges of every tile.
@@ -261,7 +268,7 @@ public enum DiskMapRenderer {
             let base: RGB
             if tile.isRemainder { base = palette.remainder }
             else if tree.isSynthetic(tile.node) { base = palette.synthetic }
-            else { base = dark ? color(tree.category(tile.node)).forDarkAppearance : color(tree.category(tile.node)) }
+            else { base = color(tree.category(tile.node)).adapted(dark: dark) }
             fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, base)
         }
 
@@ -303,7 +310,7 @@ public enum DiskMapRenderer {
         let header = (DiskMapLayoutEngine.headerHeightPoints * scale).rounded()
         let inset = 5 * scale, lineHeight = 14 * scale
         // Below this a label is noise; hovering still identifies the tile.
-        let minimumLabelWidth = 60 * scale, minimumLabelHeight = 28 * scale, minimumNameWidth = 50 * scale
+        let minimumLabelWidth = 60 * scale, minimumLabelHeight = 40 * scale, minimumNameWidth = 50 * scale
         let wrapping = NSMutableParagraphStyle()
         wrapping.lineBreakMode = .byWordWrapping
         // File tiles beside headed folders start their label below the header line.
@@ -320,8 +327,8 @@ public enum DiskMapRenderer {
             } else {
                 var base = tile.isRemainder ? palette.remainder
                     : tree.isSynthetic(tile.node) ? palette.synthetic : color(tree.category(tile.node))
-                if dark && !tile.isRemainder && !tree.isSynthetic(tile.node) { base = base.forDarkAppearance }
-                textColor = base.prefersDarkText ? NSColor(white: 0.08, alpha: 0.92) : NSColor.white
+                if !tile.isRemainder && !tree.isSynthetic(tile.node) { base = base.adapted(dark: dark) }
+                textColor = base.prefersDarkText(dark: dark) ? NSColor(white: 0.08, alpha: 0.92) : NSColor.white
             }
             let bytes: Int64
             let shownName: String

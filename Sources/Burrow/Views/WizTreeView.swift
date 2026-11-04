@@ -333,7 +333,8 @@ public struct WizTreeAnalyzerView: View {
     @ViewState private var mapImage: CGImage?
     @ViewState private var mapImageScale: CGFloat = 2
     @ViewState private var mapViewport: CGSize = .zero
-    @ViewState private var treePaneHeight: CGFloat = 24 + 28 * 6
+    /// nil until the divider is dragged: then about 40% of the space, in whole rows.
+    @ViewState private var treePaneHeight: CGFloat?
     @ViewState private var treePaneDrag: CGFloat = 0
     @ViewState private var mapHoverLocation: CGPoint = .zero
     @ViewState private var hoveredTile: DiskMapTile?
@@ -799,11 +800,13 @@ public struct WizTreeAnalyzerView: View {
         GeometryReader { outer in
             let maximumTree = max(Self.treeHeaderHeight + Self.treeRowHeight * 2,
                                   outer.size.height - Self.minimumMapHeight)
-            let treeHeight = min(maximumTree, treePaneHeight + treePaneDrag)
+            let defaultRows = max(3, ((outer.size.height * 0.4 - Self.treeHeaderHeight) / Self.treeRowHeight).rounded(.down))
+            let baseHeight = treePaneHeight ?? Self.treeHeaderHeight + Self.treeRowHeight * defaultRows
+            let treeHeight = min(maximumTree, baseHeight + treePaneDrag)
             VStack(spacing: 0) {
                 treePane(tree)
                     .frame(height: treeHeight)
-                splitHandle(currentHeight: treeHeight, maximumHeight: maximumTree)
+                splitHandle(baseHeight: baseHeight, maximumHeight: maximumTree)
                 VStack(spacing: 0) {
                     if mapScope != DiskTree.rootID { treemapHudBar(tree) }
                     diskMapCanvas(tree)
@@ -839,9 +842,16 @@ public struct WizTreeAnalyzerView: View {
     }
 
     /// A thin divider with a taller drag target that snaps the tree to whole rows.
-    private func splitHandle(currentHeight: CGFloat, maximumHeight: CGFloat) -> some View {
+    private func splitHandle(baseHeight: CGFloat, maximumHeight: CGFloat) -> some View {
         Divider()
             .frame(height: 1)
+            .overlay {
+                // A visible grip says the divider can be dragged.
+                Capsule()
+                    .fill(Color.secondary.opacity(0.45))
+                    .frame(width: 36, height: 4)
+                    .allowsHitTesting(false)
+            }
             .overlay {
                 Color.clear
                     .frame(height: 9)
@@ -853,7 +863,7 @@ public struct WizTreeAnalyzerView: View {
                         .onChanged { value in treePaneDrag = value.translation.height }
                         .onEnded { value in
                             let raw = min(maximumHeight, max(Self.treeHeaderHeight + Self.treeRowHeight * 2,
-                                                             treePaneHeight + value.translation.height))
+                                                             baseHeight + value.translation.height))
                             let rows = ((raw - Self.treeHeaderHeight) / Self.treeRowHeight).rounded()
                             treePaneHeight = Self.treeHeaderHeight + rows * Self.treeRowHeight
                             treePaneDrag = 0
@@ -866,7 +876,8 @@ public struct WizTreeAnalyzerView: View {
     private func diskTreeHeader(availableWidth: CGFloat) -> some View {
         HStack(spacing: FinderUI.rowSpacing) {
             Text("Name").frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 22)
-            if availableWidth >= 480 { Text("Share of Total").frame(width: availableWidth >= 650 ? 140 + FinderUI.rowSpacing + 44 : 48, alignment: .trailing) }
+            if availableWidth >= 480 { Text("Share of Total").frame(width: availableWidth >= 650 ? 140 + FinderUI.rowSpacing + 44 : 48,
+                                                                      alignment: availableWidth >= 650 ? .leading : .trailing) }
             Text("Size").frame(width: 80, alignment: .trailing)
             if availableWidth >= 760 { Text("Files").frame(width: 64, alignment: .trailing) }
         }
@@ -971,7 +982,7 @@ public struct WizTreeAnalyzerView: View {
                 .foregroundStyle(foreground)
                 .frame(width: 80, alignment: .trailing)
             if availableWidth >= 760 {
-                Text(tree.isDirectory(id) ? tree.fileCount(id).formatted() : "—")
+                Text(tree.isDirectory(id) ? tree.fileCount(id).formatted() : "")
                     .font(FinderUI.detailFont)
                     .monospacedDigit()
                     .foregroundStyle(secondary)

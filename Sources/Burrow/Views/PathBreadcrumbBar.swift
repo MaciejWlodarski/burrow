@@ -114,11 +114,12 @@ public struct PathBreadcrumbBar: View {
 
     private var pathEditor: some View {
         HStack(spacing: 6) {
-            Image(systemName: "folder")
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
-                .contentShape(Rectangle())
-                .onTapGesture { beginEditingFromBreadcrumbs() }
+            // The disk icon already starts the breadcrumbs; the folder glyph marks the editable field.
+            if pane.isEditingPathBar {
+                Image(systemName: "folder")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
 
             if pane.isEditingPathBar {
                 FolderAddressTextField(

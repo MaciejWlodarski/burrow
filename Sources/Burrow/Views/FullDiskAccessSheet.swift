@@ -9,20 +9,21 @@ struct FullDiskAccessSheetView: View {
     @ViewState private var granted = FullDiskAccess.isGranted()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 24) {
             HStack(alignment: .top, spacing: 16) {
                 Image(systemName: granted ? "checkmark.shield.fill" : "lock.shield.fill")
                     .font(.system(size: 36))
                     .foregroundStyle(granted ? Color.green : Color.accentColor)
                     .frame(width: 44)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(granted ? "Full Disk Access is on" : "Give Burrow Full Disk Access")
                             .font(.title2.weight(.semibold))
                         Text(granted
                             ? "Burrow calculates every folder size and scans the whole disk without asking again."
-                            : "It lets Burrow read folders macOS protects, such as Desktop, Documents and Downloads. Burrow can then size every folder and scan the whole disk without asking each time.")
+                            : "Burrow can then read protected folders such as Desktop and Documents, size every folder and scan the whole disk.")
+                            .lineSpacing(3)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -61,7 +62,7 @@ struct FullDiskAccessSheetView: View {
                         }
 
                         Text("Without it, Burrow still works; macOS asks once for each protected folder, such as Desktop.")
-                            .font(FinderUI.captionFont)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

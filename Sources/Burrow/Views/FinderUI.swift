@@ -37,17 +37,21 @@ struct FinderSelectionSummary: Equatable {
     let selectedCount: Int
     let isSearching: Bool
     let isAnalysis: Bool
+    let hasQuery: Bool
 
     @MainActor init(pane: PaneTabState) {
         totalCount = pane.selectableItems.count
         selectedCount = pane.selectedItems.count
         isSearching = pane.isSearching
+        hasQuery = !pane.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         isAnalysis = pane.viewMode == .wiztree && pane.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var countDescription: String {
         if isSearching { return String(localized: "Searching…") }
         if selectedCount > 0 { return String(localized: "\(selectedCount.formatted()) of \(totalCount.formatted()) selected") }
+        // The results header already gives the count.
+        if hasQuery { return "" }
         // The disk map shows its own totals in its header.
         if isAnalysis { return "" }
         return totalCount == 1 ? String(localized: "1 item") : String(localized: "\(totalCount.formatted()) items")

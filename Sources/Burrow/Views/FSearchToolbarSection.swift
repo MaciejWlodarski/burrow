@@ -160,17 +160,18 @@ public struct FSearchToolbarSection: View {
                 ToolbarSpacer(.fixed)
             }
             ToolbarItemGroup {
-                // Button-style toggles show their on state the way Finder's do.
-                Toggle(isOn: Binding(get: { appState.isDualPane }, set: { _ in appState.toggleDualPane() })) {
+                // On reads as an accent-coloured glyph on the normal capsule:
+                // visible, but quieter than a solid fill.
+                Button { appState.toggleDualPane() } label: {
                     Label("Two Panes", systemImage: "rectangle.split.2x1")
+                        .foregroundStyle(appState.isDualPane ? Color.accentColor : Color.primary)
                 }
-                .toggleStyle(.button)
                 .help("Two-pane view (⇧⌘D)")
                 .accessibilityValue(appState.isDualPane ? String(localized: "On") : String(localized: "Off"))
-                Toggle(isOn: Binding(get: { appState.showInspector }, set: { appState.showInspector = $0 })) {
-                    Label("Inspector", systemImage: "sidebar.right")
+                Button { appState.showInspector.toggle() } label: {
+                    Label("Inspector", systemImage: "sidebar.trailing")
+                        .foregroundStyle(appState.showInspector ? Color.accentColor : Color.primary)
                 }
-                .toggleStyle(.button)
                 .help("Show or hide the inspector (⌘I)")
                 .accessibilityValue(appState.showInspector ? String(localized: "Visible") : String(localized: "Hidden"))
             }

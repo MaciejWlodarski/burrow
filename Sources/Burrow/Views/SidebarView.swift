@@ -13,6 +13,7 @@ public struct SidebarView: View {
     @ViewState private var isPinDropTargeted = false
     @ViewState private var isFavoriteEndTargeted = false
     @ViewState private var areTagsExpanded = false
+    @ViewState private var isHoveringTagsHeader = false
     @ViewState private var expandedServers: Set<String> = []
     @ViewState private var draggedFavoriteID: String? = nil
     @ViewState private var favoriteDragNonce: UUID? = nil
@@ -125,16 +126,9 @@ public struct SidebarView: View {
         } label: {
             HStack(spacing: FinderUI.rowSpacing) {
                 Group {
-                    if let icon = cloud.icon(for: location) {
-                        // Monochrome like the other sidebar glyphs; the provider's
-                        // own colours return when the row is selected.
-                        Image(nsImage: icon).resizable().frame(width: 16, height: 16)
-                            .saturation(isSelected ? 1 : 0)
-                            .opacity(isSelected ? 1 : 0.8)
-                    } else {
-                        Image(systemName: location.provider == "iCloud Drive" ? "icloud" : "cloud")
-                            .foregroundStyle(isSelected ? selectedTextColor : Color.secondary)
-                    }
+                    // A monochrome glyph like every other sidebar row; the name says the provider.
+                    Image(systemName: location.provider == "iCloud Drive" ? "icloud" : "cloud")
+                        .foregroundStyle(isSelected ? selectedTextColor : Color.secondary)
                 }
                 .frame(width: FinderUI.sidebarIconWidth)
                 .accessibilityHidden(true)
@@ -176,8 +170,10 @@ public struct SidebarView: View {
                 HStack {
                     Text("Tags").font(FinderUI.captionFont.weight(.semibold))
                     Spacer(minLength: 0)
+                    // Like Finder, the disclosure arrow shows on hover.
                     Image(systemName: tagsAreExpanded ? "chevron.down" : "chevron.right")
                         .font(FinderUI.captionFont.weight(.semibold))
+                        .opacity(isHoveringTagsHeader ? 1 : 0)
                 }
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, FinderUI.sidebarRowInset)
@@ -185,6 +181,7 @@ public struct SidebarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onHover { isHoveringTagsHeader = $0 }
             .accessibilityLabel("Tags")
             .accessibilityValue(tagsAreExpanded ? String(localized: "Expanded") : String(localized: "Collapsed"))
             .accessibilityHint("Show or hide the seven tag colors")
@@ -565,8 +562,8 @@ public struct SidebarView: View {
 
             if !volume.isNetwork, let totalBytes = volume.totalBytes, let freeBytes = volume.freeBytes,
                let usedFraction = volume.usedFraction {
-                // Compact capacity line: a thin bar with the free space beside it, aligned to the name.
-                HStack(spacing: 8) {
+                // A thin capacity bar with "free of total" under it, aligned to the name.
+                VStack(alignment: .leading, spacing: 3) {
                     GeometryReader { geometry in
                         ZStack(alignment: .leading) {
                             Capsule().fill(Color.secondary.opacity(0.2))
@@ -579,12 +576,11 @@ public struct SidebarView: View {
                     .accessibilityElement()
                     .accessibilityLabel("Used space on \(volume.name)")
                     .accessibilityValue("\(Int(usedFraction * 100)) percent")
-                    Text("\(FormatHelpers.formatBytes(freeBytes)) free")
+                    Text("\(FormatHelpers.formatBytes(freeBytes)) free of \(FormatHelpers.formatBytes(totalBytes))")
                         .font(FinderUI.captionFont)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .fixedSize()
                 }
                 .padding(.leading, FinderUI.sidebarRowInset + FinderUI.sidebarIconWidth + FinderUI.rowSpacing)
                 .padding(.trailing, FinderUI.sidebarRowInset)
@@ -707,9 +703,15 @@ public struct SidebarView: View {
     private var indexFooter: some View {
         VStack(alignment: .leading, spacing: FinderUI.sidebarRowGap) {
             HStack(spacing: FinderUI.sidebarRowGap) {
-                Text("File Index")
-                    .font(FinderUI.detailFont.weight(.semibold))
+                // One line: how much is searchable, and the two index actions.
+                Text("\(appState.indexedFileCount.formatted()) files indexed")
+                    .font(FinderUI.detailFont)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .help(appState.indexBuildDurationMs > 0
+                        ? String(localized: "Last indexing: \(FormatHelpers.formatLatency(appState.indexBuildDurationMs))")
+                        : String(localized: "Number of files available for search"))
                 Spacer(minLength: 0)
                 sidebarActionButton(icon: "gearshape", label: "Search and app settings") {
                     appState.showSettingsSheet = true
@@ -730,14 +732,6 @@ public struct SidebarView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Indexing files")
             }
-            Text("\(appState.indexedFileCount.formatted()) files in index")
-                .font(FinderUI.detailFont)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .help(appState.indexBuildDurationMs > 0
-                    ? String(localized: "Last indexing: \(FormatHelpers.formatLatency(appState.indexBuildDurationMs))")
-                    : String(localized: "Number of files available for search"))
         }
         .padding(.leading, FinderUI.sidebarInset + FinderUI.sidebarRowInset)
         .padding(.trailing, FinderUI.sidebarInset)

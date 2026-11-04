@@ -142,7 +142,7 @@ public enum FileKindCategory: String, CaseIterable, Sendable {
         return Color(nsColor: NSColor(name: nil) { appearance in
             let rgb = DiskMapRenderer.color(category)
             let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return (dark ? rgb.forDarkAppearance : rgb).nsColor
+            return rgb.adapted(dark: dark).nsColor
         })
     }
 

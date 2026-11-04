@@ -1103,9 +1103,7 @@ struct GeneralSettingsPane: View {
                     get: { appState.restoreSessionEnabled },
                     set: { appState.setSessionRestorationEnabled($0) }
                 ))
-                LabeledContent("Saved session") {
-                    Button("Clear…", role: .destructive) { confirmingSessionClear = true }
-                }
+                Button("Clear Saved Session…", role: .destructive) { confirmingSessionClear = true }
                 if let notice = appState.sessionPersistenceNotice {
                     Text(notice).font(FinderUI.captionFont).foregroundStyle(.orange)
                 }

@@ -109,7 +109,9 @@ public struct MainWindowView: View {
                                     FilePaneView(appState: appState, pane: appState.leftTab, paneSide: .left,
                                                  isFocusedPane: appState.activePaneSide == .left)
                                     Divider()
-                                    FinderStatusBar(appState: appState, activeTab: appState.leftTab)
+                                    FinderStatusBar(appState: appState, activeTab: appState.leftTab,
+                                                    showsFreeSpace: FinderStatusBar.volume(for: appState.leftTab.currentURL.path, in: appState.mountedVolumes)?.id
+                                                        != FinderStatusBar.volume(for: appState.rightPane.currentURL.path, in: appState.mountedVolumes)?.id)
                                 }
                                 .frame(minWidth: 260)
                                 VStack(spacing: 0) {
@@ -291,11 +293,16 @@ private struct FinderStatusBar: View {
     @ObservedObject var updates = UpdateChecker.shared
     /// Transfers, updates and indexing are app-wide; in two panes only one footer shows them.
     var showsActivity = true
-    private var availableBytes: Int64? {
-        let path = activeTab.currentURL.path
-        return appState.mountedVolumes.filter {
+    /// Off for the left of two panes on the same disk: the right footer says it once.
+    var showsFreeSpace = true
+    static func volume(for path: String, in volumes: [VolumeInfoItem]) -> VolumeInfoItem? {
+        volumes.filter {
             $0.url.path == "/" || path == $0.url.path || path.hasPrefix($0.url.path + "/")
-        }.max(by: { $0.url.path.count < $1.url.path.count })?.freeBytes
+        }.max(by: { $0.url.path.count < $1.url.path.count })
+    }
+    private var availableBytes: Int64? {
+        guard showsFreeSpace else { return nil }
+        return Self.volume(for: activeTab.currentURL.path, in: appState.mountedVolumes)?.freeBytes
     }
 
     private var selectionDescription: String {

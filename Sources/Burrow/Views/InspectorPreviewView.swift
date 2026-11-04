@@ -104,6 +104,8 @@ public struct InspectorPreviewView: View {
                             Menu {
                                 Button("Open in Terminal", systemImage: "terminal") { fileOps.openInTerminal(at: item.url) }
                                 Button("Open in Editor", systemImage: "chevron.left.forwardslash.chevron.right") { fileOps.openInCodeEditor(at: item.url) }
+                                Divider()
+                                Button("Edit Permissions…", systemImage: "lock") { showChmodEditor = true }
                             } label: {
                                 Image(systemName: "ellipsis")
                                     .frame(minHeight: 22)
@@ -174,19 +176,15 @@ public struct InspectorPreviewView: View {
                                         .font(FinderUI.detailFont)
                                         .foregroundStyle(.secondary)
                                     Spacer()
-                                    // The mode and its edit button stack, so neither crowds the label.
-                                    VStack(alignment: .trailing, spacing: 2) {
-                                        Text(posixPermissionsString)
-                                            .font(FinderUI.detailFont.monospaced())
-                                            .textSelection(.enabled)
-                                        Button(showChmodEditor ? String(localized: "Done") : String(localized: "Edit…")) {
-                                            showChmodEditor.toggle()
-                                        }
-                                        .font(FinderUI.captionFont)
-                                        .buttonStyle(.link)
-                                    .help("Edit POSIX permissions (chmod)")
-                                    .accessibilityLabel("Edit POSIX permissions")
-                                    .accessibilityValue(showChmodEditor ? String(localized: "Expanded") : String(localized: "Collapsed"))
+                                    // One line like the other rows; editing lives in the "…" menu.
+                                    Text(posixPermissionsString)
+                                        .font(FinderUI.detailFont.monospaced())
+                                        .textSelection(.enabled)
+                                    if showChmodEditor {
+                                        Button("Done") { showChmodEditor = false }
+                                            .font(FinderUI.detailFont)
+                                            .buttonStyle(.link)
+                                            .help("Close the permissions editor")
                                     }
                                 }
                                 if let permissionError {
@@ -665,15 +663,20 @@ public struct InspectorPreviewView: View {
                 .padding(FinderUI.rowSpacing)
         } else if let nsImg = preparedPreviewImage {
             VStack(spacing: 4) {
+                // Sized to the picture itself, so the rounded edge hugs the image.
+                let aspect = nsImg.size.height > 0 ? nsImg.size.width / nsImg.size.height : 1
+                let height = min(180, 264 / max(aspect, 0.01))
                 Image(nsImage: nsImg)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxHeight: 180)
+                    .frame(width: height * aspect, height: height)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5) }
                     .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
                     .accessibilityLabel("Preview: \(item.name)")
             }
-            .frame(maxWidth: .infinity)
+            // Left-aligned with the name and details below it.
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, FinderUI.compactSpacing)
         } else if !textPreviewLines.isEmpty {
             VStack(alignment: .leading, spacing: 4) {

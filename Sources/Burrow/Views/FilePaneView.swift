@@ -240,7 +240,7 @@ public struct FilePaneView: View {
         .background {
             ZStack {
                 Color(nsColor: .controlBackgroundColor)
-                if appState.isDualPane && isFocusedPane { Color.accentColor.opacity(0.16) }
+                if appState.isDualPane && isFocusedPane { Color.accentColor.opacity(0.10) }
             }
         }
         .overlay(alignment: .bottom) {
@@ -308,7 +308,7 @@ public struct FilePaneView: View {
         }
         let folder = parts.popLast() ?? ""
         let lead = parts.isEmpty ? "" : parts.joined(separator: " › ") + " › "
-        let leadColor = isSelected ? selectionForegroundColor.opacity(0.75) : Color.secondary.opacity(0.75)
+        let leadColor = isSelected ? selectionForegroundColor.opacity(0.8) : Color.secondary
         let folderColor = isSelected ? selectionForegroundColor : FinderUI.metadataColor
         return Text(verbatim: lead).foregroundColor(leadColor) + Text(verbatim: folder).foregroundColor(folderColor)
     }
@@ -333,7 +333,8 @@ public struct FilePaneView: View {
             while searchStart < text.endIndex,
                   let range = text[searchStart...].range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) {
                 text[range].font = FinderUI.bodyFont.weight(.semibold)
-                if !isSelected { text[range].backgroundColor = Color.accentColor.opacity(0.16) }
+                // Accent text, not a block that reads like a text selection.
+                if !isSelected { text[range].foregroundColor = Color.accentColor }
                 searchStart = range.upperBound
             }
         }
@@ -503,10 +504,11 @@ public struct FilePaneView: View {
                     }
                 }
 
+                // Two-line search rows get a larger icon to match their height.
                 Image(nsImage: FileIconCache.shared.icon(for: item))
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: 20, height: 20)
+                    .frame(width: showSubpath ? 28 : 20, height: showSubpath ? 28 : 20)
                     .opacity(item.isHidden || isCutItem ? 0.5 : 1.0)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -544,7 +546,7 @@ public struct FilePaneView: View {
 
                     if showSubpath {
                         resultLocation(item.parentPath, isSelected: isSelected)
-                            .font(FinderUI.captionFont)
+                            .font(.callout)
                             .lineLimit(1)
                             .truncationMode(.head)
                             .help(item.parentPath)
