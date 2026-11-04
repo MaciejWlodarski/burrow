@@ -123,10 +123,14 @@ public struct SidebarView: View {
         } label: {
             HStack(spacing: FinderUI.rowSpacing) {
                 Group {
-                    // A monochrome glyph like every other sidebar row; the name says the provider.
-                    // Accent like the Favorites glyphs, as Finder tints every sidebar icon.
-                    Image(systemName: location.provider == "iCloud Drive" ? "icloud" : "cloud")
-                        .foregroundStyle(isSelected ? selectedTextColor : Color.accentColor)
+                    // A third-party provider shows its own app icon (Google Drive, Dropbox…), so
+                    // two clouds never look alike; iCloud Drive keeps the system's accent glyph.
+                    if location.provider != "iCloud Drive", let icon = cloud.icon(for: location) {
+                        Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                    } else {
+                        Image(systemName: location.provider == "iCloud Drive" ? "icloud" : "cloud")
+                            .foregroundStyle(isSelected ? selectedTextColor : Color.accentColor)
+                    }
                 }
                 .frame(width: FinderUI.sidebarIconWidth)
                 .accessibilityHidden(true)
@@ -451,9 +455,10 @@ public struct SidebarView: View {
                 else { expandedServers.insert(server.id) }
             } label: {
                 HStack(spacing: FinderUI.rowSpacing) {
+                    // Accent, like the disk and folder glyphs around it.
                     Image(systemName: "server.rack")
                         .frame(width: FinderUI.sidebarIconWidth)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.accentColor)
                     Text(server.title).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 0)
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")
@@ -669,21 +674,19 @@ public struct SidebarView: View {
                         ? String(localized: "Last indexing: \(FormatHelpers.formatLatency(appState.indexBuildDurationMs))")
                         : String(localized: "Number of files available for search"))
                 Spacer(minLength: 0)
-                sidebarActionButton(icon: "arrow.clockwise", label: "Rebuild search index") {
-                    FSearchIndex.shared.startIndexing()
-                }
-                .disabled(appState.isIndexing)
-            }
-            if appState.isIndexing {
-                HStack(spacing: FinderUI.rowSpacing) {
+                // While indexing, a spinner takes the rebuild button's place, so the footer
+                // stays one line, level with the window's status bar.
+                if appState.isIndexing {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Indexing…")
-                        .font(FinderUI.detailFont)
-                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .help("Indexing…")
+                        .accessibilityLabel("Indexing files")
+                } else {
+                    sidebarActionButton(icon: "arrow.clockwise", label: "Rebuild search index") {
+                        FSearchIndex.shared.startIndexing()
+                    }
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Indexing files")
             }
         }
         .padding(.leading, FinderUI.sidebarInset + FinderUI.sidebarRowInset)
