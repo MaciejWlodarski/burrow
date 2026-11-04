@@ -74,9 +74,12 @@ public struct InspectorPreviewView: View {
                                     .accessibilityHidden(true)
                             }
 
-                            VStack(alignment: .leading, spacing: 3) {
+                            // Under a centred preview the name is centred too: one axis.
+                            let centred = preparedPreviewImage != nil
+                            VStack(alignment: centred ? .center : .leading, spacing: 3) {
                                 Text(item.name)
                                     .font(.system(size: 15, weight: .semibold))
+                                    .multilineTextAlignment(centred ? .center : .leading)
                                     .lineLimit(2)
                                     .textSelection(.enabled)
                                     .help(item.name)
@@ -91,7 +94,7 @@ public struct InspectorPreviewView: View {
                                         .foregroundStyle(.orange)
                                 }
                             }
-                            Spacer(minLength: 0)
+                            .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
                         }
 
 
@@ -209,7 +212,7 @@ public struct InspectorPreviewView: View {
                                 Button {
                                     _ = appState.activeTab.navigate(to: URL(fileURLWithPath: item.parentPath))
                                 } label: {
-                                    Label(FileManager.default.displayName(atPath: item.parentPath), systemImage: "folder")
+                                    Label((item.parentPath as NSString).abbreviatingWithTildeInPath, systemImage: "folder")
                                         .font(FinderUI.detailFont)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
@@ -581,7 +584,6 @@ public struct InspectorPreviewView: View {
             VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
                 Text("Checksums")
                     .font(FinderUI.detailFont.weight(.semibold))
-                    .foregroundStyle(.secondary)
                     .accessibilityAddTraits(.isHeader)
                 if sha256Hash == nil {
                     Button {
@@ -593,14 +595,20 @@ public struct InspectorPreviewView: View {
                             } else {
                                 Image(systemName: "number.square")
                             }
-                            Text(isComputingHash ? String(localized: "Calculating…") : (hashErrorMessage == nil ? String(localized: "Calculate SHA-256 and MD5") : String(localized: "Try Again")))
+                            Text(isComputingHash ? String(localized: "Calculating…") : (hashErrorMessage == nil ? String(localized: "Calculate Checksums") : String(localized: "Try Again")))
                                 .font(FinderUI.detailFont)
                         }
+                        .frame(maxWidth: .infinity, minHeight: 22)
                     }
                     .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     .disabled(isComputingHash)
                     .accessibilityLabel(isComputingHash ? String(localized: "Calculating checksums") : String(localized: "Calculate SHA-256 and MD5 checksums"))
+                    if !isComputingHash && hashErrorMessage == nil {
+                        Text(verbatim: "SHA-256 · MD5")
+                            .font(FinderUI.captionFont)
+                            .foregroundStyle(.secondary)
+                    }
                     if isComputingHash {
                         Button("Cancel Calculation", systemImage: "xmark.circle") { cancelHashes() }
                             .buttonStyle(.borderless)

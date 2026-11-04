@@ -335,7 +335,7 @@ public struct FilePaneView: View {
                 text[range].font = FinderUI.bodyFont.weight(.semibold)
                 // Semibold on a faint accent wash: the name keeps its colour, so the
                 // match neither reads as a link nor vanishes on a selected row.
-                if !isSelected { text[range].backgroundColor = Color.accentColor.opacity(0.18) }
+                if !isSelected { text[range].backgroundColor = FinderUI.matchHighlight }
                 searchStart = range.upperBound
             }
         }
@@ -397,9 +397,6 @@ public struct FilePaneView: View {
 
     // MARK: - 1. Native List View with Expandable Outline Tree (`▸`) & Drag/Drop
 
-    /// Wide windows give extra width to Kind, so a size never sits far from its name.
-    static let nameColumnMaxWidth: CGFloat = 420
-
     private var listBrowserView: some View {
         GeometryReader { geometry in
             let showDate = geometry.size.width >= 480
@@ -407,7 +404,7 @@ public struct FilePaneView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     sortableHeaderButton(title: String(localized: "Name"), field: .name)
-                        .frame(maxWidth: showKind ? Self.nameColumnMaxWidth : .infinity, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     sortableHeaderButton(title: String(localized: "Size"), field: .size)
                         .frame(width: 80, alignment: .trailing)
                         .padding(.trailing, 20)
@@ -417,7 +414,7 @@ public struct FilePaneView: View {
                     }
                     if showKind {
                         sortableHeaderButton(title: String(localized: "Kind"), field: .kind)
-                            .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
+                            .frame(width: 150, alignment: .leading)
                     }
                 }
                 .padding(.leading, 15)
@@ -512,7 +509,7 @@ public struct FilePaneView: View {
                 Image(nsImage: FileIconCache.shared.icon(for: item))
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: showSubpath ? 28 : 20, height: showSubpath ? 28 : 20)
+                    .frame(width: showSubpath ? 24 : 20, height: showSubpath ? 24 : 20)
                     .opacity(item.isHidden || isCutItem ? 0.5 : 1.0)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -575,7 +572,7 @@ public struct FilePaneView: View {
                     }
                 }
             }
-            .frame(maxWidth: showKind ? Self.nameColumnMaxWidth : .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Size Column
             Group {
@@ -604,7 +601,7 @@ public struct FilePaneView: View {
                     .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
+                    .frame(width: 150, alignment: .leading)
             }
         }
         .padding(.leading, 10)
@@ -613,7 +610,7 @@ public struct FilePaneView: View {
         .opacity(isCutItem ? 0.5 : 1.0)
         .background(
             isSelected ? selectionBackgroundColor : (isFolderDropTarget ? Color.accentColor.opacity(0.18)
-                : (index.isMultiple(of: 2) ? Color.clear : Color(nsColor: .alternatingContentBackgroundColors[1]))),
+                : (index.isMultiple(of: 2) ? Color.clear : FinderUI.stripeColor)),
             in: RoundedRectangle(cornerRadius: 5)
         )
         .overlay(

@@ -42,7 +42,7 @@ public struct DiskMapLayout: Sendable {
 /// Recursion stops at sub-pixel sizes, so tile count follows the bitmap's area
 /// rather than the number of files on disk.
 public enum DiskMapLayoutEngine {
-    static let headerHeightPoints = 20.0
+    static let headerHeightPoints = 22.0
     /// A header strip narrower than its label would be an empty grey band.
     private static let minimumHeaderWidthPoints = 72.0
     private static let minimumHeaderHeightPoints = 72.0
@@ -156,7 +156,8 @@ public enum DiskMapLayoutEngine {
                 && (x1 - x0) * (y1 - y0) <= parentArea * maximumHeaderedParentShare
             append(id, x0, y0, x1, y1, isFolder: directory, isRemainder: false, hasHeader: showsHeader)
             guard isGroup else { return }
-            let inset = (x1 - x0 > 6 && y1 - y0 > 6) ? 1.0 : 0
+            // A wider inset than the gap between files, so folders read as groups.
+            let inset = (x1 - x0 > 12 && y1 - y0 > 12) ? (2 * scale).rounded() : 0
             let header = showsHeader ? (headerHeightPoints * scale).rounded() : 0
             depth += 1
             placeChildren(of: id, x: x0 + inset, y: y0 + inset + header,
@@ -191,9 +192,12 @@ public enum DiskMapRenderer {
             func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
             return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
         }
-        /// White reads better on the mid-tone fills (teal, slate, raspberry);
-        /// only the light ones (orange, ochre) take near-black text.
-        func prefersDarkText(dark: Bool) -> Bool { luminance > (dark ? 0.22 : 0.18) }
+        /// Whichever of near-black or white has the higher WCAG contrast on this fill.
+        func prefersDarkText(dark: Bool) -> Bool {
+            let onWhite = 1.05 / (luminance + 0.05)
+            let onDark = (luminance + 0.05) / (0.007 + 0.05)
+            return onDark > onWhite
+        }
         var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
         /// Dark backgrounds make saturated fills glare: pull them toward grey and down a little.
         /// Light backgrounds: lift fills toward white so a big tile does not shout.
@@ -305,6 +309,11 @@ public enum DiskMapRenderer {
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         let truncating = NSMutableParagraphStyle()
         truncating.lineBreakMode = .byTruncatingTail
+        // File names keep both ends ("iMac-B…Shoot") so similar names stay distinct.
+        let middleTruncating = NSMutableParagraphStyle()
+        middleTruncating.lineBreakMode = .byTruncatingMiddle
+        let wrapping = NSMutableParagraphStyle()
+        wrapping.lineBreakMode = .byWordWrapping
         let nameFont = NSFont.systemFont(ofSize: CGFloat(12 * scale), weight: .semibold)
         let sizeFont = NSFont.monospacedDigitSystemFont(ofSize: CGFloat(12 * scale), weight: .regular)
         let header = (DiskMapLayoutEngine.headerHeightPoints * scale).rounded()
@@ -367,10 +376,26 @@ public enum DiskMapRenderer {
                 let offset = alignsWithHeaders && tile.depth == 0 && tileHeight >= header + lineHeight * 3 ? header + scale : 0
                 let top = Double(tile.y0) + offset + 4 * scale
                 let room = tileHeight - offset - 8 * scale
-                // One line only, cut with an ellipsis: a name broken across lines reads as two labels.
-                guard available >= minimumNameWidth, nameFits || available >= truncatedNameWidth else { continue }
-                let nameLines: Double = 1
-                name.draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
+                // Tall tiles may give a long name a second line, broken between words only;
+                // otherwise one line, shortened in the middle.
+                let wrapped = NSAttributedString(string: shownName, attributes: [
+                    .font: nameFont, .foregroundColor: textColor, .paragraphStyle: wrapping])
+                let wordsFit = shownName.split(separator: " ").allSatisfy {
+                    NSAttributedString(string: String($0), attributes: [.font: nameFont]).size().width <= available
+                }
+                let twoLines = !nameFits && wordsFit && room >= lineHeight * 3
+                    && wrapped.boundingRect(with: CGSize(width: available, height: .greatestFiniteMagnitude),
+                                            options: [.usesLineFragmentOrigin]).height <= lineHeight * 2 + scale
+                guard available >= minimumNameWidth, nameFits || twoLines || available >= truncatedNameWidth else { continue }
+                let nameLines: Double = twoLines ? 2 : 1
+                if twoLines {
+                    wrapped.draw(with: CGRect(x: x, y: top, width: available, height: lineHeight * 2 + scale),
+                                 options: [.usesLineFragmentOrigin])
+                } else {
+                    NSAttributedString(string: shownName, attributes: [
+                        .font: nameFont, .foregroundColor: textColor, .paragraphStyle: middleTruncating])
+                        .draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
+                }
                 if sizeWidth <= available, room >= lineHeight * (nameLines + 1) {
                     size.draw(at: CGPoint(x: x, y: top + lineHeight * nameLines))
                 }

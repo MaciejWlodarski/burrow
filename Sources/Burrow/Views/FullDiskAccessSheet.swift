@@ -26,22 +26,29 @@ struct FullDiskAccessSheetView: View {
                             .lineSpacing(3)
                             .foregroundStyle(FinderUI.metadataColor)
                             .fixedSize(horizontal: false, vertical: true)
+                        // What happens without it belongs with the explanation, not after the steps.
+                        if !granted {
+                            Text("Without it, Burrow still works; macOS asks once for each protected folder, such as Desktop.")
+                                .lineSpacing(3)
+                                .foregroundStyle(FinderUI.metadataColor)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     if !granted {
+                        // The primary button is the first step, so the list starts after it.
                         VStack(alignment: .leading, spacing: 8) {
-                            step(1, "Click Open System Settings.")
-                            step(2, "Under Privacy & Security › Full Disk Access, turn on Burrow.")
-                            step(3, "If System Settings offers Quit & Reopen, choose it.")
+                            step(1, "Under Privacy & Security › Full Disk Access, turn on Burrow.")
+                            step(2, "If System Settings offers Quit & Reopen, choose it.")
                         }
 
                         // Dropping the app onto the Full Disk Access list adds it, the
-                        // same as choosing it with +.
+                        // same as choosing it with +. A separate, quieter block: only
+                        // needed when Burrow is missing from the list.
                         HStack(spacing: 12) {
                             Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
                                 .resizable()
                                 .frame(width: 40, height: 40)
-                                .padding(8)
-                                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                                .padding(6)
                                 .overlay {
                                     RoundedRectangle(cornerRadius: 10)
                                         .strokeBorder(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
@@ -49,22 +56,24 @@ struct FullDiskAccessSheetView: View {
                                 .onDrag { NSItemProvider(contentsOf: Bundle.main.bundleURL) ?? NSItemProvider() }
                                 .help("Drag Burrow into the Full Disk Access list")
                                 .accessibilityLabel("Burrow app icon, drag it into the Full Disk Access list")
-                            Text("Burrow missing from the list? Drag this icon into the Full Disk Access list.")
-                                .font(FinderUI.detailFont)
-                                .foregroundStyle(FinderUI.metadataColor)
-                                .fixedSize(horizontal: false, vertical: true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Burrow missing from the list?")
+                                    .font(FinderUI.detailFont.weight(.medium))
+                                Text("Drag this icon into the Full Disk Access list.")
+                                    .font(FinderUI.detailFont)
+                                    .foregroundStyle(FinderUI.metadataColor)
+                            }
+                            .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
                         }
+                        .padding(10)
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
 
                         if openedSettings {
                             Label("Burrow notices the change when you come back.", systemImage: "arrow.uturn.backward")
                                 .font(FinderUI.detailFont)
                                 .foregroundStyle(.secondary)
                         }
-
-                        Text("Without it, Burrow still works; macOS asks once for each protected folder, such as Desktop.")
-                            .font(.callout)
-                            .foregroundStyle(FinderUI.metadataColor)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }

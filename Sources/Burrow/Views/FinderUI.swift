@@ -29,6 +29,13 @@ enum FinderUI {
     static let titleFont: Font = .headline
     /// Sizes, dates and kinds: quieter than names but still easy to read.
     static let metadataColor = Color.primary.opacity(0.68)
+    /// Zebra rows: a faint wash that guides the eye without banding, in either appearance.
+    static let stripeColor = Color.primary.opacity(0.035)
+    /// Search matches: a wash strong enough to find in both appearances.
+    static let matchHighlight = Color(nsColor: NSColor(name: nil) { appearance in
+        let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.35 : 0.22)
+    })
 }
 
 /// The status bar must describe the same projection that commands can act on.

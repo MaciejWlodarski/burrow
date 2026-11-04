@@ -348,11 +348,16 @@ private struct FinderStatusBar: View {
                     .help("Show how to update")
             }
             if activeTab.viewMode == .icons {
-                Image(systemName: "square.grid.2x2").foregroundStyle(.secondary).accessibilityHidden(true)
-                Slider(value: $appState.iconGridSize, in: 44...136)
-                    .frame(width: 90)
-                    .controlSize(.mini)
-                    .accessibilityLabel("Icon size")
+                // Small and large glyphs at either end, set apart from the free space.
+                HStack(spacing: 6) {
+                    Image(systemName: "photo").font(.system(size: 9)).foregroundStyle(.secondary).accessibilityHidden(true)
+                    Slider(value: $appState.iconGridSize, in: 44...136)
+                        .frame(width: 90)
+                        .controlSize(.mini)
+                        .accessibilityLabel("Icon size")
+                    Image(systemName: "photo").font(.system(size: 13)).foregroundStyle(.secondary).accessibilityHidden(true)
+                }
+                .padding(.trailing, 10)
             }
             if showsActivity && appState.isIndexing {
                 ProgressView().controlSize(.small).accessibilityLabel("Indexing files")

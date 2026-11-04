@@ -1108,7 +1108,14 @@ struct GeneralSettingsPane: View {
                     Text("Folders, views and searches reopen as you left them.")
                 }
                 LabeledContent("Saved session") {
-                    Button("Clear…", role: .destructive) { confirmingSessionClear = true }
+                    HStack(spacing: FinderUI.rowSpacing) {
+                        // What a clear would remove.
+                        if appState.restoreSessionEnabled {
+                            Text(appState.tabs.count == 1 ? String(localized: "1 tab") : String(localized: "\(appState.tabs.count.formatted()) tabs"))
+                                .foregroundStyle(.secondary)
+                        }
+                        Button("Clear…", role: .destructive) { confirmingSessionClear = true }
+                    }
                 }
                 if let notice = appState.sessionPersistenceNotice {
                     Text(notice).font(FinderUI.captionFont).foregroundStyle(.orange)
@@ -1318,10 +1325,11 @@ struct LanguageSettingsSection: View {
                 }
                 changed = true
             }
-        } footer: {
-            // Always present, so every section is spaced the same.
-            SettingsFootnote(changed ? String(localized: "Restart Burrow to apply the new language.")
-                             : String(localized: "System Default follows the language set in System Settings."))
+            if changed {
+                Text("Restart Burrow to apply the new language.")
+                    .font(FinderUI.captionFont)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -1334,7 +1342,7 @@ struct DefaultFileViewerSettingsSection: View {
 
     var body: some View {
         Section {
-            LabeledContent("Default file browser") {
+            LabeledContent {
                 HStack(spacing: FinderUI.rowSpacing) {
                     Text(isDefault ? "Currently Burrow" : "Currently Finder")
                         .foregroundStyle(.secondary)
@@ -1346,12 +1354,13 @@ struct DefaultFileViewerSettingsSection: View {
                             .disabled(isWorking)
                     }
                 }
+            } label: {
+                Text("Default file browser")
+                Text("Folders opened from other apps and “Show in Finder” open in Burrow. The Desktop and the Dock’s Trash stay with Finder.")
             }
             if let errorMessage {
                 Text(errorMessage).font(FinderUI.captionFont).foregroundStyle(.orange)
             }
-        } footer: {
-            SettingsFootnote(String(localized: "Folders opened from other apps and “Show in Finder” open in Burrow. The Desktop and the Dock’s Trash stay with Finder."))
         }
         .onAppear { isDefault = DefaultFileViewer.isDefault }
     }
@@ -1441,12 +1450,14 @@ struct UpdateSettingsSection: View {
 
     var body: some View {
         Section {
-            Toggle("Check for updates automatically", isOn: Binding(
+            // Explanations are row subtitles, so every group is spaced the same.
+            Toggle(isOn: Binding(
                 get: { updates.automaticChecksEnabled },
                 set: { updates.automaticChecksEnabled = $0 }
-            ))
-        } footer: {
-            SettingsFootnote(String(localized: "Once a day Burrow asks GitHub for the latest version number. Nothing about you or your files is sent."))
+            )) {
+                Text("Check for updates automatically")
+                Text("Once a day Burrow asks GitHub for the latest version number. Nothing about you or your files is sent.")
+            }
         }
     }
 }

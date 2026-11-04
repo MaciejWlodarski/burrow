@@ -12,7 +12,7 @@ public struct SidebarView: View {
     @ViewState private var dropTargetedPath: String? = nil
     @ViewState private var isPinDropTargeted = false
     @ViewState private var isFavoriteEndTargeted = false
-    @ViewState private var areTagsExpanded = false
+    @ViewState private var areTagsExpanded = true
     @ViewState private var isHoveringTagsHeader = false
     @ViewState private var expandedServers: Set<String> = []
     @ViewState private var draggedFavoriteID: String? = nil
@@ -186,27 +186,11 @@ public struct SidebarView: View {
             .accessibilityValue(tagsAreExpanded ? String(localized: "Expanded") : String(localized: "Collapsed"))
             .accessibilityHint("Show or hide the seven tag colors")
             if tagsAreExpanded {
-                ForEach(FinderTagColor.allCases) { tagColor in tagRow(tagColor) }
-            } else {
-                // Collapsed: one compact row of colour dots, each still a tag search.
-                HStack(spacing: 10) {
-                    ForEach(FinderTagColor.allCases) { tagColor in
-                        let query = "tag:\(tagColor.rawValue)"
-                        Button { runSearch(query) } label: {
-                            Circle()
-                                .fill(tagColor.swiftUIColor)
-                                .overlay(Circle().strokeBorder(isSearchSelected(query) ? Color.primary : Color.primary.opacity(0.2),
-                                                               lineWidth: isSearchSelected(query) ? 1.5 : 0.5))
-                                .frame(width: 12, height: 12)
-                                .frame(width: 18, height: 22)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help("Show files with tag: \(tagColor.displayName)")
-                        .accessibilityLabel("Tag: \(tagColor.displayName)")
-                    }
+                // Named tags in two columns: every colour labelled, in half the height.
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 0), GridItem(.flexible(), spacing: 0)],
+                          alignment: .leading, spacing: 0) {
+                    ForEach(FinderTagColor.allCases) { tagColor in tagRow(tagColor) }
                 }
-                .padding(.horizontal, FinderUI.sidebarRowInset + 2)
             }
         }
     }
