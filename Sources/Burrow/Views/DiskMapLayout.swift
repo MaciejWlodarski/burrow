@@ -300,7 +300,9 @@ public enum DiskMapRenderer {
                 // A hairline around a named group, header and body, so its children never
                 // read as part of a neighbouring group. A group without a header (one that
                 // fills its parent) gets none: an unnamed outline would look like a stray frame.
-                if tile.hasHeader {
+                // Only a top-level group draws the outline: a nested group's own header strip
+                // marks it, and a second hairline 2 pt inside the first would stack borders.
+                if tile.hasHeader && tile.depth == 0 {
                     fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderStroke)
                     let line = Int32(max(1, scale.rounded()))
                     if x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
@@ -413,7 +415,8 @@ public enum DiskMapRenderer {
             let gutter = (tile.depth == 0 ? 6 : 1.5) * scale
             let width = Double(tile.x1 - tile.x0) - gutter, tileHeight = Double(tile.y1 - tile.y0) - gutter
             // Roomier insets where the tile allows them; small tiles keep every point for text.
-            let inset = (width >= 100 * scale && tileHeight >= 56 * scale ? 8 : 6) * scale
+            // One inset for neighbours alike; only narrow tiles keep every point for text.
+            let inset = (width >= 64 * scale && tileHeight >= 56 * scale ? 8 : 6) * scale
             let isGroup = tile.isFolder && tree.childCount(tile.node) > 0 && !tile.isRemainder && !tile.isCollapsed
             if isGroup && !tile.hasHeader { continue }
             // Tiles too small for name and size still get a one-line name when one fits.
@@ -434,10 +437,14 @@ public enum DiskMapRenderer {
             if tile.isRemainder, let parent = tree.parent(tile.node) {
                 let rest = tree.children(of: parent).drop { $0 != tile.node }
                 bytes = rest.reduce(0) { $0 + tree.allocatedSize($1) }
-                // A compact summary tile says only how many it holds.
+                // A compact summary tile says only how many it holds, unless the full
+                // wording fits on its one line.
+                let summary = String(localized: "\(rest.count.formatted()) smaller items")
+                let summaryFits = NSAttributedString(string: summary, attributes: [.font: compactFont]).size().width
+                    <= width - 12 * scale
                 shownName = rest.count == 1 ? tree.name(tile.node)
-                    : isCompact ? "+\(rest.count.formatted())"
-                    : String(localized: "\(rest.count.formatted()) smaller items")
+                    : isCompact && !summaryFits ? "+\(rest.count.formatted())"
+                    : summary
             } else {
                 bytes = tree.allocatedSize(tile.node)
                 // Inside a coloured tile the colour already says the type.
