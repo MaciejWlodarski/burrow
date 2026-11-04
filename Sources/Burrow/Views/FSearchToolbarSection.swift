@@ -15,6 +15,11 @@ public struct FSearchToolbarSection: View {
 
     @ViewState private var isSearchPresented = false
 
+    private var windowTitle: String {
+        let query = activeTab.searchQuery.trimmingCharacters(in: .whitespaces)
+        return query.isEmpty ? activeTab.title : "“\(query)”"
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             if !activeTab.activeFilterPills.isEmpty {
@@ -23,6 +28,8 @@ public struct FSearchToolbarSection: View {
             }
         }
         .background(.bar)
+        // Observed here, so the title follows the query as it is typed.
+        .navigationTitle(windowTitle)
         .sheet(isPresented: $appState.showFSearchHelpPopover) {
             VStack(spacing: 0) {
                 FSearchSyntaxCheatsheetView(activeTab: activeTab)
@@ -148,16 +155,17 @@ public struct FSearchToolbarSection: View {
                 .help("New folder, hidden files and other actions")
             }
             ToolbarItemGroup {
-                Button { appState.toggleDualPane() } label: {
+                // Button-style toggles show their on state the way Finder's do.
+                Toggle(isOn: Binding(get: { appState.isDualPane }, set: { _ in appState.toggleDualPane() })) {
                     Label("Two Panes", systemImage: "rectangle.split.2x1")
                 }
-                .tint(appState.isDualPane ? .accentColor : .secondary)
+                .toggleStyle(.button)
                 .help("Two-pane view (⇧⌘D)")
                 .accessibilityValue(appState.isDualPane ? String(localized: "On") : String(localized: "Off"))
-                Button { appState.showInspector.toggle() } label: {
+                Toggle(isOn: Binding(get: { appState.showInspector }, set: { appState.showInspector = $0 })) {
                     Label("Inspector", systemImage: "sidebar.right")
                 }
-                .tint(appState.showInspector ? .accentColor : .secondary)
+                .toggleStyle(.button)
                 .help("Show or hide the inspector (⌘I)")
                 .accessibilityValue(appState.showInspector ? String(localized: "Visible") : String(localized: "Hidden"))
             }

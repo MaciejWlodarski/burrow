@@ -1064,7 +1064,7 @@ public struct FSearchSettingsSheetView: View {
     public var body: some View {
         TabView {
             GeneralSettingsPane(appState: appState)
-                .frame(height: 430)
+                .frame(height: 476)
                 .tabItem { Label("General", systemImage: "gearshape") }
             BrowsingSettingsPane()
                 .frame(minHeight: 300, idealHeight: 300)
@@ -1316,9 +1316,9 @@ struct LanguageSettingsSection: View {
                 changed = true
             }
         } footer: {
-            if changed {
-                SettingsFootnote(String(localized: "Restart Burrow to apply the new language."))
-            }
+            // Always present, so every section is spaced the same.
+            SettingsFootnote(changed ? String(localized: "Restart Burrow to apply the new language.")
+                             : String(localized: "System Default follows the language set in System Settings."))
         }
     }
 }
@@ -1333,7 +1333,7 @@ struct DefaultFileViewerSettingsSection: View {
         Section {
             LabeledContent("Default file browser") {
                 HStack(spacing: FinderUI.rowSpacing) {
-                    Text(verbatim: isDefault ? "Burrow" : "Finder")
+                    Text(isDefault ? "Currently Burrow" : "Currently Finder")
                         .foregroundStyle(.secondary)
                     if isDefault {
                         Button("Restore Finder") { apply(makeDefault: false) }

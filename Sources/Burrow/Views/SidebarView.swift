@@ -126,7 +126,11 @@ public struct SidebarView: View {
             HStack(spacing: FinderUI.rowSpacing) {
                 Group {
                     if let icon = cloud.icon(for: location) {
+                        // Monochrome like the other sidebar glyphs; the provider's
+                        // own colours return when the row is selected.
                         Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                            .saturation(isSelected ? 1 : 0)
+                            .opacity(isSelected ? 1 : 0.8)
                     } else {
                         Image(systemName: location.provider == "iCloud Drive" ? "icloud" : "cloud")
                             .foregroundStyle(isSelected ? selectedTextColor : Color.secondary)

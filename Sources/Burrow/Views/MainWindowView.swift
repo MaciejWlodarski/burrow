@@ -41,8 +41,6 @@ public struct MainWindowView: View {
             browserColumn(activeTab: activeTab)
         }
         .frame(minWidth: appState.isDualPane ? 1080 : 880, minHeight: 560)
-        .navigationTitle(activeTab.searchQuery.trimmingCharacters(in: .whitespaces).isEmpty
-                         ? activeTab.title : "“\(activeTab.searchQuery.trimmingCharacters(in: .whitespaces))”")
         .onChange(of: appState.activeTabId) { _, _ in appState.persistTabsState() }
         .onAppear {
             let open = openWindow

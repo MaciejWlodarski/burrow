@@ -81,13 +81,16 @@ public enum DiskMapLayoutEngine {
                 return max(side2 * largest / sum2, sum2 / (side2 * smallest))
             }
 
+            // Items under 1% of their folder (and too small to label) merge
+            // into one "smaller items" tile instead of a confetti of slivers.
+            let mergeArea = max(minimumArea, 144 * scale * scale, min(parentArea * 0.01, 24 * 24 * scale * scale))
             let kids = tree.children(of: parent)
             var index = 0
             while index < kids.count {
                 let id = kids[index]
                 let area = Double(tree.allocatedSize(id)) * pixelsPerByte
                 // Sorted largest-first: everything from here on is too small.
-                if area < minimumArea {
+                if area < minimumArea || (index > 0 && area < mergeArea) {
                     if area > 0 { remainderStart = id }
                     break
                 }
@@ -188,6 +191,12 @@ public enum DiskMapRenderer {
             return onDark > onWhite
         }
         var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
+        /// Dark backgrounds make saturated fills glare: pull them toward grey and down a little.
+        var forDarkAppearance: RGB {
+            let gray = 0.299 * red + 0.587 * green + 0.114 * blue
+            func soften(_ c: Double) -> Double { (c * 0.86 + gray * 0.14) * 0.88 }
+            return RGB(soften(red), soften(green), soften(blue))
+        }
     }
 
     private struct Palette {
@@ -248,11 +257,11 @@ public enum DiskMapRenderer {
             let base: RGB
             if tile.isRemainder { base = palette.remainder }
             else if tree.isSynthetic(tile.node) { base = palette.synthetic }
-            else { base = color(tree.category(tile.node)) }
+            else { base = dark ? color(tree.category(tile.node)).forDarkAppearance : color(tree.category(tile.node)) }
             fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, base)
         }
 
-        drawLabels(context, layout: layout, tree: tree, scale: scale, palette: palette)
+        drawLabels(context, layout: layout, tree: tree, scale: scale, palette: palette, dark: dark)
         return context.makeImage()
     }
 
@@ -274,7 +283,7 @@ public enum DiskMapRenderer {
     }
 
     private static func drawLabels(_ context: CGContext, layout: DiskMapLayout, tree: DiskTree, scale: Double,
-                                   palette: Palette) {
+                                   palette: Palette, dark: Bool) {
         let height = CGFloat(layout.height)
         context.saveGState()
         defer { context.restoreGState() }
@@ -289,41 +298,64 @@ public enum DiskMapRenderer {
         let sizeFont = NSFont.monospacedDigitSystemFont(ofSize: CGFloat(11 * scale), weight: .regular)
         let header = (DiskMapLayoutEngine.headerHeightPoints * scale).rounded()
         let inset = 5 * scale, lineHeight = 14 * scale
+        // Below this a label is noise; hovering still identifies the tile.
+        let minimumLabelWidth = 60 * scale, minimumLabelHeight = 28 * scale, minimumNameWidth = 50 * scale
         var drawn = 0
-        for tile in layout.tiles where drawn < 800 && !tile.isRemainder {
+        for tile in layout.tiles where drawn < 800 {
             let width = Double(tile.x1 - tile.x0) - scale, tileHeight = Double(tile.y1 - tile.y0) - scale
-            let isGroup = tile.isFolder && tree.childCount(tile.node) > 0
+            let isGroup = tile.isFolder && tree.childCount(tile.node) > 0 && !tile.isRemainder
             if isGroup && !tile.hasHeader { continue }
+            if !isGroup && (width < minimumLabelWidth || tileHeight < minimumLabelHeight) { continue }
             let textColor: NSColor
             if isGroup {
                 textColor = palette.folderText
             } else {
-                let base = tree.isSynthetic(tile.node) ? palette.synthetic : color(tree.category(tile.node))
+                var base = tile.isRemainder ? palette.remainder
+                    : tree.isSynthetic(tile.node) ? palette.synthetic : color(tree.category(tile.node))
+                if dark && !tile.isRemainder && !tree.isSynthetic(tile.node) { base = base.forDarkAppearance }
                 textColor = base.prefersDarkText ? NSColor(white: 0.08, alpha: 0.92) : NSColor.white
             }
-            let size = NSAttributedString(string: FormatHelpers.formatBytes(tree.allocatedSize(tile.node)), attributes: [
-                .font: sizeFont, .foregroundColor: textColor.withAlphaComponent(isGroup ? 0.75 : 0.9)])
-            let available = width - inset * 2
-            // A tile that cannot show its full size shows nothing.
-            guard available >= size.size().width, tileHeight >= lineHeight + 2 * scale else { continue }
-            // Inside a coloured tile the colour already says the type.
-            let rawName = tree.name(tile.node)
-            let shownName = isGroup ? rawName : (rawName as NSString).deletingPathExtension.isEmpty ? rawName : (rawName as NSString).deletingPathExtension
+            let bytes: Int64
+            let shownName: String
+            if tile.isRemainder, let parent = tree.parent(tile.node) {
+                let rest = tree.children(of: parent).drop { $0 != tile.node }
+                bytes = rest.reduce(0) { $0 + tree.allocatedSize($1) }
+                shownName = rest.count == 1 ? tree.name(tile.node)
+                    : String(localized: "\(rest.count.formatted()) smaller items")
+            } else {
+                bytes = tree.allocatedSize(tile.node)
+                // Inside a coloured tile the colour already says the type.
+                let rawName = tree.name(tile.node)
+                let stem = (rawName as NSString).deletingPathExtension
+                shownName = isGroup || stem.isEmpty ? rawName : stem
+            }
+            let size = NSAttributedString(string: FormatHelpers.formatBytes(bytes), attributes: [
+                .font: sizeFont, .foregroundColor: textColor.withAlphaComponent(isGroup ? 0.7 : 0.85)])
             let name = NSAttributedString(string: shownName, attributes: [
                 .font: nameFont, .foregroundColor: textColor, .paragraphStyle: truncating])
-            let top = Double(tile.y0) + (isGroup ? (header - lineHeight) / 2 : 3 * scale)
-            // Names need room to be readable; narrower tiles show only the size.
-            if !isGroup && tileHeight >= lineHeight * 2 + 6 * scale && available >= 80 * scale {
-                name.draw(in: CGRect(x: Double(tile.x0) + inset, y: top, width: available, height: lineHeight))
-                size.draw(at: CGPoint(x: Double(tile.x0) + inset, y: top + lineHeight))
-            } else {
-                let sizeWidth = size.size().width
+            let available = width - inset * 2
+            let sizeWidth = size.size().width
+            // A name cut to a few letters ("Brand…") says nothing; leave it to hover.
+            let nameFits = name.size().width <= available
+            let truncatedNameWidth = 72 * scale
+            let x = Double(tile.x0) + inset
+            if isGroup {
+                let top = Double(tile.y0) + (header - lineHeight) / 2
                 let nameWidth = available - sizeWidth - 6 * scale
-                if nameWidth >= 60 * scale {
-                    name.draw(in: CGRect(x: Double(tile.x0) + inset, y: top, width: nameWidth, height: lineHeight))
-                    size.draw(at: CGPoint(x: Double(tile.x0) + inset + available - sizeWidth, y: top))
+                guard nameFits || available >= truncatedNameWidth else { continue }
+                if nameWidth >= minimumNameWidth && (name.size().width <= nameWidth || nameWidth >= truncatedNameWidth) {
+                    name.draw(in: CGRect(x: x, y: top, width: nameWidth, height: lineHeight))
+                    size.draw(at: CGPoint(x: x + available - sizeWidth, y: top))
                 } else {
-                    size.draw(at: CGPoint(x: Double(tile.x0) + inset, y: top))
+                    name.draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
+                }
+            } else {
+                // The name always leads; the size follows when it fits whole.
+                let top = Double(tile.y0) + 4 * scale
+                guard available >= minimumNameWidth, nameFits || available >= truncatedNameWidth else { continue }
+                name.draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
+                if sizeWidth <= available, tileHeight >= lineHeight * 2 + 6 * scale {
+                    size.draw(at: CGPoint(x: x, y: top + lineHeight))
                 }
             }
             drawn += 1

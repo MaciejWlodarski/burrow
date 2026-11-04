@@ -96,13 +96,31 @@ public struct InspectorPreviewView: View {
 
 
                         // Frequent actions sit under the name, one click away.
+                        // Trash stands apart so it is never hit by accident.
                         HStack(spacing: 6) {
                             inspectorIconButton("Quick Look", icon: "eye") { appState.toggleQuickLook() }
-                            inspectorIconButton("Open in Terminal", icon: "terminal") { fileOps.openInTerminal(at: item.url) }
-                            inspectorIconButton("Open in Editor", icon: "chevron.left.forwardslash.chevron.right") { fileOps.openInCodeEditor(at: item.url) }
-                            inspectorIconButton("Copy Path", icon: "doc.on.doc") { fileOps.copyPaths([item]) }
                             inspectorIconButton("Share", icon: "square.and.arrow.up") { fileOps.showShareSheet(for: [item]) }
-                            inspectorIconButton("Move to Trash", icon: "trash") { fileOps.moveToTrash([item]) }
+                            inspectorIconButton("Copy Path", icon: "doc.on.doc") { fileOps.copyPaths([item]) }
+                            Menu {
+                                Button("Open in Terminal", systemImage: "terminal") { fileOps.openInTerminal(at: item.url) }
+                                Button("Open in Editor", systemImage: "chevron.left.forwardslash.chevron.right") { fileOps.openInCodeEditor(at: item.url) }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .frame(minHeight: 22)
+                            }
+                            .menuIndicator(.hidden)
+                            .buttonStyle(.bordered)
+                            .fixedSize()
+                            .help("More actions")
+                            .accessibilityLabel("More actions")
+                            Spacer(minLength: 14)
+                            Button(role: .destructive) { fileOps.moveToTrash([item]) } label: {
+                                Image(systemName: "trash")
+                                    .frame(minWidth: 22, minHeight: 22)
+                            }
+                            .buttonStyle(.bordered)
+                            .help("Move to Trash")
+                            .accessibilityLabel("Move to Trash")
                         }
 
                         Divider()
@@ -159,14 +177,11 @@ public struct InspectorPreviewView: View {
                                     Text(posixPermissionsString)
                                         .font(FinderUI.detailFont.monospaced())
                                         .textSelection(.enabled)
-                                    Button {
+                                    Button(showChmodEditor ? String(localized: "Done") : String(localized: "Edit…")) {
                                         showChmodEditor.toggle()
-                                    } label: {
-                                        Image(systemName: "slider.horizontal.3")
-                                            .font(FinderUI.detailFont)
-                                            .frame(width: 24, height: 24)
                                     }
-                                    .buttonStyle(.borderless)
+                                    .font(FinderUI.detailFont)
+                                    .buttonStyle(.link)
                                     .help("Edit POSIX permissions (chmod)")
                                     .accessibilityLabel("Edit POSIX permissions")
                                     .accessibilityValue(showChmodEditor ? String(localized: "Expanded") : String(localized: "Collapsed"))
@@ -183,16 +198,17 @@ public struct InspectorPreviewView: View {
                                 chmodEditorBox(for: item)
                             }
 
-                            VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 12) {
                                 Text("Where")
                                     .font(FinderUI.detailFont)
                                     .foregroundStyle(.secondary)
-                                Text(item.parentPath)
+                                    .layoutPriority(1)
+                                Spacer(minLength: 0)
+                                Text((item.parentPath as NSString).abbreviatingWithTildeInPath)
                                     .font(FinderUI.detailFont)
                                     .foregroundStyle(.primary)
-                                    .textSelection(.enabled)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
                                     .help(item.path)
                             }
                         }
@@ -749,7 +765,7 @@ public struct InspectorPreviewView: View {
     private func inspectorIconButton(_ title: LocalizedStringKey, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .frame(maxWidth: .infinity, minHeight: 22)
+                .frame(minWidth: 22, minHeight: 22)
         }
         .buttonStyle(.bordered)
         .controlSize(.regular)

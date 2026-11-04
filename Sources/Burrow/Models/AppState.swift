@@ -133,7 +133,7 @@ public final class AppState: ObservableObject {
     @Published public var showInspector: Bool = false {
         didSet { Self.preferences.set(showInspector, forKey: "bf.showInspector") }
     }
-    @Published public var iconGridSize: Double = 88.0 {
+    @Published public var iconGridSize: Double = 104.0 {
         didSet { Self.preferences.set(iconGridSize, forKey: "bf.iconGridSize") }
     }
     @Published public var showTerminalDrawer: Bool = false

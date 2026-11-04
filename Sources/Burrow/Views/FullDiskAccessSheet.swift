@@ -22,17 +22,14 @@ struct FullDiskAccessSheetView: View {
                             .font(.title2.weight(.semibold))
                         Text(granted
                             ? "Burrow calculates every folder size and scans the whole disk without asking again."
-                            : "Burrow can then show the size of every folder and scan the whole disk, without a permission prompt for each protected folder.")
+                            : "See the size of every folder and scan the whole disk, without a prompt for each protected folder.")
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if !granted {
-                        Label("System Settings › Privacy & Security › Full Disk Access", systemImage: "gearshape")
-                            .font(FinderUI.detailFont.weight(.medium))
-                            .foregroundStyle(.secondary)
                         VStack(alignment: .leading, spacing: 8) {
                             step(1, "Click Open System Settings.")
-                            step(2, "Turn on Burrow in the list.")
+                            step(2, "Under Privacy & Security › Full Disk Access, turn on Burrow.")
                             step(3, "If System Settings offers Quit & Reopen, choose it.")
                         }
 
@@ -41,8 +38,8 @@ struct FullDiskAccessSheetView: View {
                         HStack(spacing: 12) {
                             Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
                                 .resizable()
-                                .frame(width: 40, height: 40)
-                                .padding(8)
+                                .frame(width: 32, height: 32)
+                                .padding(6)
                                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
                                 .overlay {
                                     RoundedRectangle(cornerRadius: 10)
@@ -63,9 +60,8 @@ struct FullDiskAccessSheetView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text("Without it, Burrow still works: protected folders such as Desktop and Documents are searched and sized once you open them or ask, and macOS asks about each of them once.")
-                            .font(FinderUI.detailFont)
-                            .lineSpacing(2)
+                        Text("Without it, Burrow still works; macOS asks once for each protected folder, such as Desktop.")
+                            .font(FinderUI.captionFont)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

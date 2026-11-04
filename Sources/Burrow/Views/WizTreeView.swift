@@ -333,6 +333,8 @@ public struct WizTreeAnalyzerView: View {
     @ViewState private var mapImage: CGImage?
     @ViewState private var mapImageScale: CGFloat = 2
     @ViewState private var mapViewport: CGSize = .zero
+    @ViewState private var treePaneHeight: CGFloat = 24 + 28 * 6
+    @ViewState private var treePaneDrag: CGFloat = 0
     @ViewState private var hoveredTile: DiskMapTile?
     @ViewState private var mapRenderTask: Task<Void, Never>?
     @ViewState private var mapSummaryTask: Task<Void, Never>?
@@ -505,7 +507,6 @@ public struct WizTreeAnalyzerView: View {
                     analyzerTitle
                     analysisModePicker
                         .pickerStyle(.segmented)
-                        .tint(Color.secondary)
                         .fixedSize()
                     Spacer(minLength: 0)
                     wholeDiskButton
@@ -604,7 +605,11 @@ public struct WizTreeAnalyzerView: View {
 
     /// "used · 44 files · 213 GB free · scanned 1:04 PM"
     private var telemetryDetails: String {
-        var parts = [telemetryTotalTitle.lowercased(), String(localized: "\(totalScannedFiles.formatted()) files")]
+        var lead = telemetryTotalTitle.lowercased()
+        if isMapMode, let mapTree {
+            lead = String(localized: "\(lead) in \(mapTree.name(DiskTree.rootID))")
+        }
+        var parts = [lead, String(localized: "\(totalScannedFiles.formatted()) files")]
         if isMapMode, let free = mapTree?.volumeFreeBytes {
             parts.append(String(localized: "\(FormatHelpers.formatBytes(free)) free on disk"))
         }
@@ -623,7 +628,7 @@ public struct WizTreeAnalyzerView: View {
         Button {
             performPaneAction { showWholeDisk() }
         } label: {
-            Label("Whole Disk", systemImage: "internaldrive")
+            Label("Scan Whole Disk", systemImage: "internaldrive")
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
@@ -765,11 +770,37 @@ public struct WizTreeAnalyzerView: View {
 
     // MARK: - Split Workspace: Expandable Tree + Full-Depth Treemap
 
+    /// Header plus whole rows, so the divider never cuts through a row.
+    private static let treeHeaderHeight: CGFloat = 24
+    private static let treeRowHeight: CGFloat = 28
+    private static let minimumMapHeight: CGFloat = 220
+
     private func wizTreeSplitWorkspace(_ tree: DiskTree) -> some View {
-        VSplitView {
-            // Optional detail columns collapse in narrow panes, like the file list.
-            GeometryReader { geometry in
+        GeometryReader { outer in
+            let maximumTree = max(Self.treeHeaderHeight + Self.treeRowHeight * 2,
+                                  outer.size.height - Self.minimumMapHeight)
+            let treeHeight = min(maximumTree, treePaneHeight + treePaneDrag)
+            VStack(spacing: 0) {
+                treePane(tree)
+                    .frame(height: treeHeight)
+                splitHandle(currentHeight: treeHeight, maximumHeight: maximumTree)
                 VStack(spacing: 0) {
+                    // Live Hover / Selection HUD Bar
+                    treemapHudBar(tree)
+                    diskMapCanvas(tree)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .padding(FinderUI.rowSpacing)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                }
+                .frame(maxHeight: .infinity)
+            }
+        }
+    }
+
+    private func treePane(_ tree: DiskTree) -> some View {
+        // Optional detail columns collapse in narrow panes, like the file list.
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
                 diskTreeHeader(availableWidth: geometry.size.width)
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -784,20 +815,33 @@ public struct WizTreeAnalyzerView: View {
                         if let target { proxy.scrollTo(target, anchor: .center) }
                     }
                 }
-                }
             }
-            .frame(minHeight: 120, idealHeight: 190)
-
-            VStack(spacing: 0) {
-                // Live Hover / Selection HUD Bar
-                treemapHudBar(tree)
-                diskMapCanvas(tree)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .padding(FinderUI.rowSpacing)
-                    .background(Color(nsColor: .controlBackgroundColor))
-            }
-            .frame(minHeight: 260, idealHeight: 460)
         }
+    }
+
+    /// A thin divider with a taller drag target that snaps the tree to whole rows.
+    private func splitHandle(currentHeight: CGFloat, maximumHeight: CGFloat) -> some View {
+        Divider()
+            .frame(height: 1)
+            .overlay {
+                Color.clear
+                    .frame(height: 9)
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+                    }
+                    .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .onChanged { value in treePaneDrag = value.translation.height }
+                        .onEnded { value in
+                            let raw = min(maximumHeight, max(Self.treeHeaderHeight + Self.treeRowHeight * 2,
+                                                             treePaneHeight + value.translation.height))
+                            let rows = ((raw - Self.treeHeaderHeight) / Self.treeRowHeight).rounded()
+                            treePaneHeight = Self.treeHeaderHeight + rows * Self.treeRowHeight
+                            treePaneDrag = 0
+                        })
+            }
+            .zIndex(1)
+            .accessibilityHidden(true)
     }
 
     private func diskTreeHeader(availableWidth: CGFloat) -> some View {
@@ -863,7 +907,7 @@ public struct WizTreeAnalyzerView: View {
                     .foregroundStyle(secondary)
                     .accessibilityHidden(true)
             } else {
-                Image(nsImage: iconCache.icon(for: tree.fileItem(id), preferThumbnail: false))
+                Image(nsImage: iconCache.icon(for: tree.fileItem(id)))
                     .resizable()
                     .frame(width: 18, height: 18)
                     .accessibilityHidden(true)
@@ -887,7 +931,8 @@ public struct WizTreeAnalyzerView: View {
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.primary.opacity(0.07))
                         Capsule()
-                            .fill(isSelected ? selectionForegroundColor.opacity(0.85) : Color.secondary.opacity(0.6))
+                            .fill(isSelected ? selectionForegroundColor.opacity(0.85)
+                                  : synthetic ? Color.secondary.opacity(0.6) : tree.category(id).treemapColor)
                             .frame(width: max(3, geometry.size.width * CGFloat(fraction)))
                     }
                 }
@@ -907,7 +952,7 @@ public struct WizTreeAnalyzerView: View {
                 .foregroundStyle(foreground)
                 .frame(width: 80, alignment: .trailing)
             if availableWidth >= 760 {
-                Text(tree.fileCount(id).formatted())
+                Text(tree.isDirectory(id) ? tree.fileCount(id).formatted() : "—")
                     .font(FinderUI.detailFont)
                     .monospacedDigit()
                     .foregroundStyle(secondary)
@@ -972,14 +1017,21 @@ public struct WizTreeAnalyzerView: View {
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
-            } else {
-                Text(tree.name(mapScope))
+            } else if mapScope != DiskTree.rootID {
+                // Zoomed in: the path from the scanned folder down to the map's scope.
+                Text(zoomPath(in: tree))
                     .font(FinderUI.detailFont.weight(.semibold))
                     .lineLimit(1)
+                    .truncationMode(.head)
                 Text("· \(FormatHelpers.formatBytes(tree.allocatedSize(mapScope)))")
                     .font(FinderUI.detailFont)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
+            } else {
+                Text("Point at a tile for details. Double-click a folder to zoom in.")
+                    .font(FinderUI.captionFont)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer()
         }
@@ -987,6 +1039,16 @@ public struct WizTreeAnalyzerView: View {
         .frame(height: 28)
         .background(Color(nsColor: .controlBackgroundColor))
         .help("Click an item to locate it in the tree. Double-click a folder to zoom in.")
+    }
+
+    private func zoomPath(in tree: DiskTree) -> String {
+        var names: [String] = []
+        var node: DiskTree.NodeID? = mapScope
+        while let current = node {
+            names.append(tree.name(current))
+            node = tree.parent(current)
+        }
+        return names.reversed().joined(separator: " › ")
     }
 
     private func remainderSize(_ tile: DiskMapTile, in tree: DiskTree) -> Int64 {

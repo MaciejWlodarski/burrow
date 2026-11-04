@@ -240,7 +240,7 @@ public struct FilePaneView: View {
         .background {
             ZStack {
                 Color(nsColor: .controlBackgroundColor)
-                if appState.isDualPane && isFocusedPane { Color.accentColor.opacity(0.08) }
+                if appState.isDualPane && isFocusedPane { Color.accentColor.opacity(0.12) }
             }
         }
         .overlay(alignment: .bottom) {
@@ -266,7 +266,24 @@ public struct FilePaneView: View {
                  : count == 1 ? String(localized: "1 result for “\(query)”") : String(localized: "\(count) results for “\(query)”"))
                 .fontWeight(.semibold)
                 .lineLimit(1)
-            Text(scope).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            // Where to search, changeable right where the results are described.
+            Menu {
+                Picker("Search In", selection: Binding(get: { pane.searchScope }, set: { mode in
+                    pane.searchScope = mode
+                    if pane !== appState.activeTab { pane.triggerSearch() }
+                })) {
+                    Text("All Indexed Folders").tag(SearchScopeMode.wholeIndex)
+                    Text("“\(folder)” and Subfolders").tag(SearchScopeMode.recursiveFolder)
+                    Text("“\(folder)” Only").tag(SearchScopeMode.currentFolder)
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Text(scope).lineLimit(1).truncationMode(.middle)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .foregroundStyle(.secondary)
+            .help("Choose where to search")
             Spacer(minLength: 0)
         }
         .font(FinderUI.detailFont)
@@ -274,7 +291,7 @@ public struct FilePaneView: View {
         .frame(height: 34)
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .bottom) { Divider() }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 
     /// "Burrow Demo › Studio › Invoices": the folders nearest the result
@@ -282,9 +299,8 @@ public struct FilePaneView: View {
     static func shortLocation(of path: String) -> String {
         let home = NSHomeDirectory()
         let relative = path == home ? "~" : path.hasPrefix(home + "/") ? "~/" + path.dropFirst(home.count + 1) : path
-        let parts = relative.split(separator: "/").map(String.init)
-        let shown = parts.suffix(2).joined(separator: " › ")
-        return parts.count > 2 ? "… › " + shown : shown
+        // The whole location; the text view shortens the middle only when it overflows.
+        return relative.split(separator: "/").joined(separator: " › ")
     }
 
     /// Search results show the typed text in bold within each name.
@@ -512,7 +528,7 @@ public struct FilePaneView: View {
                             .font(FinderUI.captionFont)
                             .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                             .lineLimit(1)
-                            .truncationMode(.head)
+                            .truncationMode(.middle)
                             .help(item.parentPath)
                     }
 
@@ -629,7 +645,7 @@ public struct FilePaneView: View {
 
     private var iconGridBrowserView: some View {
         let iconDim = CGFloat(appState.iconGridSize)
-        let cellWidth = max(96, iconDim + 44)
+        let cellWidth = max(110, iconDim + 60)
         // Top-aligned cells keep thumbnails, names and sizes on shared lines.
         let columns = [GridItem(.adaptive(minimum: cellWidth, maximum: cellWidth + 24), spacing: 14, alignment: .top)]
         return ScrollView {
@@ -681,7 +697,8 @@ public struct FilePaneView: View {
                                 RoundedRectangle(cornerRadius: 5)
                                     .fill(isSelected ? selectionBackgroundColor : Color.clear)
                             )
-                            .frame(height: 36, alignment: .top)
+                            // The size sits right under the name, however many lines it takes.
+                            .padding(.bottom, -4)
 
                             Group {
                                 if item.isDirectory {
@@ -691,7 +708,7 @@ public struct FilePaneView: View {
                                 }
                             }
                             .font(FinderUI.captionFont)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(FinderUI.metadataColor)
                         }
                         .frame(width: cellWidth)
                         .padding(6)
