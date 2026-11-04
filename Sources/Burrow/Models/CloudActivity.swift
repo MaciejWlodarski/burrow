@@ -14,6 +14,7 @@ public final class CloudActivity: ObservableObject {
     private var downloadStarted: [String: Date] = [:]
     private var poll: Task<Void, Never>?
     private var icons: [String: NSImage] = [:]
+    private var symbols: [String: NSImage?] = [:]
 
     init() {
         #if !BURROW_TESTING
@@ -42,6 +43,34 @@ public final class CloudActivity: ObservableObject {
         icon.size = NSSize(width: 16, height: 16)
         icons[location.id] = icon
         return icon
+    }
+
+    /// The monochrome symbol the provider's File Provider extension declares
+    /// (CFBundleSymbolName, e.g. Google Drive's triangle): what Finder's sidebar
+    /// shows. A template image, so it takes the sidebar's tint. Nil when the
+    /// extension declares none.
+    public func sidebarSymbol(for location: CloudFiles.Location) -> NSImage? {
+        if let cached = symbols[location.id] { return cached }
+        var found: NSImage?
+        if let bundleID = CloudFiles.appBundleIdentifier(for: location.provider),
+           let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+           let plugins = try? FileManager.default.contentsOfDirectory(
+               at: app.appendingPathComponent("Contents/PlugIns"), includingPropertiesForKeys: nil) {
+            for appex in plugins where appex.pathExtension == "appex" {
+                guard let bundle = Bundle(url: appex), let info = bundle.infoDictionary,
+                      let ext = info["NSExtension"] as? [String: Any],
+                      (ext["NSExtensionPointIdentifier"] as? String)?.hasPrefix("com.apple.fileprovider") == true,
+                      let icons = info["CFBundleIcons"] as? [String: Any],
+                      let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+                      let name = primary["CFBundleSymbolName"] as? String,
+                      let image = NSImage(symbolName: name, bundle: bundle, variableValue: 0) else { continue }
+                image.isTemplate = true
+                found = image
+                break
+            }
+        }
+        symbols[location.id] = found
+        return found
     }
 
     public func location(containing path: String) -> CloudFiles.Location? {

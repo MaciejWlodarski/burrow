@@ -123,9 +123,14 @@ public struct SidebarView: View {
         } label: {
             HStack(spacing: FinderUI.rowSpacing) {
                 Group {
-                    // A third-party provider shows its own app icon (Google Drive, Dropbox…), so
-                    // two clouds never look alike; iCloud Drive keeps the system's accent glyph.
-                    if location.provider != "iCloud Drive", let icon = cloud.icon(for: location) {
+                    // Each provider in its own shape, as in Finder: the monochrome symbol its
+                    // File Provider extension declares (Google Drive's triangle), tinted like every
+                    // sidebar glyph; else its app icon. iCloud Drive keeps the system glyph.
+                    if location.provider != "iCloud Drive", let symbol = cloud.sidebarSymbol(for: location) {
+                        Image(nsImage: symbol)
+                            .renderingMode(.template)
+                            .foregroundStyle(isSelected ? selectedTextColor : Color.accentColor)
+                    } else if location.provider != "iCloud Drive", let icon = cloud.icon(for: location) {
                         Image(nsImage: icon).resizable().frame(width: 16, height: 16)
                     } else {
                         Image(systemName: location.provider == "iCloud Drive" ? "icloud" : "cloud")
