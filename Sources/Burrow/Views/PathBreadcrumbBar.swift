@@ -233,7 +233,8 @@ public struct PathBreadcrumbBar: View {
                         Text(segment.name)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                            .fontWeight(isCurrent ? .semibold : .regular)
+                            // Primary, not bold: the window title above already names this folder.
+                            .foregroundStyle(isCurrent ? Color.primary : Color.primary.opacity(0.8))
                     }
                     .padding(.horizontal, 5)
                     .frame(minHeight: 22)

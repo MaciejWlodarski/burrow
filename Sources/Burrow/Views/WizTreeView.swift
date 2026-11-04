@@ -502,12 +502,6 @@ public struct WizTreeAnalyzerView: View {
 
     // MARK: - Top Control Bar
 
-    private func publishAnalysisSummary() {
-        pane.analysisSummary = totalScannedFiles > 0
-            ? String(localized: "\(totalScannedFiles.formatted()) files · \(FormatHelpers.formatBytes(totalScannedBytes))")
-            : nil
-    }
-
     private var analyzerHeaderBar: some View {
         VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
             ViewThatFits(in: .horizontal) {
@@ -554,9 +548,6 @@ public struct WizTreeAnalyzerView: View {
         .padding(.top, 10)
         .padding(.bottom, FinderUI.rowSpacing)
         .background(Color(nsColor: .controlBackgroundColor))
-        .onAppear { publishAnalysisSummary() }
-        .onChange(of: totalScannedFiles) { _, _ in publishAnalysisSummary() }
-        .onChange(of: totalScannedBytes) { _, _ in publishAnalysisSummary() }
     }
 
 
@@ -822,12 +813,17 @@ public struct WizTreeAnalyzerView: View {
         // Optional detail columns collapse in narrow panes, like the file list.
         GeometryReader { geometry in
             VStack(spacing: 0) {
+                // Bars are drawn against the largest visible row, so the biggest item
+                // fills the track; the percentage keeps the share of the total.
+                let largestRow = treeRows.lazy.filter { $0.hiddenChildren == nil }
+                    .map { tree.allocatedSize($0.node) }.max() ?? 0
                 diskTreeHeader(availableWidth: geometry.size.width)
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(Array(treeRows.enumerated()), id: \.element.id) { index, row in
-                                diskTreeRow(row, tree: tree, index: index, availableWidth: geometry.size.width)
+                                diskTreeRow(row, tree: tree, index: index, availableWidth: geometry.size.width,
+                                            largestRow: largestRow)
                                     .id(row.id)
                             }
                         }
@@ -874,8 +870,13 @@ public struct WizTreeAnalyzerView: View {
 
     /// Name column of the analysis tree: wide enough for long names, never so wide
     /// that short ones sit far from their bars.
+    static var legacyScrollerWidth: CGFloat {
+        NSScroller.preferredScrollerStyle == .legacy
+            ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
+    }
+
     static func treeNameWidth(_ availableWidth: CGFloat) -> CGFloat {
-        min(380, max(240, availableWidth * 0.36))
+        min(300, max(220, availableWidth * 0.24))
     }
 
     private func diskTreeHeader(availableWidth: CGFloat) -> some View {
@@ -891,14 +892,18 @@ public struct WizTreeAnalyzerView: View {
             if availableWidth >= 760 { Text("Files").frame(width: 64, alignment: .trailing) }
         }
         .font(FinderUI.captionFont.weight(.medium))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, FinderUI.sectionSpacing)
+        .foregroundStyle(FinderUI.metadataColor)
+        .padding(.leading, FinderUI.sectionSpacing)
+        // Rows lose the width of an always-visible scroller; the header must too,
+        // or numbers sit left of their titles.
+        .padding(.trailing, FinderUI.sectionSpacing + Self.legacyScrollerWidth)
         .frame(height: 24)
         .background(Color(nsColor: .controlBackgroundColor))
         .overlay(alignment: .bottom) { Divider() }
     }
 
-    private func diskTreeRow(_ row: DiskMapRow, tree: DiskTree, index: Int, availableWidth: CGFloat) -> some View {
+    private func diskTreeRow(_ row: DiskMapRow, tree: DiskTree, index: Int, availableWidth: CGFloat,
+                             largestRow: Int64) -> some View {
         Group {
             if let hidden = row.hiddenChildren {
                 Text("… and \(hidden.formatted()) more smaller items")
@@ -908,16 +913,18 @@ public struct WizTreeAnalyzerView: View {
                     .padding(.leading, CGFloat(row.depth + 1) * 16 + FinderUI.sectionSpacing)
                     .padding(.vertical, 5)
             } else {
-                diskNodeRow(row, tree: tree, index: index, availableWidth: availableWidth)
+                diskNodeRow(row, tree: tree, index: index, availableWidth: availableWidth, largestRow: largestRow)
             }
         }
     }
 
-    private func diskNodeRow(_ row: DiskMapRow, tree: DiskTree, index: Int, availableWidth: CGFloat) -> some View {
+    private func diskNodeRow(_ row: DiskMapRow, tree: DiskTree, index: Int, availableWidth: CGFloat,
+                             largestRow: Int64) -> some View {
         let id = row.node
         let generation = scanToken
         let size = tree.allocatedSize(id)
         let fraction = totalScannedBytes > 0 ? Double(size) / Double(totalScannedBytes) : 0
+        let barFraction = largestRow > 0 ? Double(size) / Double(largestRow) : 0
         let isSelected = selectedNode == id
         let synthetic = tree.isSynthetic(id)
         let foreground = isSelected ? selectionForegroundColor : Color.primary
@@ -979,7 +986,7 @@ public struct WizTreeAnalyzerView: View {
                             // and blue means selection. Never thinner than a short pill,
                             // so small shares don't read as bullets.
                             .fill(isSelected ? selectionForegroundColor.opacity(0.85) : Color.primary.opacity(0.5))
-                            .frame(width: max(10, geometry.size.width * CGFloat(fraction)))
+                            .frame(width: max(10, geometry.size.width * CGFloat(barFraction)))
                     }
                 }
                 .frame(maxWidth: .infinity)

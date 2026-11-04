@@ -22,17 +22,10 @@ struct FullDiskAccessSheetView: View {
                             .font(.title2.weight(.semibold))
                         Text(granted
                             ? "Burrow calculates every folder size and scans the whole disk without asking again."
-                            : "Burrow can then read protected folders such as Desktop and Documents, size every folder and scan the whole disk.")
+                            : "Burrow can then read protected folders such as Desktop and Documents, size every folder and scan the whole disk. You can also continue without it.")
                             .lineSpacing(3)
                             .foregroundStyle(FinderUI.metadataColor)
                             .fixedSize(horizontal: false, vertical: true)
-                        // What happens without it belongs with the explanation, not after the steps.
-                        if !granted {
-                            Text("Without it, Burrow still works; macOS asks once for each protected folder, such as Desktop.")
-                                .lineSpacing(3)
-                                .foregroundStyle(FinderUI.metadataColor)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
                     }
                     if !granted {
                         // The primary button is the first step, so the list starts after it.

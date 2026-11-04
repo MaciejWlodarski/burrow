@@ -74,8 +74,6 @@ public final class PaneTabState: ObservableObject, Identifiable {
     @Published public var selectedPaths: Set<String> = []
     @Published public var expandedFolderPaths: Set<String> = []
 
-    /// "44 files · 760 MB": what the disk analysis has measured, for the status bar.
-    @Published public var analysisSummary: String?
     @Published public var viewMode: FinderViewMode = .list {
         didSet {
             guard oldValue != viewMode else { return }

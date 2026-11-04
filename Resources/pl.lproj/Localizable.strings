@@ -664,7 +664,6 @@
 "Show Next Tab" = "Następna karta";
 "Show or hide the inspector (⌘I)" = "Pokaż lub ukryj inspektor (⌘I)";
 "Show or hide the mounted shares of this server" = "Pokaż lub ukryj zamontowane udziały tego serwera";
-"Show or hide the seven tag colors" = "Pokaż lub ukryj siedem kolorów tagów";
 "Show or hide the sidebar (⌃⌘S)" = "Pokaż lub ukryj pasek boczny (⌃⌘S)";
 "Show or hide the terminal (Ctrl+`)" = "Pokaż lub ukryj terminal (Ctrl+`)";
 "Show Previous Tab" = "Poprzednia karta";
@@ -896,7 +895,7 @@
 "Burrow %@ is available" = "Dostępny jest Burrow %@";
 "Show how to update" = "Pokaż, jak zaktualizować";
 "Check for updates automatically" = "Sprawdzaj aktualizacje automatycznie";
-"Once a day Burrow asks GitHub for the latest version number. Nothing about you or your files is sent." = "Raz dziennie Burrow pyta GitHuba o numer najnowszej wersji. Nic o Tobie ani Twoich plikach nie jest wysyłane.";
+"Checks GitHub once a day. Nothing about you or your files is sent." = "Sprawdza GitHuba raz dziennie. Nic o Tobie ani Twoich plikach nie jest wysyłane.";
 "OK" = "OK";
 "Opening “%@”…" = "Otwieranie „%@”…";
 
@@ -956,7 +955,6 @@
 "“%@” and Subfolders" = "„%@” i podfoldery";
 "“%@” Only" = "Tylko „%@”";
 "Choose where to search" = "Wybierz, gdzie szukać";
-"Without it, Burrow still works; macOS asks once for each protected folder, such as Desktop." = "Bez tego Burrow też działa; macOS zapyta raz o każdy chroniony folder, np. Biurko.";
 "Under Privacy & Security › Full Disk Access, turn on Burrow." = "W sekcji Prywatność i ochrona › Pełny dostęp do dysku włącz Burrow.";
 "More actions" = "Więcej czynności";
 "Currently Burrow" = "Obecnie Burrow";
@@ -964,13 +962,10 @@
 "Scan Whole Disk" = "Skanuj cały dysk";
 "Folders, views and searches reopen as you left them." = "Foldery, widoki i wyszukiwania otwierają się tak, jak je zostawiono.";
 "in %@" = "w: %@";
-"Burrow can then read protected folders such as Desktop and Documents, size every folder and scan the whole disk." = "Burrow będzie wtedy czytać chronione foldery, takie jak Biurko i Dokumenty, liczyć rozmiar każdego folderu i skanować cały dysk.";
+"Burrow can then read protected folders such as Desktop and Documents, size every folder and scan the whole disk. You can also continue without it." = "Burrow będzie wtedy czytać chronione foldery, takie jak Biurko i Dokumenty, liczyć rozmiar każdego folderu i skanować cały dysk. Możesz też kontynuować bez tego.";
 "Edit Permissions…" = "Edytuj uprawnienia…";
 "Close the permissions editor" = "Zamknij edytor uprawnień";
 "%@ files indexed" = "Zindeksowane pliki: %@";
-"1 result" = "1 wynik";
-"%@ results" = "Wyniki: %@";
-"%@ files · %@" = "Pliki: %1$@ · %2$@";
 "Burrow missing from the list?" = "Nie ma Burrow na liście?";
 "Drag this icon into the Full Disk Access list." = "Przeciągnij tę ikonę na listę Pełny dostęp do dysku.";
 "Calculate SHA-256 and MD5" = "Oblicz SHA-256 i MD5";

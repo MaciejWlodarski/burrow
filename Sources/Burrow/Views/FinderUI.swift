@@ -45,13 +45,11 @@ struct FinderSelectionSummary: Equatable {
     let isSearching: Bool
     let isAnalysis: Bool
     let hasQuery: Bool
-    let analysisSummary: String?
 
     @MainActor init(pane: PaneTabState) {
         totalCount = pane.selectableItems.count
         selectedCount = pane.selectedItems.count
         isSearching = pane.isSearching
-        analysisSummary = pane.analysisSummary
         hasQuery = !pane.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         isAnalysis = pane.viewMode == .wiztree && pane.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -59,9 +57,9 @@ struct FinderSelectionSummary: Equatable {
     var countDescription: String {
         if isSearching { return String(localized: "Searching…") }
         if selectedCount > 0 { return String(localized: "\(selectedCount.formatted()) of \(totalCount.formatted()) selected") }
-        if hasQuery { return totalCount == 1 ? String(localized: "1 result") : String(localized: "\(totalCount.formatted()) results") }
-        // The disk map shows its own totals in its header.
-        if isAnalysis { return analysisSummary ?? "" }
+        // Search results and the disk map state their totals in their own headers;
+        // the footer only adds the selection, never a second count.
+        if hasQuery || isAnalysis { return "" }
         return totalCount == 1 ? String(localized: "1 item") : String(localized: "\(totalCount.formatted()) items")
     }
 }

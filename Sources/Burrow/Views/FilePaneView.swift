@@ -452,10 +452,9 @@ public struct FilePaneView: View {
                         .frame(width: 80, alignment: .trailing)
                         .padding(.trailing, 20)
                     if showDate {
-                        // As the last column the date hugs the trailing edge, so a narrow
-                        // pane has no dead strip after it.
+                        // Leading in every layout; 160 pt holds "Nov 12, 2025 at 12:58 PM".
                         sortableHeaderButton(title: String(localized: "Date Modified"), field: .dateModified)
-                            .frame(width: 170, alignment: showKind ? .leading : .trailing)
+                            .frame(width: 160, alignment: .leading)
                     }
                     if showKind {
                         sortableHeaderButton(title: String(localized: "Kind"), field: .kind)
@@ -500,7 +499,7 @@ public struct FilePaneView: View {
             HStack(spacing: 4) {
                 Text(title)
                     .font(FinderUI.captionFont.weight(pane.sortField == field ? .semibold : .medium))
-                    .foregroundStyle(pane.sortField == field ? .primary : .secondary)
+                    .foregroundStyle(pane.sortField == field ? Color.primary : FinderUI.metadataColor)
                 if pane.sortField == field {
                     Image(systemName: pane.sortAscending ? "chevron.up" : "chevron.down")
                         .font(.system(size: 8.5, weight: .bold))
@@ -639,7 +638,7 @@ public struct FilePaneView: View {
                     .font(FinderUI.bodyFont)
                     .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                     .lineLimit(1)
-                    .frame(width: 170, alignment: showKind ? .leading : .trailing)
+                    .frame(width: 160, alignment: .leading)
             }
             if showKind {
                 Text(item.kindDisplayString)
@@ -752,7 +751,7 @@ public struct FilePaneView: View {
                                     }
                                 }
                                 Text(item.name)
-                                    .font(FinderUI.detailFont)
+                                    .font(FinderUI.bodyFont)
                                     .foregroundStyle(isSelected ? selectionForegroundColor : Color.primary)
                                     .lineLimit(2)
                                     .multilineTextAlignment(.center)
@@ -765,7 +764,7 @@ public struct FilePaneView: View {
                                     .fill(isSelected ? selectionBackgroundColor : Color.clear)
                             )
                             // The size sits right under the name, however many lines it takes.
-                            .padding(.bottom, -4)
+                            .padding(.bottom, -2)
 
                             Group {
                                 if item.isDirectory {

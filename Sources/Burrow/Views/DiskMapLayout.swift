@@ -222,14 +222,14 @@ public enum DiskMapRenderer {
     }
 
     private struct Palette {
-        let gutter: RGB, folderBody: RGB, folderHeader: RGB, folderText: NSColor
+        let gutter: RGB, folderBody: RGB, folderHeader: RGB, folderStroke: RGB, folderText: NSColor
         let remainder: RGB, synthetic: RGB
 
         static let light = Palette(gutter: RGB(0.97, 0.97, 0.98), folderBody: RGB(0.97, 0.97, 0.98),
-                                   folderHeader: RGB(0.88, 0.89, 0.91), folderText: NSColor(white: 0.18, alpha: 1),
+                                   folderHeader: RGB(0.88, 0.89, 0.91), folderStroke: RGB(0.76, 0.78, 0.82), folderText: NSColor(white: 0.18, alpha: 1),
                                    remainder: RGB(0.74, 0.76, 0.79), synthetic: RGB(0.80, 0.80, 0.82))
         static let dark = Palette(gutter: RGB(0.11, 0.11, 0.12), folderBody: RGB(0.11, 0.11, 0.12),
-                                  folderHeader: RGB(0.22, 0.23, 0.25), folderText: NSColor(white: 0.92, alpha: 1),
+                                  folderHeader: RGB(0.22, 0.23, 0.25), folderStroke: RGB(0.34, 0.35, 0.38), folderText: NSColor(white: 0.92, alpha: 1),
                                   remainder: RGB(0.34, 0.35, 0.38), synthetic: RGB(0.28, 0.28, 0.30))
     }
 
@@ -245,7 +245,7 @@ public enum DiskMapRenderer {
         case .video: return RGB(0.92, 0.56, 0.27)
         case .archive: return RGB(0.85, 0.69, 0.27)
         case .executable: return RGB(0.82, 0.34, 0.31)
-        case .other: return RGB(0.56, 0.60, 0.66)
+        case .other: return RGB(0.50, 0.56, 0.70)
         }
     }
 
@@ -277,9 +277,17 @@ public enum DiskMapRenderer {
                 }
                 continue
             }
+            if tile.isCollapsed {
+                // The header-strip fill with a hairline inside, so a small folder reads as a folder.
+                fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderStroke)
+                let line = Int32(max(1, scale.rounded()))
+                if x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
+                    fill(pixels, stride: stride, tile.x0 + line, tile.y0 + line, x1 - line, y1 - line, palette.folderHeader)
+                }
+                continue
+            }
             let base: RGB
-            if tile.isCollapsed { base = palette.folderHeader }
-            else if tile.isRemainder { base = palette.remainder }
+            if tile.isRemainder { base = palette.remainder }
             else if tree.isSynthetic(tile.node) { base = palette.synthetic }
             else { base = color(tree.category(tile.node)).adapted(dark: dark) }
             fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, base)
@@ -366,12 +374,15 @@ public enum DiskMapRenderer {
                 .font: sizeFont, .foregroundColor: textColor.withAlphaComponent(isGroup ? 0.7 : 0.85)])
             let name = NSAttributedString(string: shownName, attributes: [
                 .font: nameFont, .foregroundColor: textColor, .paragraphStyle: truncating])
-            let available = width - inset * 2
+            // Collapsed folders lead with a small folder glyph, so they never read as a header strip.
+            // Only where it leaves room for a readable name.
+            let glyph = tile.isCollapsed && width - inset * 2 - 15 * scale >= 72 * scale ? 15 * scale : 0
+            let available = width - inset * 2 - glyph
             let sizeWidth = size.size().width
             // A name cut to a few letters ("Brand…") says nothing; leave it to hover.
             let nameFits = name.size().width <= available
             let truncatedNameWidth = 72 * scale
-            let x = Double(tile.x0) + inset
+            let x = Double(tile.x0) + inset + glyph
             if isGroup {
                 let top = Double(tile.y0) + (header - lineHeight) / 2
                 let nameWidth = available - sizeWidth - 6 * scale
@@ -399,6 +410,14 @@ public enum DiskMapRenderer {
                                             options: [.usesLineFragmentOrigin]).height <= lineHeight * 2 + scale
                 guard available >= minimumNameWidth, nameFits || twoLines || available >= truncatedNameWidth else { continue }
                 let nameLines: Double = twoLines ? 2 : 1
+                if glyph > 0,
+                   let symbol = NSImage(systemSymbolName: "folder.fill", accessibilityDescription: nil)?
+                    .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: CGFloat(10 * scale), weight: .medium)
+                        .applying(NSImage.SymbolConfiguration(paletteColors: [textColor.withAlphaComponent(0.6)]))) {
+                    let side = symbol.size
+                    symbol.draw(in: CGRect(x: x - glyph, y: top + (lineHeight - side.height) / 2, width: side.width, height: side.height),
+                                from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+                }
                 if twoLines {
                     wrapped.draw(with: CGRect(x: x, y: top, width: available, height: lineHeight * 2 + scale),
                                  options: [.usesLineFragmentOrigin])

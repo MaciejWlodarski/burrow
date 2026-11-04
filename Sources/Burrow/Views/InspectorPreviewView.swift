@@ -24,7 +24,7 @@ public struct InspectorPreviewView: View {
     static func locationTrail(_ path: String) -> String {
         let components = (path as NSString).abbreviatingWithTildeInPath.split(separator: "/").map(String.init)
         guard !components.isEmpty else { return path }
-        return components.suffix(3).joined(separator: " › ")
+        return components.suffix(4).joined(separator: " › ")
     }
     @ViewState private var currentModeBits: UInt16 = 0
     @ViewState private var permissionSnapshot: PosixPermissionSnapshot?
@@ -106,9 +106,9 @@ public struct InspectorPreviewView: View {
                         }
 
 
-                        // Frequent actions sit under the name, one click away.
-                        // Trash stands apart so it is never hit by accident.
-                        HStack(spacing: 6) {
+                        // Frequent actions sit under the name, one click away, as one
+                        // centred group of equal buttons; Trash stands apart after a hairline.
+                        HStack(spacing: 8) {
                             inspectorIconButton("Quick Look", icon: "eye") { appState.toggleQuickLook() }
                             inspectorIconButton("Share", icon: "square.and.arrow.up") { fileOps.showShareSheet(for: [item]) }
                             Menu {
@@ -119,26 +119,25 @@ public struct InspectorPreviewView: View {
                                 Button("Edit Permissions…", systemImage: "lock") { showChmodEditor = true }
                             } label: {
                                 Image(systemName: "ellipsis")
-                                    .frame(minHeight: 22)
+                                    .frame(width: 30, height: 22)
                             }
                             .menuIndicator(.hidden)
                             .buttonStyle(.bordered)
                             .fixedSize()
                             .help("More actions")
                             .accessibilityLabel("More actions")
-                            Spacer(minLength: 14)
-                            // Quieter than the routine actions, behind a hairline, same hit area.
-                            Divider().frame(height: 18)
+                            // Same size as the routine actions, behind a hairline, its icon quieter.
+                            Divider().frame(height: 18).padding(.horizontal, 4)
                             Button(role: .destructive) { fileOps.moveToTrash([item]) } label: {
                                 Image(systemName: "trash")
                                     .foregroundStyle(FinderUI.metadataColor)
-                                    .frame(width: 32, height: 28)
-                                    .contentShape(Rectangle())
+                                    .frame(width: 30, height: 22)
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.bordered)
                             .help("Move to Trash")
                             .accessibilityLabel("Move to Trash")
                         }
+                        .frame(maxWidth: .infinity, alignment: preparedPreviewImage != nil ? .center : .leading)
 
                         Divider()
 
@@ -189,7 +188,7 @@ public struct InspectorPreviewView: View {
                                 HStack(alignment: .firstTextBaseline) {
                                     Text("Permissions")
                                         .font(FinderUI.detailFont)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(FinderUI.metadataColor)
                                     Spacer()
                                     // One line like the other rows; editing lives in the "…" menu.
                                     Text(posixPermissionsString)
@@ -215,13 +214,12 @@ public struct InspectorPreviewView: View {
                                 chmodEditorBox(for: item)
                             }
 
-                            HStack(spacing: 12) {
+                            // The location gets the panel's full width on its own line.
+                            VStack(alignment: .leading, spacing: 4) {
                                 Text("Where")
                                     .font(FinderUI.detailFont)
-                                    .foregroundStyle(.secondary)
-                                    .layoutPriority(1)
-                                Spacer(minLength: 0)
-                                // The enclosing folder by name; the full path is in the tooltip.
+                                    .foregroundStyle(FinderUI.metadataColor)
+                                // The enclosing folders by whole name; the full path is in the tooltip.
                                 Button {
                                     _ = appState.activeTab.navigate(to: URL(fileURLWithPath: item.parentPath))
                                 } label: {
@@ -763,7 +761,7 @@ public struct InspectorPreviewView: View {
         HStack(alignment: .top, spacing: FinderUI.rowSpacing) {
             Text(label)
                 .font(FinderUI.detailFont)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinderUI.metadataColor)
             Spacer()
             Text(value)
                 .font(FinderUI.detailFont)
@@ -791,7 +789,7 @@ public struct InspectorPreviewView: View {
     private func inspectorIconButton(_ title: LocalizedStringKey, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .frame(minWidth: 22, minHeight: 22)
+                .frame(width: 30, height: 22)
         }
         .buttonStyle(.bordered)
         .controlSize(.regular)

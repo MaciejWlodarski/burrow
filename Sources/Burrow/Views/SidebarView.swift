@@ -12,8 +12,6 @@ public struct SidebarView: View {
     @ViewState private var dropTargetedPath: String? = nil
     @ViewState private var isPinDropTargeted = false
     @ViewState private var isFavoriteEndTargeted = false
-    @ViewState private var areTagsExpanded = true
-    @ViewState private var isHoveringTagsHeader = false
     @ViewState private var expandedServers: Set<String> = []
     @ViewState private var draggedFavoriteID: String? = nil
     @ViewState private var favoriteDragNonce: UUID? = nil
@@ -26,7 +24,6 @@ public struct SidebarView: View {
 
     #if BURROW_TESTING
     @Environment(\.sidebarPreviewExpandedServerIDs) private var previewExpandedServerIDs
-    @Environment(\.sidebarPreviewTagsExpanded) private var previewTagsExpanded
     #endif
 
     public init(appState: AppState, activeTab: PaneTabState) {
@@ -157,41 +154,24 @@ public struct SidebarView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private var tagsAreExpanded: Bool {
-        #if BURROW_TESTING
-        if let previewTagsExpanded { return previewTagsExpanded }
-        #endif
-        return areTagsExpanded
-    }
-
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: FinderUI.sidebarRowGap) {
-            Button { areTagsExpanded.toggle() } label: {
-                HStack {
-                    Text("Tags").font(FinderUI.captionFont.weight(.semibold))
-                    Spacer(minLength: 0)
-                    // Like Finder, the disclosure arrow shows on hover.
-                    Image(systemName: tagsAreExpanded ? "chevron.down" : "chevron.right")
-                        .font(FinderUI.captionFont.weight(.semibold))
-                        .opacity(isHoveringTagsHeader ? 1 : 0)
-                }
+            Text("Tags")
+                .font(FinderUI.captionFont.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, FinderUI.sidebarRowInset)
                 .frame(minHeight: FinderUI.sidebarRowHeight)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .onHover { isHoveringTagsHeader = $0 }
-            .accessibilityLabel("Tags")
-            .accessibilityValue(tagsAreExpanded ? String(localized: "Expanded") : String(localized: "Collapsed"))
-            .accessibilityHint("Show or hide the seven tag colors")
-            if tagsAreExpanded {
-                // Named tags in two columns: every colour labelled, in half the height.
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 0), GridItem(.flexible(), spacing: 0)],
-                          alignment: .leading, spacing: 0) {
-                    ForEach(FinderTagColor.allCases) { tagColor in tagRow(tagColor) }
+                .accessibilityAddTraits(.isHeader)
+            // One quiet row of colour dots, spread across the sidebar; each is a tag
+            // search, named in its tooltip and for VoiceOver.
+            HStack(spacing: 0) {
+                ForEach(Array(FinderTagColor.allCases.enumerated()), id: \.element.id) { index, tagColor in
+                    if index > 0 { Spacer(minLength: 2) }
+                    let query = "tag:\(tagColor.rawValue)"
+                    SidebarTagDot(color: tagColor, isSelected: isSearchSelected(query)) { runSearch(query) }
                 }
             }
+            .padding(.horizontal, FinderUI.sidebarRowInset)
         }
     }
 
@@ -308,36 +288,6 @@ public struct SidebarView: View {
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor in appState.addBookmark(for: url) }
         }
-    }
-
-    private func tagRow(_ tagColor: FinderTagColor) -> some View {
-        let query = "tag:\(tagColor.rawValue)"
-        let isSelected = isSearchSelected(query)
-
-        return Button {
-            runSearch(query)
-        } label: {
-            HStack(spacing: FinderUI.rowSpacing) {
-                Circle()
-                    .fill(tagColor.swiftUIColor)
-                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
-                    .frame(width: 10, height: 10)
-                    .frame(width: FinderUI.sidebarIconWidth)
-                    .accessibilityHidden(true)
-                Text(tagColor.displayName)
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(isSelected ? selectedTextColor : Color.primary)
-            .padding(.horizontal, FinderUI.sidebarRowInset)
-            .frame(minHeight: FinderUI.sidebarRowHeight)
-            .background(rowBackground(isSelected: isSelected))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Show files with tag: \(tagColor.displayName)")
-        .accessibilityLabel("Tag: \(tagColor.displayName)")
-        .accessibilityHint("Searches the whole index for files with this tag")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // Keep the row's result builders and drag closures separately type-checked.
@@ -747,17 +697,44 @@ public struct SidebarView: View {
 private struct SidebarPreviewExpandedServerIDsKey: EnvironmentKey {
     static let defaultValue: Set<String> = []
 }
-private struct SidebarPreviewTagsExpandedKey: EnvironmentKey {
-    static let defaultValue: Bool? = nil
-}
 extension EnvironmentValues {
     var sidebarPreviewExpandedServerIDs: Set<String> {
         get { self[SidebarPreviewExpandedServerIDsKey.self] }
         set { self[SidebarPreviewExpandedServerIDsKey.self] = newValue }
     }
-    var sidebarPreviewTagsExpanded: Bool? {
-        get { self[SidebarPreviewTagsExpandedKey.self] }
-        set { self[SidebarPreviewTagsExpandedKey.self] = newValue }
-    }
 }
 #endif
+
+/// A tag colour in the sidebar's dot row: a ring on hover, a firmer ring and a
+/// slightly larger dot while its search is shown.
+private struct SidebarTagDot: View {
+    let color: FinderTagColor
+    let isSelected: Bool
+    let action: () -> Void
+    @ViewState private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .strokeBorder(isSelected ? Color.primary.opacity(0.55) : Color.primary.opacity(isHovering ? 0.25 : 0),
+                                  lineWidth: 1.5)
+                    .frame(width: 22, height: 22)
+                Circle()
+                    .fill(color.swiftUIColor)
+                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
+                    .frame(width: isSelected ? 14 : 12, height: isSelected ? 14 : 12)
+            }
+            .frame(width: FinderUI.sidebarIconWidth + 4, height: 26)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .animation(.easeOut(duration: 0.12), value: isSelected)
+        .help("Show files with tag: \(color.displayName)")
+        .accessibilityLabel("Tag: \(color.displayName)")
+        .accessibilityHint("Searches the whole index for files with this tag")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
