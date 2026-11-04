@@ -38,14 +38,12 @@ struct FullDiskAccessSheetView: View {
                         // same as choosing it with +. A separate, quieter block: only
                         // needed when Burrow is missing from the list.
                         HStack(spacing: 12) {
+                            // The real app icon, lifted like something you can pick up
+                            // (a dashed outline would say "drop here").
                             Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
                                 .resizable()
-                                .frame(width: 40, height: 40)
-                                .padding(6)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .strokeBorder(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                                }
+                                .frame(width: 48, height: 48)
+                                .shadow(color: .black.opacity(0.18), radius: 3, y: 1.5)
                                 .onDrag { NSItemProvider(contentsOf: Bundle.main.bundleURL) ?? NSItemProvider() }
                                 .help("Drag Burrow into the Full Disk Access list")
                                 .accessibilityLabel("Burrow app icon, drag it into the Full Disk Access list")

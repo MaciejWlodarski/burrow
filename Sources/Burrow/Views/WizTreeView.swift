@@ -870,6 +870,9 @@ public struct WizTreeAnalyzerView: View {
 
     /// Name column of the analysis tree: wide enough for long names, never so wide
     /// that short ones sit far from their bars.
+    /// Chevron, icon and their gaps: the header's "Name" starts where the names do.
+    static let treeNameInset: CGFloat = 14 + FinderUI.rowSpacing * 2 + 18
+
     static var legacyScrollerWidth: CGFloat {
         NSScroller.preferredScrollerStyle == .legacy
             ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
@@ -882,10 +885,10 @@ public struct WizTreeAnalyzerView: View {
     private func diskTreeHeader(availableWidth: CGFloat) -> some View {
         HStack(spacing: FinderUI.rowSpacing) {
             if availableWidth >= 650 {
-                Text("Name").padding(.leading, 22).frame(width: Self.treeNameWidth(availableWidth), alignment: .leading)
+                Text("Name").padding(.leading, Self.treeNameInset).frame(width: Self.treeNameWidth(availableWidth), alignment: .leading)
                 Text("Share of Total").frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                Text("Name").padding(.leading, 22).frame(maxWidth: .infinity, alignment: .leading)
+                Text("Name").padding(.leading, Self.treeNameInset).frame(maxWidth: .infinity, alignment: .leading)
                 if availableWidth >= 480 { Text("Share of Total").frame(width: 48, alignment: .trailing) }
             }
             Text("Size").frame(width: 80, alignment: .trailing)
@@ -997,7 +1000,7 @@ public struct WizTreeAnalyzerView: View {
                 Text(String(format: "%.1f%%", fraction * 100.0))
                     .font(FinderUI.detailFont)
                     .monospacedDigit()
-                    .foregroundStyle(secondary)
+                    .foregroundStyle(isSelected ? foreground : FinderUI.metadataColor)
                     .frame(width: 44, alignment: .trailing)
             }
             Text(FormatHelpers.formatBytes(size))
@@ -1009,7 +1012,7 @@ public struct WizTreeAnalyzerView: View {
                 Text(tree.isDirectory(id) ? tree.fileCount(id).formatted() : "")
                     .font(FinderUI.detailFont)
                     .monospacedDigit()
-                    .foregroundStyle(secondary)
+                    .foregroundStyle(isSelected ? foreground : FinderUI.metadataColor)
                     .frame(width: 64, alignment: .trailing)
             }
         }

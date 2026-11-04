@@ -609,8 +609,9 @@ public struct InspectorPreviewView: View {
                             Text(isComputingHash ? String(localized: "Calculating…") : (hashErrorMessage == nil ? String(localized: "Calculate SHA-256 and MD5") : String(localized: "Try Again")))
                                 .font(FinderUI.detailFont)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 22)
+                        .frame(minHeight: 22)
                     }
+                    // Sized to its title: the least-used action stays the lightest.
                     .buttonStyle(.bordered)
                     .controlSize(.regular)
                     .disabled(isComputingHash)

@@ -161,7 +161,7 @@ public struct EmbeddedTerminalDrawerView: View {
                         .fixedSize()
                 }
                 if let tab = workspace.selected {
-                    TerminalFolderLabel(terminal: tab)
+                    TerminalFolderLabel(terminal: tab, browsedPath: activeTab.currentURL.standardizedFileURL.path)
                 }
                 Spacer(minLength: FinderUI.rowSpacing)
                 if let tab = workspace.selected {
@@ -256,10 +256,18 @@ private func terminalHeaderButton(_ help: LocalizedStringKey, icon: String, acce
     .accessibilityLabel(accessibility)
 }
 
-/// The selected tab's folder, kept current as `cd` moves it.
+/// The selected tab's folder, kept current as `cd` moves it. Shown only when the
+/// shell has moved away from the folder being browsed; the prompt names it anyway.
 private struct TerminalFolderLabel: View {
     @ObservedObject var terminal: TerminalTab
+    let browsedPath: String
     var body: some View {
+        if terminal.directory.standardizedFileURL.path != browsedPath {
+            label
+        }
+    }
+
+    private var label: some View {
         Text(terminal.directory.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
             .font(FinderUI.detailFont)
             .foregroundStyle(FinderUI.metadataColor)
@@ -293,7 +301,7 @@ private struct TerminalTabContent: View {
     @FocusState private var isInputFocused: Bool
     private var outputLines: [TerminalOutputLine] { terminal.transcript.lines }
     private var isRunning: Bool { terminal.isRunning }
-    private static let monoFont = Font.system(size: 12, design: .monospaced)
+    private static let monoFont = Font.system(size: 13, design: .monospaced)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -361,7 +369,7 @@ private struct TerminalTabContent: View {
                 }
             }
             .padding(.horizontal, FinderUI.sectionSpacing)
-            .frame(minHeight: 34)
+            .padding(.vertical, 8)
         }
         .background(Color(nsColor: .textBackgroundColor))
         .onAppear { isInputFocused = true }
@@ -384,7 +392,7 @@ private struct TerminalTabContent: View {
                     .foregroundStyle(line.isError ? Color(nsColor: .systemRed) : Color.primary.opacity(0.85))
             }
         }
-        .lineSpacing(2)
+        .lineSpacing(3)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
     }

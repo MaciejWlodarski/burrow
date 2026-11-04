@@ -263,9 +263,13 @@ public enum DiskMapRenderer {
         fill(pixels, stride: stride, 0, 0, Int32(width), Int32(height), palette.gutter)
 
         // About 1.5 pt, so neighbouring blocks of one colour stay apart.
-        let gap = Int32(max(1, (scale * 1.5).rounded()))
+        let innerGap = Int32(max(1, (scale * 1.5).rounded()))
+        // Top-level blocks stand further apart, so a folder never seems to run into
+        // a neighbouring file of the same colour.
+        let outerGap = Int32(max(2, (scale * 3.5).rounded()))
         for (index, tile) in layout.tiles.enumerated() {
             if index & 0xFFF == 0, isCancelled() { return nil }
+            let gap = tile.depth == 0 ? outerGap : innerGap
             // Leave a gutter on the right and bottom edges of every tile.
             let x1 = tile.x1 - tile.x0 > gap * 2 ? tile.x1 - gap : tile.x1
             let y1 = tile.y1 - tile.y0 > gap * 2 ? tile.y1 - gap : tile.y1

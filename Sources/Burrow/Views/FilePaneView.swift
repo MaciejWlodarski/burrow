@@ -240,7 +240,7 @@ public struct FilePaneView: View {
         .background {
             ZStack {
                 Color(nsColor: .controlBackgroundColor)
-                if appState.isDualPane && isFocusedPane { Color.accentColor.opacity(0.10) }
+                if appState.isDualPane && isFocusedPane { FinderUI.activePaneTint }
             }
         }
         .overlay(alignment: .bottom) {
@@ -308,7 +308,7 @@ public struct FilePaneView: View {
         }
         let folder = parts.popLast() ?? ""
         let lead = parts.isEmpty ? "" : parts.joined(separator: " › ") + " › "
-        let leadColor = isSelected ? selectionForegroundColor.opacity(0.8) : Color.secondary
+        let leadColor = isSelected ? selectionForegroundColor.opacity(0.8) : Color.primary.opacity(0.55)
         let folderColor = isSelected ? selectionForegroundColor : FinderUI.metadataColor
         return Text(verbatim: lead).foregroundColor(leadColor) + Text(verbatim: folder).foregroundColor(folderColor)
     }
@@ -443,7 +443,12 @@ public struct FilePaneView: View {
     private var listBrowserView: some View {
         GeometryReader { geometry in
             let showDate = geometry.size.width >= 480
-            let showKind = geometry.size.width >= 760
+            // Kind stays in a half-width pane at a narrower width instead of
+            // leaving an empty band after the date.
+            let kindWidth: CGFloat = geometry.size.width >= 760 ? 150 : (geometry.size.width >= 560 ? 110 : 0)
+            let showKind = kindWidth > 0
+            // No disclosure gutter in a folder without subfolders.
+            let showsDisclosure = pane.displayedItems.contains { $0.isDirectory && $0.fileExtension.lowercased() != "app" }
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     sortableHeaderButton(title: String(localized: "Name"), field: .name)
@@ -458,7 +463,7 @@ public struct FilePaneView: View {
                     }
                     if showKind {
                         sortableHeaderButton(title: String(localized: "Kind"), field: .kind)
-                            .frame(width: 150, alignment: .leading)
+                            .frame(width: kindWidth, alignment: .leading)
                     }
                 }
                 .padding(.leading, 15)
@@ -471,7 +476,8 @@ public struct FilePaneView: View {
                     ScrollView {
                         LazyVStack(spacing: 1) {
                             ForEach(Array(pane.displayedItems.enumerated()), id: \.element.id) { index, item in
-                                fileListRow(item: item, index: index, showDate: showDate, showKind: showKind)
+                                fileListRow(item: item, index: index, showDate: showDate, kindWidth: kindWidth,
+                                            showsDisclosure: showsDisclosure)
                                     .id(item.path)
                             }
                         }
@@ -515,7 +521,9 @@ public struct FilePaneView: View {
         .accessibilityValue(pane.sortField == field ? (pane.sortAscending ? String(localized: "Ascending") : String(localized: "Descending")) : String(localized: "Not sorted"))
     }
 
-    private func fileListRow(item: FileItem, index: Int, showDate: Bool, showKind: Bool) -> some View {
+    private func fileListRow(item: FileItem, index: Int, showDate: Bool, kindWidth: CGFloat,
+                             showsDisclosure: Bool) -> some View {
+        let showKind = kindWidth > 0
         let isSelected = pane.selectedPaths.contains(item.path)
         let isCutItem = fileOps.isCut(item.path)
         let isFolderDropTarget = (dropTargetFolderPath == item.path)
@@ -544,7 +552,7 @@ public struct FilePaneView: View {
                         .buttonStyle(.plain)
                         .help(pane.isExpanded(item.path) ? String(localized: "Collapse folder") : String(localized: "Expand folder"))
                         .accessibilityLabel(pane.isExpanded(item.path) ? String(localized: "Collapse folder \(item.name)") : String(localized: "Expand folder \(item.name)"))
-                    } else {
+                    } else if showsDisclosure {
                         Spacer()
                             .frame(width: 14)
                     }
@@ -646,7 +654,7 @@ public struct FilePaneView: View {
                     .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .frame(width: 150, alignment: .leading)
+                    .frame(width: kindWidth, alignment: .leading)
             }
         }
         .padding(.leading, 10)

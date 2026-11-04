@@ -1065,7 +1065,7 @@ public struct FSearchSettingsSheetView: View {
         TabView {
             // Sized to its groups, so the window has no empty band below them.
             GeneralSettingsPane(appState: appState)
-                .frame(minHeight: 322, idealHeight: 322)
+                .frame(height: 324)
                 .tabItem { Label("General", systemImage: "gearshape") }
             BrowsingSettingsPane()
                 .frame(minHeight: 300, idealHeight: 300)

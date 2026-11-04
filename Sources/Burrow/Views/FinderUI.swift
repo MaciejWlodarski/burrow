@@ -31,10 +31,15 @@ enum FinderUI {
     static let metadataColor = Color.primary.opacity(0.68)
     /// Zebra rows: a faint wash that guides the eye without banding, in either appearance.
     static let stripeColor = Color.primary.opacity(0.035)
+    /// The active pane's path bar in dual pane: equally visible in both appearances.
+    static let activePaneTint = Color(nsColor: NSColor(name: nil) { appearance in
+        let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.18 : 0.10)
+    })
     /// Search matches: a wash strong enough to find in both appearances.
     static let matchHighlight = Color(nsColor: NSColor(name: nil) { appearance in
         let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.30 : 0.16)
+        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.42 : 0.16)
     })
 }
 
