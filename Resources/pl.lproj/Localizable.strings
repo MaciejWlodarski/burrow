@@ -911,7 +911,6 @@
 "Searching for “%@”…" = "Szukanie „%@”…";
 "1 result for “%@”" = "1 wynik dla „%@”";
 "%lld results for “%@”" = "Wyniki dla „%2$@”: %1$lld";
-"Burrow missing from the list? Drag this icon into it." = "Nie ma Burrow na liście? Przeciągnij tam tę ikonę.";
 "Details" = "Szczegóły";
 "Where" = "Położenie";
 "General" = "Ogólne";
@@ -920,7 +919,6 @@
 "Reopen tabs and panes at launch" = "Przywracaj karty i panele po uruchomieniu";
 "Saved session" = "Zapisana sesja";
 "Clear…" = "Wyczyść…";
-"Folders, views and searches come back as you left them. Selections and the clipboard are not saved." = "Foldery, widoki i wyszukiwania wracają takie, jak je zostawiono. Zaznaczenia i schowek nie są zapisywane.";
 "When a file already exists" = "Gdy plik już istnieje";
 "Used when copying or moving files onto items with the same name." = "Dotyczy kopiowania i przenoszenia na elementy o tej samej nazwie.";
 "Skip developer folders and caches" = "Pomijaj foldery deweloperskie i pamięci podręczne";
@@ -960,7 +958,6 @@
 "“%@” Only" = "Tylko „%@”";
 "Choose where to search" = "Wybierz, gdzie szukać";
 "Without it, Burrow still works; macOS asks once for each protected folder, such as Desktop." = "Bez tego Burrow też działa; macOS zapyta raz o każdy chroniony folder, np. Biurko.";
-"See the size of every folder and scan the whole disk, without a prompt for each protected folder." = "Zobacz rozmiar każdego folderu i skanuj cały dysk bez pytania o każdy chroniony folder.";
 "Under Privacy & Security › Full Disk Access, turn on Burrow." = "W sekcji Prywatność i ochrona › Pełny dostęp do dysku włącz Burrow.";
 "More actions" = "Więcej czynności";
 "Edit…" = "Edytuj…";
@@ -969,4 +966,7 @@
 "Currently Finder" = "Obecnie Finder";
 "%@ in %@" = "%1$@ w %2$@";
 "Scan Whole Disk" = "Skanuj cały dysk";
-"Point at a tile for details. Double-click a folder to zoom in." = "Wskaż kafelek, by zobaczyć szczegóły. Kliknij dwukrotnie folder, by go powiększyć.";
+"Burrow missing from the list? Drag this icon into the Full Disk Access list." = "Nie ma Burrow na liście? Przeciągnij tę ikonę na listę Pełny dostęp do dysku.";
+"Folders, views and searches reopen as you left them." = "Foldery, widoki i wyszukiwania otwierają się tak, jak je zostawiono.";
+"It lets Burrow read folders macOS protects, such as Desktop, Documents and Downloads. Burrow can then size every folder and scan the whole disk without asking each time." = "Pozwala Burrow czytać foldery chronione przez macOS, takie jak Biurko, Dokumenty i Pobrane. Burrow może wtedy policzyć rozmiar każdego folderu i skanować cały dysk bez pytania za każdym razem.";
+"in %@" = "w: %@";

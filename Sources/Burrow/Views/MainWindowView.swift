@@ -103,13 +103,22 @@ public struct MainWindowView: View {
                 GeometryReader { geometry in
                     VStack(spacing: 0) {
                         if appState.isDualPane {
+                            // Each pane keeps its own footer, so both counts are visible.
                             HSplitView {
-                                FilePaneView(appState: appState, pane: appState.leftTab, paneSide: .left,
-                                             isFocusedPane: appState.activePaneSide == .left)
-                                    .frame(minWidth: 260)
-                                FilePaneView(appState: appState, pane: appState.rightPane, paneSide: .right,
-                                             isFocusedPane: appState.activePaneSide == .right)
-                                    .frame(minWidth: 260)
+                                VStack(spacing: 0) {
+                                    FilePaneView(appState: appState, pane: appState.leftTab, paneSide: .left,
+                                                 isFocusedPane: appState.activePaneSide == .left)
+                                    Divider()
+                                    FinderStatusBar(appState: appState, activeTab: appState.leftTab)
+                                }
+                                .frame(minWidth: 260)
+                                VStack(spacing: 0) {
+                                    FilePaneView(appState: appState, pane: appState.rightPane, paneSide: .right,
+                                                 isFocusedPane: appState.activePaneSide == .right)
+                                    Divider()
+                                    FinderStatusBar(appState: appState, activeTab: appState.rightPane, showsActivity: false)
+                                }
+                                .frame(minWidth: 260)
                             }
                         } else {
                             FilePaneView(appState: appState, pane: appState.leftTab, paneSide: .left, isFocusedPane: true)
@@ -132,13 +141,15 @@ public struct MainWindowView: View {
 
                 if appState.showInspector {
                     InspectorPreviewView(appState: appState, activeTab: activeTab)
-                        .frame(minWidth: 280, idealWidth: 300, maxWidth: 380)
+                        .frame(minWidth: 300, idealWidth: 320, maxWidth: 400)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
-            FinderStatusBar(appState: appState, activeTab: activeTab)
+            if !appState.isDualPane {
+                Divider()
+                FinderStatusBar(appState: appState, activeTab: activeTab)
+            }
         }
         .background(Color(nsColor: .controlBackgroundColor))
     }
@@ -278,6 +289,8 @@ private struct FinderStatusBar: View {
     @ObservedObject var fileOps = FileOperationsManager.shared
     @ObservedObject var folderSizes = FolderSizeCache.shared
     @ObservedObject var updates = UpdateChecker.shared
+    /// Transfers, updates and indexing are app-wide; in two panes only one footer shows them.
+    var showsActivity = true
     private var availableBytes: Int64? {
         let path = activeTab.currentURL.path
         return appState.mountedVolumes.filter {
@@ -305,7 +318,7 @@ private struct FinderStatusBar: View {
                 Text("Opening “\(FileManager.default.displayName(atPath: opening.path))”…")
                     .lineLimit(1).truncationMode(.middle).help(opening.path)
             }
-            if let transfer = fileOps.activeTransfer {
+            if showsActivity, let transfer = fileOps.activeTransfer {
                 ProgressView(value: transfer.fraction).frame(width: 70)
                     .accessibilityLabel("File operation progress")
                 Text(transfer.currentFile).lineLimit(1).truncationMode(.middle).help(transfer.currentFile)
@@ -318,11 +331,11 @@ private struct FinderStatusBar: View {
                         .help("Stop after the current file")
                         .accessibilityLabel("Cancel file operation")
                 }
-            } else if let message = fileOps.lastStatusMessage {
+            } else if showsActivity, let message = fileOps.lastStatusMessage {
                 Text(message).lineLimit(1).truncationMode(.middle).help(message).textSelection(.enabled)
             }
             Spacer(minLength: 8)
-            if let release = updates.available {
+            if showsActivity, let release = updates.available {
                 Button("Burrow \(release.version) is available") { updates.presented = .available(release) }
                     .buttonStyle(.link)
                     .help("Show how to update")
@@ -334,11 +347,12 @@ private struct FinderStatusBar: View {
                     .controlSize(.mini)
                     .accessibilityLabel("Icon size")
             }
-            if appState.isIndexing {
+            if showsActivity && appState.isIndexing {
                 ProgressView().controlSize(.small).accessibilityLabel("Indexing files")
                 Text("Indexing…")
             } else if let availableBytes {
-                Text("\(FormatHelpers.formatBytes(availableBytes)) available").monospacedDigit()
+                // Same wording as the sidebar's disk row.
+                Text("\(FormatHelpers.formatBytes(availableBytes)) free").monospacedDigit()
             }
         }
         .font(FinderUI.detailFont)

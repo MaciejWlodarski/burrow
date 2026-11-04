@@ -240,7 +240,7 @@ public struct FilePaneView: View {
         .background {
             ZStack {
                 Color(nsColor: .controlBackgroundColor)
-                if appState.isDualPane && isFocusedPane { Color.accentColor.opacity(0.12) }
+                if appState.isDualPane && isFocusedPane { Color.accentColor.opacity(0.16) }
             }
         }
         .overlay(alignment: .bottom) {
@@ -292,6 +292,25 @@ public struct FilePaneView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .bottom) { Divider() }
         .accessibilityElement(children: .contain)
+    }
+
+    /// The folder holding a result reads first; the way to it recedes.
+    private func resultLocation(_ path: String, isSelected: Bool) -> Text {
+        let base = pane.searchScope == .wholeIndex
+            ? FSearchIndex.shared.configuredRoots.filter { path == $0 || path.hasPrefix($0 + "/") }.max { $0.count < $1.count }
+            : pane.currentURL.path
+        var parts: [String]
+        if let base, base != "/", path == base || path.hasPrefix(base + "/") {
+            parts = [FileManager.default.displayName(atPath: base)]
+                + path.dropFirst(base.count).split(separator: "/").map(String.init)
+        } else {
+            parts = Self.shortLocation(of: path).components(separatedBy: " › ")
+        }
+        let folder = parts.popLast() ?? ""
+        let lead = parts.isEmpty ? "" : parts.joined(separator: " › ") + " › "
+        let leadColor = isSelected ? selectionForegroundColor.opacity(0.75) : Color.secondary.opacity(0.75)
+        let folderColor = isSelected ? selectionForegroundColor : FinderUI.metadataColor
+        return Text(verbatim: lead).foregroundColor(leadColor) + Text(verbatim: folder).foregroundColor(folderColor)
     }
 
     /// "Burrow Demo › Studio › Invoices": the folders nearest the result
@@ -524,11 +543,10 @@ public struct FilePaneView: View {
                     }
 
                     if showSubpath {
-                        Text(Self.shortLocation(of: item.parentPath))
+                        resultLocation(item.parentPath, isSelected: isSelected)
                             .font(FinderUI.captionFont)
-                            .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                             .lineLimit(1)
-                            .truncationMode(.middle)
+                            .truncationMode(.head)
                             .help(item.parentPath)
                     }
 

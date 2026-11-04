@@ -22,7 +22,7 @@ struct FullDiskAccessSheetView: View {
                             .font(.title2.weight(.semibold))
                         Text(granted
                             ? "Burrow calculates every folder size and scans the whole disk without asking again."
-                            : "See the size of every folder and scan the whole disk, without a prompt for each protected folder.")
+                            : "It lets Burrow read folders macOS protects, such as Desktop, Documents and Downloads. Burrow can then size every folder and scan the whole disk without asking each time.")
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -38,8 +38,8 @@ struct FullDiskAccessSheetView: View {
                         HStack(spacing: 12) {
                             Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
                                 .resizable()
-                                .frame(width: 32, height: 32)
-                                .padding(6)
+                                .frame(width: 40, height: 40)
+                                .padding(8)
                                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
                                 .overlay {
                                     RoundedRectangle(cornerRadius: 10)
@@ -48,7 +48,7 @@ struct FullDiskAccessSheetView: View {
                                 .onDrag { NSItemProvider(contentsOf: Bundle.main.bundleURL) ?? NSItemProvider() }
                                 .help("Drag Burrow into the Full Disk Access list")
                                 .accessibilityLabel("Burrow app icon, drag it into the Full Disk Access list")
-                            Text("Burrow missing from the list? Drag this icon into it.")
+                            Text("Burrow missing from the list? Drag this icon into the Full Disk Access list.")
                                 .font(FinderUI.detailFont)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -100,9 +100,10 @@ struct FullDiskAccessSheetView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(verbatim: "\(number)")
                 .font(FinderUI.captionFont.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.white)
+                .foregroundStyle(.secondary)
                 .frame(width: 18, height: 18)
-                .background(Circle().fill(Color.accentColor))
+                // Grey, so the only accent fill is the primary button.
+                .background(Circle().fill(Color.primary.opacity(0.08)))
             Text(text)
                 .fixedSize(horizontal: false, vertical: true)
         }

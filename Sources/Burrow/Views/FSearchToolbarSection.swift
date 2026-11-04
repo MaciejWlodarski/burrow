@@ -17,7 +17,8 @@ public struct FSearchToolbarSection: View {
 
     private var windowTitle: String {
         let query = activeTab.searchQuery.trimmingCharacters(in: .whitespaces)
-        return query.isEmpty ? activeTab.title : "“\(query)”"
+        // The query is already in the field and the results header.
+        return query.isEmpty ? activeTab.title : String(localized: "Search")
     }
 
     public var body: some View {
@@ -153,6 +154,10 @@ public struct FSearchToolbarSection: View {
                     Label("More Actions", systemImage: "ellipsis.circle")
                 }
                 .help("New folder, hidden files and other actions")
+            }
+            // A little air between "what to show" and "how the window is split".
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed)
             }
             ToolbarItemGroup {
                 // Button-style toggles show their on state the way Finder's do.

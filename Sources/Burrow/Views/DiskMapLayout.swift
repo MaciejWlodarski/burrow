@@ -11,6 +11,9 @@ public struct DiskMapTile: Sendable, Equatable {
     /// Stands for the children too small to draw individually.
     public let isRemainder: Bool
     public let hasHeader: Bool
+    /// 0 for the map's direct children, so their labels can line up with
+    /// the labels inside neighbouring folders.
+    public let depth: UInt16
 
     func contains(x: Int32, y: Int32) -> Bool { x >= x0 && x < x1 && y >= y0 && y < y1 }
 }
@@ -40,7 +43,8 @@ public struct DiskMapLayout: Sendable {
 /// rather than the number of files on disk.
 public enum DiskMapLayoutEngine {
     static let headerHeightPoints = 18.0
-    private static let minimumHeaderWidthPoints = 44.0
+    /// A header strip narrower than its label would be an empty grey band.
+    private static let minimumHeaderWidthPoints = 72.0
     private static let minimumHeaderHeightPoints = 56.0
     /// A folder filling its parent repeats the same rectangle; stacked headers
     /// of `Users/me/dev/...` chains would only eat the map.
@@ -62,6 +66,7 @@ public enum DiskMapLayoutEngine {
         let minimumArea: Double
         let isCancelled: () -> Bool
         var wasCancelled = false
+        var depth: UInt16 = 0
 
         mutating func placeChildren(of parent: DiskTree.NodeID, x startX: Double, y startY: Double,
                                     width startWidth: Double, height startHeight: Double) {
@@ -153,8 +158,10 @@ public enum DiskMapLayoutEngine {
             guard isGroup else { return }
             let inset = (x1 - x0 > 6 && y1 - y0 > 6) ? 1.0 : 0
             let header = showsHeader ? (headerHeightPoints * scale).rounded() : 0
+            depth += 1
             placeChildren(of: id, x: x0 + inset, y: y0 + inset + header,
                           width: x1 - x0 - 2 * inset, height: y1 - y0 - 2 * inset - header)
+            depth -= 1
         }
 
         private mutating func append(_ id: DiskTree.NodeID, _ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double,
@@ -163,7 +170,7 @@ public enum DiskMapLayoutEngine {
             let right = Int32(x1.rounded()), bottom = Int32(y1.rounded())
             guard right > left, bottom > top else { return }
             tiles.append(DiskMapTile(node: id, x0: left, y0: top, x1: right, y1: bottom,
-                                     isFolder: isFolder, isRemainder: isRemainder, hasHeader: hasHeader))
+                                     isFolder: isFolder, isRemainder: isRemainder, hasHeader: hasHeader, depth: depth))
         }
     }
 }
@@ -184,12 +191,9 @@ public enum DiskMapRenderer {
             func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
             return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
         }
-        /// True when near-black text contrasts more than white.
-        var prefersDarkText: Bool {
-            let onWhite = 1.05 / (luminance + 0.05)
-            let onDark = (luminance + 0.05) / (0.012 + 0.05)
-            return onDark > onWhite
-        }
+        /// White reads better on the mid-tone fills (teal, slate, raspberry);
+        /// only the light ones (orange, ochre) take near-black text.
+        var prefersDarkText: Bool { luminance > 0.3 }
         var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
         /// Dark backgrounds make saturated fills glare: pull them toward grey and down a little.
         var forDarkAppearance: RGB {
@@ -300,6 +304,10 @@ public enum DiskMapRenderer {
         let inset = 5 * scale, lineHeight = 14 * scale
         // Below this a label is noise; hovering still identifies the tile.
         let minimumLabelWidth = 60 * scale, minimumLabelHeight = 28 * scale, minimumNameWidth = 50 * scale
+        let wrapping = NSMutableParagraphStyle()
+        wrapping.lineBreakMode = .byWordWrapping
+        // File tiles beside headed folders start their label below the header line.
+        let alignsWithHeaders = layout.tiles.contains { $0.depth == 0 && $0.hasHeader }
         var drawn = 0
         for tile in layout.tiles where drawn < 800 {
             let width = Double(tile.x1 - tile.x0) - scale, tileHeight = Double(tile.y1 - tile.y0) - scale
@@ -351,11 +359,29 @@ public enum DiskMapRenderer {
                 }
             } else {
                 // The name always leads; the size follows when it fits whole.
-                let top = Double(tile.y0) + 4 * scale
-                guard available >= minimumNameWidth, nameFits || available >= truncatedNameWidth else { continue }
-                name.draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
-                if sizeWidth <= available, tileHeight >= lineHeight * 2 + 6 * scale {
-                    size.draw(at: CGPoint(x: x, y: top + lineHeight))
+                let offset = alignsWithHeaders && tile.depth == 0 && tileHeight >= header + lineHeight * 3 ? header + scale : 0
+                let top = Double(tile.y0) + offset + 4 * scale
+                let room = tileHeight - offset - 8 * scale
+                // A long name may take a second line when the tile is tall enough.
+                let wrapped = NSAttributedString(string: shownName, attributes: [
+                    .font: nameFont, .foregroundColor: textColor, .paragraphStyle: wrapping])
+                // Only break between words: "Checkou / t v2" is worse than a truncation.
+                let wordsFit = shownName.split(separator: " ").allSatisfy {
+                    NSAttributedString(string: String($0), attributes: [.font: nameFont]).size().width <= available
+                }
+                let twoLines = !nameFits && wordsFit && room >= lineHeight * 3
+                    && wrapped.boundingRect(with: CGSize(width: available, height: .greatestFiniteMagnitude),
+                                            options: [.usesLineFragmentOrigin]).height <= lineHeight * 2 + scale
+                guard available >= minimumNameWidth, nameFits || twoLines || available >= truncatedNameWidth else { continue }
+                let nameLines: Double = twoLines ? 2 : 1
+                if twoLines {
+                    wrapped.draw(with: CGRect(x: x, y: top, width: available, height: lineHeight * 2 + scale),
+                                 options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+                } else {
+                    name.draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
+                }
+                if sizeWidth <= available, room >= lineHeight * (nameLines + 1) {
+                    size.draw(at: CGPoint(x: x, y: top + lineHeight * nameLines))
                 }
             }
             drawn += 1

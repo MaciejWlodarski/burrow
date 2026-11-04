@@ -16,6 +16,9 @@ public struct PathBreadcrumbBar: View {
     @ViewState private var editablePathText: String = ""
     @ViewState private var pathValidationMessage: String? = nil
     @ViewState private var isPathFieldFocused = false
+    /// The folder menu and the current folder's subfolder arrow appear on hover,
+    /// so the resting bar is just the path.
+    @ViewState private var isHoveringBar = false
 
     public init(appState: AppState, pane: PaneTabState) {
         self.appState = appState
@@ -71,6 +74,7 @@ public struct PathBreadcrumbBar: View {
             HStack(spacing: 8) {
                 pathEditor
                 folderActionsMenu
+                    .opacity(isHoveringBar || pane.isEditingPathBar ? 1 : 0)
             }
 
             if pane.isEditingPathBar, let message = pathValidationMessage {
@@ -88,6 +92,7 @@ public struct PathBreadcrumbBar: View {
         .overlay(alignment: .bottom) {
             Divider()
         }
+        .onHover { isHoveringBar = $0 }
         .onAppear { editablePathText = pane.currentURL.path }
         .onChange(of: pane.isEditingPathBar) { _, editing in
             if !editing { resetEditor() }
@@ -239,6 +244,7 @@ public struct PathBreadcrumbBar: View {
                     open: { navigate(to: $0) }
                 )
                 .frame(width: 16, height: 22)
+                .opacity(!isCurrent || isHoveringBar ? 1 : 0)
                 .help("Subfolders: \(segment.name)")
             }
         }

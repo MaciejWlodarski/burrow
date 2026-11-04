@@ -169,22 +169,25 @@ public struct InspectorPreviewView: View {
 
                             // The editable value has its own line so the narrow inspector stays readable.
                             VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                                HStack {
+                                HStack(alignment: .firstTextBaseline) {
                                     Text("Permissions")
                                         .font(FinderUI.detailFont)
                                         .foregroundStyle(.secondary)
                                     Spacer()
-                                    Text(posixPermissionsString)
-                                        .font(FinderUI.detailFont.monospaced())
-                                        .textSelection(.enabled)
-                                    Button(showChmodEditor ? String(localized: "Done") : String(localized: "Edit…")) {
-                                        showChmodEditor.toggle()
-                                    }
-                                    .font(FinderUI.detailFont)
-                                    .buttonStyle(.link)
+                                    // The mode and its edit button stack, so neither crowds the label.
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        Text(posixPermissionsString)
+                                            .font(FinderUI.detailFont.monospaced())
+                                            .textSelection(.enabled)
+                                        Button(showChmodEditor ? String(localized: "Done") : String(localized: "Edit…")) {
+                                            showChmodEditor.toggle()
+                                        }
+                                        .font(FinderUI.captionFont)
+                                        .buttonStyle(.link)
                                     .help("Edit POSIX permissions (chmod)")
                                     .accessibilityLabel("Edit POSIX permissions")
                                     .accessibilityValue(showChmodEditor ? String(localized: "Expanded") : String(localized: "Collapsed"))
+                                    }
                                 }
                                 if let permissionError {
                                     Text(permissionError)
@@ -204,12 +207,17 @@ public struct InspectorPreviewView: View {
                                     .foregroundStyle(.secondary)
                                     .layoutPriority(1)
                                 Spacer(minLength: 0)
-                                Text((item.parentPath as NSString).abbreviatingWithTildeInPath)
-                                    .font(FinderUI.detailFont)
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .help(item.path)
+                                // The enclosing folder by name; the full path is in the tooltip.
+                                Button {
+                                    _ = appState.activeTab.navigate(to: URL(fileURLWithPath: item.parentPath))
+                                } label: {
+                                    Label(FileManager.default.displayName(atPath: item.parentPath), systemImage: "folder")
+                                        .font(FinderUI.detailFont)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                                .buttonStyle(.borderless)
+                                .help(item.parentPath)
                             }
                         }
 

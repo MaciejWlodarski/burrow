@@ -1083,8 +1083,9 @@ private struct SettingsFootnote: View {
     init(_ text: String) { self.text = text }
     var body: some View {
         Text(text)
-            .font(FinderUI.captionFont)
-            .foregroundStyle(.secondary)
+            .font(.callout)
+            .lineSpacing(2)
+            .foregroundStyle(FinderUI.metadataColor)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -1109,7 +1110,7 @@ struct GeneralSettingsPane: View {
                     Text(notice).font(FinderUI.captionFont).foregroundStyle(.orange)
                 }
             } footer: {
-                SettingsFootnote(String(localized: "Folders, views and searches come back as you left them. Selections and the clipboard are not saved."))
+                SettingsFootnote(String(localized: "Folders, views and searches reopen as you left them."))
             }
             UpdateSettingsSection()
         }
