@@ -262,7 +262,7 @@ private struct FinderTabView: View {
                         .truncationMode(.middle)
                 }
                 .frame(minWidth: 70, maxWidth: 190, alignment: .leading)
-                .padding(.vertical, 8)
+                .padding(.vertical, 5)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -276,7 +276,8 @@ private struct FinderTabView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .opacity(isOnlyTab ? 0 : 1)
+            // Like Safari: the close button on the selected tab and under the pointer only.
+            .opacity(isOnlyTab ? 0 : (isSelected || isHovered ? 1 : 0))
             .accessibilityHidden(isOnlyTab)
             .disabled(isOnlyTab)
             .accessibilityLabel("Close tab \(tab.title)")
@@ -284,8 +285,11 @@ private struct FinderTabView: View {
         }
         .font(.system(size: 12, weight: isSelected ? .medium : .regular))
         .padding(.horizontal, 10)
-        .background(isSelected ? Color(nsColor: .controlBackgroundColor) : (isHovered ? Color.primary.opacity(0.04) : .clear),
-                    in: UnevenRoundedRectangle(topLeadingRadius: 6, topTrailingRadius: 6))
+        // Each pane's selected tab is a filled chip whether or not that pane has focus;
+        // focus itself is the path bar's tint and underline.
+        .background(isSelected ? Color.primary.opacity(0.08) : (isHovered ? Color.primary.opacity(0.04) : .clear),
+                    in: RoundedRectangle(cornerRadius: 6))
+        .padding(.vertical, 4)
         .onHover { isHovered = $0 }
         .help(tab.currentURL.path)
         .contextMenu {

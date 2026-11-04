@@ -422,10 +422,8 @@ public enum DiskMapRenderer {
                 if compactName.size().width <= available || available >= 60 * scale {
                     if glyph > 0 { drawFolderGlyph(x: origin.x, top: origin.y) }
                     compactName.draw(in: CGRect(x: origin.x + glyph, y: origin.y, width: available, height: lineHeight))
-                } else if tile.isCollapsed {
-                    // Too narrow for its name: the glyph alone still says "folder".
-                    drawFolderGlyph(x: origin.x, top: origin.y)
                 } else {
+                    // A glyph without a name says nothing useful; hover names the tile.
                     continue
                 }
             } else {
@@ -445,9 +443,8 @@ public enum DiskMapRenderer {
                                             options: [.usesLineFragmentOrigin]).height <= lineHeight * 2 + scale
                 // Identity first, as in compact tiles: a middle-truncated name rather than a blank tile.
                 let showsName = nameFits || twoLines || available >= 60 * scale
-                guard showsName || tile.isCollapsed else { continue }
-                if glyph > 0 || !showsName { drawFolderGlyph(x: x - glyph, top: top) }
-                guard showsName else { drawn += 1; continue }
+                guard showsName else { continue }
+                if glyph > 0 { drawFolderGlyph(x: x - glyph, top: top) }
                 let nameLines: Double = twoLines ? 2 : 1
                 if twoLines {
                     wrapped.draw(with: CGRect(x: x, y: top, width: available, height: lineHeight * 2 + scale),

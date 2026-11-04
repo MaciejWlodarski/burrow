@@ -202,7 +202,8 @@ public struct InspectorPreviewView: View {
                                     // The same size and colour as the other values; the octal
                                     // form is the quieter echo.
                                     permissionsText
-                                        .font(FinderUI.detailFont.monospaced())
+                                        // Regular 12 pt mono matches the cap height of the 13 pt values.
+                                        .font(.system(size: 12, design: .monospaced))
                                         .textSelection(.enabled)
                                     if showChmodEditor {
                                         Button("Done") { showChmodEditor = false }

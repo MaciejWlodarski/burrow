@@ -308,7 +308,7 @@ public struct FilePaneView: View {
         }
         let folder = parts.popLast() ?? ""
         let lead = parts.isEmpty ? "" : parts.joined(separator: " › ") + " › "
-        let leadColor = isSelected ? selectionForegroundColor.opacity(0.8) : FinderUI.metadataColor
+        let leadColor = isSelected ? selectionForegroundColor.opacity(0.8) : Color(nsColor: .tertiaryLabelColor)
         let folderColor = isSelected ? selectionForegroundColor : FinderUI.metadataColor
         return Text(verbatim: lead).foregroundColor(leadColor) + Text(verbatim: folder).foregroundColor(folderColor)
     }
@@ -605,7 +605,8 @@ public struct FilePaneView: View {
 
                     if showSubpath {
                         resultLocation(item.parentPath, isSelected: isSelected)
-                            .font(.callout)
+                            // Smaller and quieter than the name: the same path often repeats.
+                            .font(.system(size: 11))
                             .lineLimit(1)
                             .truncationMode(.head)
                             .help(item.parentPath)

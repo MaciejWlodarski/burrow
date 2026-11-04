@@ -284,7 +284,7 @@ private struct TerminalTabActions: View {
     var body: some View {
         HStack(spacing: 4) {
             // Icons like the rest of the header; the tooltip names each.
-            terminalHeaderButton("Clear Terminal Output", icon: "eraser", accessibility: "Clear Terminal Output") {
+            terminalHeaderButton("Clear Terminal Output", icon: "clear", accessibility: "Clear Terminal Output") {
                 terminal.clear()
             }
             .disabled(terminal.transcript.lines.isEmpty)
