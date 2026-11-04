@@ -23,6 +23,19 @@ public struct FSearchToolbarSection: View {
             }
         }
         .background(.bar)
+        .sheet(isPresented: $appState.showFSearchHelpPopover) {
+            VStack(spacing: 0) {
+                FSearchSyntaxCheatsheetView(activeTab: activeTab)
+                HStack {
+                    Spacer()
+                    Button("Done") { appState.showFSearchHelpPopover = false }
+                        .keyboardShortcut(.defaultAction)
+                }
+                .padding([.horizontal, .bottom], 14)
+            }
+            // Trying an example closes the sheet to show its results.
+            .onChange(of: activeTab.searchQuery) { _, _ in appState.showFSearchHelpPopover = false }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button { activeTab.goBack() } label: {
@@ -123,6 +136,7 @@ public struct FSearchToolbarSection: View {
                         Button("Compare Folders…", systemImage: "arrow.left.arrow.right") { appState.showCompareSheet = true }
                         Divider()
                     }
+                    Menu("Search Filters", systemImage: "line.3.horizontal.decrease.circle") { filterMenuItems }
                     Button("Quick Search…", systemImage: "magnifyingglass") {
                         appState.showQuickFSearchModal = true
                     }
@@ -147,7 +161,6 @@ public struct FSearchToolbarSection: View {
                 .help("Show or hide the inspector (⌘I)")
                 .accessibilityValue(appState.showInspector ? String(localized: "Visible") : String(localized: "Hidden"))
             }
-            ToolbarItem { filterMenu }
         }
         // A native toolbar search field, as in Finder. Where to search is a
         // scope bar that appears only while searching.
@@ -164,33 +177,25 @@ public struct FSearchToolbarSection: View {
         .onChange(of: appState.focusSearchFieldTrigger) { _, _ in isSearchPresented = true }
     }
 
-    private var filterMenu: some View {
-        Menu {
-            Section("File Kind") {
-                filter("Folders", "folder", "type:dir")
-                filter("Documents", "doc.text", "type:doc")
-                filter("Images", "photo", "type:image")
-                filter("Video", "film", "type:video")
-                filter("Source Code", "chevron.left.forwardslash.chevron.right", "type:code")
-                filter("Archives", "doc.zipper", "type:archive")
-            }
-            Section("Quick Filters") {
-                filter("Larger Than 10 MB", "internaldrive", "size:>10mb")
-                filter("Changed in the Last Week", "clock", "mtime:<7d")
-                filter("Modified in Git", "point.3.connected.trianglepath.dotted", "git:modified")
-            }
-            Divider()
-            Toggle("Tolerate Typos", isOn: $activeTab.fuzzyEnabled)
-            Button("Search Syntax…", systemImage: "questionmark.circle") {
-                appState.showFSearchHelpPopover = true
-            }
-        } label: {
-            Label("Filters", systemImage: activeTab.activeFilterPills.isEmpty
-                  ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+    @ViewBuilder
+    private var filterMenuItems: some View {
+        Section("File Kind") {
+            filter("Folders", "folder", "type:dir")
+            filter("Documents", "doc.text", "type:doc")
+            filter("Images", "photo", "type:image")
+            filter("Video", "film", "type:video")
+            filter("Source Code", "chevron.left.forwardslash.chevron.right", "type:code")
+            filter("Archives", "doc.zipper", "type:archive")
         }
-        .help("Search filters and syntax")
-        .popover(isPresented: $appState.showFSearchHelpPopover) {
-            FSearchSyntaxCheatsheetView(activeTab: activeTab)
+        Section("Quick Filters") {
+            filter("Larger Than 10 MB", "internaldrive", "size:>10mb")
+            filter("Changed in the Last Week", "clock", "mtime:<7d")
+            filter("Modified in Git", "point.3.connected.trianglepath.dotted", "git:modified")
+        }
+        Divider()
+        Toggle("Tolerate Typos", isOn: $activeTab.fuzzyEnabled)
+        Button("Search Syntax…", systemImage: "questionmark.circle") {
+            appState.showFSearchHelpPopover = true
         }
     }
 

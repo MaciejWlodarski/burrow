@@ -407,7 +407,7 @@ public final class AppState: ObservableObject {
             (String(localized: "Trash"), "trash.fill", "\(home)/.Trash")
         ]
         #if !BURROW_TESTING
-        candidates.append((String(localized: "Applications"), "app.badge.fill", "/Applications"))
+        candidates.append((String(localized: "Applications"), "square.grid.2x2", "/Applications"))
         #endif
         return candidates.map { SidebarFavoritesStore.Entry(path: $0.2, title: $0.0, iconName: $0.1) }
     }

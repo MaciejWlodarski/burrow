@@ -237,6 +237,12 @@ public struct FilePaneView: View {
             }
         }
         .opacity(appState.isDualPane && !isFocusedPane ? 0.6 : 1)
+        .background {
+            ZStack {
+                Color(nsColor: .controlBackgroundColor)
+                if appState.isDualPane && isFocusedPane { Color.accentColor.opacity(0.08) }
+            }
+        }
         .overlay(alignment: .bottom) {
             if appState.isDualPane && isFocusedPane {
                 Rectangle().fill(Color.accentColor).frame(height: 2).allowsHitTesting(false)
@@ -267,7 +273,6 @@ public struct FilePaneView: View {
         .padding(.horizontal, FinderUI.panelInset)
         .frame(height: 34)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor))
         .overlay(alignment: .bottom) { Divider() }
         .accessibilityElement(children: .combine)
     }
@@ -278,7 +283,8 @@ public struct FilePaneView: View {
         let home = NSHomeDirectory()
         let relative = path == home ? "~" : path.hasPrefix(home + "/") ? "~/" + path.dropFirst(home.count + 1) : path
         let parts = relative.split(separator: "/").map(String.init)
-        return parts.suffix(3).joined(separator: " › ")
+        let shown = parts.suffix(2).joined(separator: " › ")
+        return parts.count > 2 ? "… › " + shown : shown
     }
 
     /// Search results show the typed text in bold within each name.
@@ -291,7 +297,8 @@ public struct FilePaneView: View {
             var searchStart = text.startIndex
             while searchStart < text.endIndex,
                   let range = text[searchStart...].range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) {
-                text[range].font = FinderUI.bodyFont.weight(.bold)
+                text[range].font = FinderUI.bodyFont.weight(.semibold)
+                if !isSelected { text[range].backgroundColor = Color.accentColor.opacity(0.16) }
                 searchStart = range.upperBound
             }
         }
@@ -503,7 +510,7 @@ public struct FilePaneView: View {
                     if showSubpath {
                         Text(Self.shortLocation(of: item.parentPath))
                             .font(FinderUI.captionFont)
-                            .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
+                            .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                             .lineLimit(1)
                             .truncationMode(.head)
                             .help(item.parentPath)
@@ -538,23 +545,23 @@ public struct FilePaneView: View {
                     Text(FormatHelpers.formatBytes(item.size))
                 }
             }
-            .font(FinderUI.detailFont.monospacedDigit())
-            .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
+            .font(FinderUI.bodyFont.monospacedDigit())
+            .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
             .lineLimit(1)
             .frame(width: 80, alignment: .trailing)
             .padding(.trailing, 20)
 
             if showDate {
                 Text(FormatHelpers.formatDate(item.modificationDate))
-                    .font(FinderUI.detailFont)
-                    .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
+                    .font(FinderUI.bodyFont)
+                    .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                     .lineLimit(1)
                     .frame(width: 170, alignment: .leading)
             }
             if showKind {
                 Text(item.kindDisplayString)
-                    .font(FinderUI.detailFont)
-                    .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
+                    .font(FinderUI.bodyFont)
+                    .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(width: 150, alignment: .leading)
@@ -623,7 +630,8 @@ public struct FilePaneView: View {
     private var iconGridBrowserView: some View {
         let iconDim = CGFloat(appState.iconGridSize)
         let cellWidth = max(96, iconDim + 44)
-        let columns = [GridItem(.adaptive(minimum: cellWidth, maximum: cellWidth + 24), spacing: 14)]
+        // Top-aligned cells keep thumbnails, names and sizes on shared lines.
+        let columns = [GridItem(.adaptive(minimum: cellWidth, maximum: cellWidth + 24), spacing: 14, alignment: .top)]
         return ScrollView {
             ZStack(alignment: .topLeading) {
                 LazyVGrid(columns: columns, spacing: FinderUI.sectionSpacing) {
@@ -673,6 +681,7 @@ public struct FilePaneView: View {
                                 RoundedRectangle(cornerRadius: 5)
                                     .fill(isSelected ? selectionBackgroundColor : Color.clear)
                             )
+                            .frame(height: 36, alignment: .top)
 
                             Group {
                                 if item.isDirectory {

@@ -943,3 +943,13 @@
 "Share of Total" = "Udział";
 "Files" = "Pliki";
 "Share…" = "Udostępnij…";
+"1 item" = "1 element";
+"%@ items" = "Elementy: %@";
+"%@ available" = "Dostępne: %@";
+"Search Filters" = "Filtry wyszukiwania";
+"No tags" = "Brak tagów";
+"Add or remove tags" = "Dodaj lub usuń tagi";
+"Edit tags" = "Edytuj tagi";
+"Open in Terminal" = "Otwórz w Terminalu";
+"Open in Editor" = "Otwórz w edytorze";
+"System Settings › Privacy & Security › Full Disk Access" = "Ustawienia systemowe › Prywatność i ochrona › Pełny dostęp do dysku";

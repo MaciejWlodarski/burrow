@@ -12,7 +12,7 @@ public struct SidebarView: View {
     @ViewState private var dropTargetedPath: String? = nil
     @ViewState private var isPinDropTargeted = false
     @ViewState private var isFavoriteEndTargeted = false
-    @ViewState private var areTagsExpanded = false
+    @ViewState private var areTagsExpanded = true
     @ViewState private var expandedServers: Set<String> = []
     @ViewState private var draggedFavoriteID: String? = nil
     @ViewState private var favoriteDragNonce: UUID? = nil

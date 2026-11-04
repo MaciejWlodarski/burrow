@@ -176,8 +176,17 @@ public enum DiskMapRenderer {
             self.green = green
             self.blue = blue
         }
-        /// Relative luminance, to pick a legible label colour.
-        var luminance: Double { 0.2126 * red + 0.7152 * green + 0.0722 * blue }
+        /// WCAG relative luminance, to pick the more legible label colour.
+        var luminance: Double {
+            func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+            return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+        }
+        /// True when near-black text contrasts more than white.
+        var prefersDarkText: Bool {
+            let onWhite = 1.05 / (luminance + 0.05)
+            let onDark = (luminance + 0.05) / (0.012 + 0.05)
+            return onDark > onWhite
+        }
         var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
     }
 
@@ -290,26 +299,30 @@ public enum DiskMapRenderer {
                 textColor = palette.folderText
             } else {
                 let base = tree.isSynthetic(tile.node) ? palette.synthetic : color(tree.category(tile.node))
-                textColor = base.luminance > 0.62 ? NSColor(white: 0.1, alpha: 0.9) : NSColor.white
+                textColor = base.prefersDarkText ? NSColor(white: 0.08, alpha: 0.92) : NSColor.white
             }
             let size = NSAttributedString(string: FormatHelpers.formatBytes(tree.allocatedSize(tile.node)), attributes: [
-                .font: sizeFont, .foregroundColor: textColor.withAlphaComponent(isGroup ? 0.7 : 0.85)])
+                .font: sizeFont, .foregroundColor: textColor.withAlphaComponent(isGroup ? 0.75 : 0.9)])
             let available = width - inset * 2
             // A tile that cannot show its full size shows nothing.
             guard available >= size.size().width, tileHeight >= lineHeight + 2 * scale else { continue }
-            let name = NSAttributedString(string: tree.name(tile.node), attributes: [
+            // Inside a coloured tile the colour already says the type.
+            let rawName = tree.name(tile.node)
+            let shownName = isGroup ? rawName : (rawName as NSString).deletingPathExtension.isEmpty ? rawName : (rawName as NSString).deletingPathExtension
+            let name = NSAttributedString(string: shownName, attributes: [
                 .font: nameFont, .foregroundColor: textColor, .paragraphStyle: truncating])
             let top = Double(tile.y0) + (isGroup ? (header - lineHeight) / 2 : 3 * scale)
-            if !isGroup && tileHeight >= lineHeight * 2 + 6 * scale && available >= 40 * scale {
+            // Names need room to be readable; narrower tiles show only the size.
+            if !isGroup && tileHeight >= lineHeight * 2 + 6 * scale && available >= 80 * scale {
                 name.draw(in: CGRect(x: Double(tile.x0) + inset, y: top, width: available, height: lineHeight))
                 size.draw(at: CGPoint(x: Double(tile.x0) + inset, y: top + lineHeight))
             } else {
                 let sizeWidth = size.size().width
                 let nameWidth = available - sizeWidth - 6 * scale
-                if nameWidth >= 28 * scale {
+                if nameWidth >= 60 * scale {
                     name.draw(in: CGRect(x: Double(tile.x0) + inset, y: top, width: nameWidth, height: lineHeight))
                     size.draw(at: CGPoint(x: Double(tile.x0) + inset + available - sizeWidth, y: top))
-                } else if !isGroup {
+                } else {
                     size.draw(at: CGPoint(x: Double(tile.x0) + inset, y: top))
                 }
             }

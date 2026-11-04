@@ -505,6 +505,7 @@ public struct WizTreeAnalyzerView: View {
                     analyzerTitle
                     analysisModePicker
                         .pickerStyle(.segmented)
+                        .tint(Color.secondary)
                         .fixedSize()
                     Spacer(minLength: 0)
                     wholeDiskButton
@@ -589,7 +590,7 @@ public struct WizTreeAnalyzerView: View {
     @ViewBuilder
     private var analysisTelemetry: some View {
         Text(FormatHelpers.formatBytes(totalScannedBytes))
-            .font(.title3.weight(.semibold))
+            .font(.system(size: 22, weight: .semibold))
             .monospacedDigit()
             .foregroundStyle(.primary)
             .fixedSize()
@@ -736,7 +737,7 @@ public struct WizTreeAnalyzerView: View {
                 }
                 .clipShape(Capsule())
             }
-            .frame(height: 6)
+            .frame(height: 8)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 16) {
@@ -785,7 +786,7 @@ public struct WizTreeAnalyzerView: View {
                 }
                 }
             }
-            .frame(minHeight: 120, idealHeight: 240)
+            .frame(minHeight: 120, idealHeight: 190)
 
             VStack(spacing: 0) {
                 // Live Hover / Selection HUD Bar
@@ -795,7 +796,7 @@ public struct WizTreeAnalyzerView: View {
                     .padding(FinderUI.rowSpacing)
                     .background(Color(nsColor: .controlBackgroundColor))
             }
-            .frame(minHeight: 220, idealHeight: 420)
+            .frame(minHeight: 260, idealHeight: 460)
         }
     }
 
@@ -886,7 +887,7 @@ public struct WizTreeAnalyzerView: View {
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.primary.opacity(0.07))
                         Capsule()
-                            .fill(tree.isDirectory(id) ? Color.secondary.opacity(0.55) : tree.category(id).treemapColor)
+                            .fill(isSelected ? selectionForegroundColor.opacity(0.85) : Color.secondary.opacity(0.6))
                             .frame(width: max(3, geometry.size.width * CGFloat(fraction)))
                     }
                 }

@@ -27,6 +27,8 @@ enum FinderUI {
     static let detailFont: Font = .callout
     static let captionFont: Font = .subheadline
     static let titleFont: Font = .headline
+    /// Sizes, dates and kinds: quieter than names but still easy to read.
+    static let metadataColor = Color.primary.opacity(0.68)
 }
 
 /// The status bar must describe the same projection that commands can act on.
@@ -46,7 +48,8 @@ struct FinderSelectionSummary: Equatable {
     var countDescription: String {
         if isSearching { return String(localized: "Searching…") }
         if selectedCount > 0 { return String(localized: "\(selectedCount.formatted()) of \(totalCount.formatted()) selected") }
-        if isAnalysis { return String(localized: "Analysis items: \(totalCount.formatted())") }
-        return String(localized: "Items: \(totalCount.formatted())")
+        // The disk map shows its own totals in its header.
+        if isAnalysis { return "" }
+        return totalCount == 1 ? String(localized: "1 item") : String(localized: "\(totalCount.formatted()) items")
     }
 }

@@ -27,6 +27,9 @@ struct FullDiskAccessSheetView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if !granted {
+                        Label("System Settings › Privacy & Security › Full Disk Access", systemImage: "gearshape")
+                            .font(FinderUI.detailFont.weight(.medium))
+                            .foregroundStyle(.secondary)
                         VStack(alignment: .leading, spacing: 8) {
                             step(1, "Click Open System Settings.")
                             step(2, "Turn on Burrow in the list.")
@@ -61,7 +64,8 @@ struct FullDiskAccessSheetView: View {
                         }
 
                         Text("Without it, Burrow still works: protected folders such as Desktop and Documents are searched and sized once you open them or ask, and macOS asks about each of them once.")
-                            .font(FinderUI.captionFont)
+                            .font(FinderUI.detailFont)
+                            .lineSpacing(2)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

@@ -41,7 +41,8 @@ public struct MainWindowView: View {
             browserColumn(activeTab: activeTab)
         }
         .frame(minWidth: appState.isDualPane ? 1080 : 880, minHeight: 560)
-        .navigationTitle(activeTab.title)
+        .navigationTitle(activeTab.searchQuery.trimmingCharacters(in: .whitespaces).isEmpty
+                         ? activeTab.title : "“\(activeTab.searchQuery.trimmingCharacters(in: .whitespaces))”")
         .onChange(of: appState.activeTabId) { _, _ in appState.persistTabsState() }
         .onAppear {
             let open = openWindow
@@ -339,13 +340,13 @@ private struct FinderStatusBar: View {
                 ProgressView().controlSize(.small).accessibilityLabel("Indexing files")
                 Text("Indexing…")
             } else if let availableBytes {
-                Text("\(FormatHelpers.formatBytes(availableBytes)) free").monospacedDigit()
+                Text("\(FormatHelpers.formatBytes(availableBytes)) available").monospacedDigit()
             }
         }
-        .font(FinderUI.captionFont)
-        .foregroundStyle(.secondary)
+        .font(FinderUI.detailFont)
+        .foregroundStyle(FinderUI.metadataColor)
         .padding(.horizontal, 16)
-        .frame(minHeight: 32)
+        .frame(minHeight: 30)
         .background(.bar)
     }
 }

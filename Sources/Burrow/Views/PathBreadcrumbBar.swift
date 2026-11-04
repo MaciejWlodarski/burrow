@@ -85,7 +85,6 @@ public struct PathBreadcrumbBar: View {
         .font(FinderUI.detailFont)
         .padding(.horizontal, FinderUI.rowSpacing)
         .padding(.vertical, 3)
-        .background(Color(nsColor: .controlBackgroundColor))
         .overlay(alignment: .bottom) {
             Divider()
         }
@@ -198,10 +197,9 @@ public struct PathBreadcrumbBar: View {
                         Button(segment.isRoot ? segment.name : segment.url.path) { navigate(to: segment.url) }
                     }
                 } label: {
-                    Image(systemName: "chevron.left.2")
-                        .font(.system(size: 9, weight: .semibold))
+                    Text(verbatim: "…")
                         .foregroundStyle(.secondary)
-                        .frame(width: 20, height: 22)
+                        .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
