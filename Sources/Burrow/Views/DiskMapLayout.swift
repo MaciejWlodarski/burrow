@@ -266,7 +266,7 @@ public enum DiskMapRenderer {
         let innerGap = Int32(max(1, (scale * 1.5).rounded()))
         // Top-level blocks stand further apart, so a folder never seems to run into
         // a neighbouring file of the same colour.
-        let outerGap = Int32(max(2, (scale * 3.5).rounded()))
+        let outerGap = Int32(max(3, (scale * 6).rounded()))
         for (index, tile) in layout.tiles.enumerated() {
             if index & 0xFFF == 0, isCancelled() { return nil }
             let gap = tile.depth == 0 ? outerGap : innerGap
@@ -419,10 +419,13 @@ public enum DiskMapRenderer {
                 // Identity, never a bare size: the name, shortened in the middle when needed;
                 // too narrow even for that, nothing (the hover callout names it).
                 let origin = CGPoint(x: Double(tile.x0) + 6 * scale, y: Double(tile.y0) + 4 * scale)
-                if glyph > 0 { drawFolderGlyph(x: origin.x, top: origin.y) }
-                if compactName.size().width <= available || available >= 46 * scale {
+                if compactName.size().width <= available || available >= 60 * scale {
+                    if glyph > 0 { drawFolderGlyph(x: origin.x, top: origin.y) }
                     compactName.draw(in: CGRect(x: origin.x + glyph, y: origin.y, width: available, height: lineHeight))
-                } else if glyph == 0 {
+                } else if tile.isCollapsed {
+                    // Too narrow for its name: the glyph alone still says "folder".
+                    drawFolderGlyph(x: origin.x, top: origin.y)
+                } else {
                     continue
                 }
             } else {
@@ -441,9 +444,9 @@ public enum DiskMapRenderer {
                     && wrapped.boundingRect(with: CGSize(width: available, height: .greatestFiniteMagnitude),
                                             options: [.usesLineFragmentOrigin]).height <= lineHeight * 2 + scale
                 // Identity first, as in compact tiles: a middle-truncated name rather than a blank tile.
-                let showsName = nameFits || twoLines || available >= 46 * scale
-                guard showsName || glyph > 0 else { continue }
-                if glyph > 0 { drawFolderGlyph(x: x - glyph, top: top) }
+                let showsName = nameFits || twoLines || available >= 60 * scale
+                guard showsName || tile.isCollapsed else { continue }
+                if glyph > 0 || !showsName { drawFolderGlyph(x: x - glyph, top: top) }
                 guard showsName else { drawn += 1; continue }
                 let nameLines: Double = twoLines ? 2 : 1
                 if twoLines {

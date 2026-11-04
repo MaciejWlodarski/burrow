@@ -875,7 +875,7 @@ public struct WizTreeAnalyzerView: View {
     /// A short bar track, kept next to its percentage: a full-width track turns
     /// the rows into a wall of progress bars that outweighs the names.
     static func shareBarWidth(_ availableWidth: CGFloat) -> CGFloat {
-        min(200, max(120, availableWidth * 0.18))
+        min(140, max(100, availableWidth * 0.12))
     }
 
     /// The bar and its percentage, one column under one header.

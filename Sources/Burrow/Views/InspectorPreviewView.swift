@@ -601,34 +601,28 @@ public struct InspectorPreviewView: View {
 
     private func checksumsSection(for item: FileItem) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
+            // One quiet row, like the details above: the least-used action stays the lightest.
+            HStack(spacing: FinderUI.rowSpacing) {
                 Text("Checksums")
-                    .font(FinderUI.detailFont.weight(.semibold))
+                    .font(FinderUI.detailFont)
+                    .foregroundStyle(FinderUI.metadataColor)
                     .accessibilityAddTraits(.isHeader)
+                Spacer()
                 if sha256Hash == nil {
-                    Button {
-                        startHashes(for: item)
-                    } label: {
-                        HStack(spacing: 4) {
-                            if isComputingHash {
-                                ProgressView().controlSize(.mini)
-                            } else {
-                                Image(systemName: "number.square")
-                            }
-                            Text(isComputingHash ? String(localized: "Calculating…") : (hashErrorMessage == nil ? String(localized: "Calculate SHA-256 and MD5") : String(localized: "Try Again")))
-                                .font(FinderUI.detailFont)
-                        }
-                        .frame(minHeight: 22)
-                    }
-                    // Sized to its title: the least-used action stays the lightest.
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
-                    .disabled(isComputingHash)
-                    .accessibilityLabel(isComputingHash ? String(localized: "Calculating checksums") : String(localized: "Calculate SHA-256 and MD5 checksums"))
                     if isComputingHash {
-                        Button("Cancel Calculation", systemImage: "xmark.circle") { cancelHashes() }
-                            .buttonStyle(.borderless)
-                            .controlSize(.small)
+                        ProgressView().controlSize(.mini)
+                        Button("Cancel") { cancelHashes() }
+                            .buttonStyle(.link)
+                            .font(FinderUI.detailFont)
+                            .help("Cancel Calculation")
+                    } else {
+                        Button(hashErrorMessage == nil ? String(localized: "Calculate") : String(localized: "Try Again")) {
+                            startHashes(for: item)
+                        }
+                        .buttonStyle(.link)
+                        .font(FinderUI.detailFont)
+                        .help("Calculate SHA-256 and MD5")
+                        .accessibilityLabel("Calculate SHA-256 and MD5 checksums")
                     }
                 }
             }

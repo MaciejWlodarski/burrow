@@ -80,7 +80,7 @@ struct SearchMatchRenderer: TextRenderer {
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
             for run in line where run[SearchMatchAttribute.self] != nil {
-                let rect = run.typographicBounds.rect.insetBy(dx: -2, dy: -1)
+                let rect = run.typographicBounds.rect.insetBy(dx: -3, dy: -1)
                 context.fill(Path(roundedRect: rect, cornerRadius: 4), with: .color(FinderUI.matchHighlight))
             }
             for run in line { context.draw(run) }

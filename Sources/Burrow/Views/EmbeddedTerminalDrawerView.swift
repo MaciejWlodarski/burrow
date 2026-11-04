@@ -168,7 +168,7 @@ public struct EmbeddedTerminalDrawerView: View {
                     TerminalTabActions(terminal: tab)
                     Divider().frame(height: 16)
                 }
-                terminalHeaderButton("New terminal tab in the active pane’s folder", icon: "plus",
+                terminalHeaderButton("New Terminal Tab", icon: "plus",
                                      accessibility: "New Terminal Tab") {
                     _ = workspace.add(directory: activeTab.currentURL)
                 }
@@ -283,15 +283,11 @@ private struct TerminalTabActions: View {
     @ObservedObject var terminal: TerminalTab
     var body: some View {
         HStack(spacing: 4) {
-            // The least familiar action says what it does.
-            Button("Clear") { terminal.clear() }
-                .buttonStyle(.borderless)
-                .font(FinderUI.detailFont)
-                .foregroundStyle(FinderUI.metadataColor)
-                .padding(.horizontal, 6)
-                .help("Clear Terminal Output")
-                .accessibilityLabel("Clear Terminal Output")
-                .disabled(terminal.transcript.lines.isEmpty)
+            // Icons like the rest of the header; the tooltip names each.
+            terminalHeaderButton("Clear Terminal Output", icon: "eraser", accessibility: "Clear Terminal Output") {
+                terminal.clear()
+            }
+            .disabled(terminal.transcript.lines.isEmpty)
             terminalHeaderButton("Open Folder in External Terminal", icon: "arrow.up.forward.app",
                                  accessibility: "Open Folder in External Terminal") {
                 FileOperationsManager.shared.openInTerminal(at: terminal.directory)
