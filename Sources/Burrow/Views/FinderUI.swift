@@ -80,11 +80,11 @@ struct SearchMatchRenderer: TextRenderer {
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
             for run in line where run[SearchMatchAttribute.self] != nil {
-                // Flush with the first glyph, so a highlighted name keeps the text
-                // column's left edge; a little room after the match.
+                // The same 2 pt of room on both sides; the wash reaches outside the text, so
+                // the glyphs themselves keep the name column's left edge.
                 let bounds = run.typographicBounds.rect
-                let rect = CGRect(x: bounds.minX - 1, y: bounds.minY - 1, width: bounds.width + 4, height: bounds.height + 2)
-                context.fill(Path(roundedRect: rect, cornerRadius: 4), with: .color(FinderUI.matchHighlight))
+                let rect = CGRect(x: bounds.minX - 2, y: bounds.minY - 1, width: bounds.width + 4, height: bounds.height + 2)
+                context.fill(Path(roundedRect: rect, cornerRadius: 3.5), with: .color(FinderUI.matchHighlight))
             }
             for run in line { context.draw(run) }
         }

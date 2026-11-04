@@ -361,8 +361,13 @@ public enum DiskMapRenderer {
             if tile.isCollapsed {
                 // A folder summary: the header-strip fill, with a hairline inside only at the
                 // top level; inside an outlined group a second border would double that outline.
+                // Inside a group the fill goes a step past the header strip's grey, so the
+                // summary never reads as one more header.
+                let nestedFill = RGB((palette.folderHeader.red + palette.folderStroke.red) / 2,
+                                     (palette.folderHeader.green + palette.folderStroke.green) / 2,
+                                     (palette.folderHeader.blue + palette.folderStroke.blue) / 2)
                 fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1,
-                     tile.depth == 0 ? palette.folderStroke : palette.folderHeader)
+                     tile.depth == 0 ? palette.folderStroke : nestedFill)
                 let line = Int32(max(1, scale.rounded()))
                 if tile.depth == 0, x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
                     fill(pixels, stride: stride, tile.x0 + line, tile.y0 + line, x1 - line, y1 - line, palette.folderHeader)
