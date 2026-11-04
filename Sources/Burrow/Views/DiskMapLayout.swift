@@ -192,6 +192,9 @@ public enum DiskMapLayoutEngine {
             let inset = (x1 - x0 > 12 && y1 - y0 > 12) ? (2 * scale).rounded() : 0
             let flush = showsHeader && depth > 0
             let sideInset = flush ? 0 : inset
+            // Its bottom edge has no strip to mark it, so a nested group ends in a 6 pt band:
+            // a sibling below it (a collapsed folder) then clearly starts outside it.
+            let bottomInset = flush ? (6 * scale).rounded() : inset
             let header = showsHeader ? (DiskMapLayoutEngine.headerHeight(depth: depth) * scale).rounded() : 0
             // Children stay inside the group's drawn edge (its rect minus its own gutter),
             // with the same inset on all four sides once their own gutters are counted.
@@ -200,7 +203,7 @@ public enum DiskMapLayoutEngine {
             depth += 1
             placeChildren(of: id, x: x0 + sideInset, y: y0 + sideInset + header,
                           width: x1 - gap - x0 - 2 * sideInset + childGap,
-                          height: y1 - gap - y0 - sideInset - inset - header + childGap)
+                          height: y1 - gap - y0 - sideInset - bottomInset - header + childGap)
             depth -= 1
         }
 
