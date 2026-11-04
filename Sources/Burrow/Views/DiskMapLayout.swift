@@ -274,7 +274,13 @@ public enum DiskMapRenderer {
             let x1 = tile.x1 - tile.x0 > gap * 2 ? tile.x1 - gap : tile.x1
             let y1 = tile.y1 - tile.y0 > gap * 2 ? tile.y1 - gap : tile.y1
             if tile.isFolder && tree.childCount(tile.node) > 0 && !tile.isCollapsed {
-                fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderBody)
+                // A hairline around the whole group, header and body, so its
+                // children never read as part of a neighbouring group.
+                fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderStroke)
+                let line = Int32(max(1, scale.rounded()))
+                if x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
+                    fill(pixels, stride: stride, tile.x0 + line, tile.y0 + line, x1 - line, y1 - line, palette.folderBody)
+                }
                 if tile.hasHeader {
                     let header = Int32((DiskMapLayoutEngine.headerHeightPoints * scale).rounded())
                     fill(pixels, stride: stride, tile.x0, tile.y0, x1, min(y1, tile.y0 + header + 1), palette.folderHeader)

@@ -308,8 +308,9 @@ public struct FilePaneView: View {
         }
         let folder = parts.popLast() ?? ""
         let lead = parts.isEmpty ? "" : parts.joined(separator: " › ") + " › "
-        let leadColor = isSelected ? selectionForegroundColor.opacity(0.8) : Color(nsColor: .tertiaryLabelColor)
-        let folderColor = isSelected ? selectionForegroundColor : FinderUI.metadataColor
+        // One readable secondary colour for the whole line; the smaller size keeps it subordinate.
+        let leadColor = isSelected ? selectionForegroundColor.opacity(0.85) : FinderUI.metadataColor
+        let folderColor = leadColor
         return Text(verbatim: lead).foregroundColor(leadColor) + Text(verbatim: folder).foregroundColor(folderColor)
     }
 

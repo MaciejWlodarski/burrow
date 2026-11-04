@@ -287,7 +287,7 @@ private struct FinderTabView: View {
         .padding(.horizontal, 10)
         // Each pane's selected tab is a filled chip whether or not that pane has focus;
         // focus itself is the path bar's tint and underline.
-        .background(isSelected ? Color.primary.opacity(0.08) : (isHovered ? Color.primary.opacity(0.04) : .clear),
+        .background(isSelected ? Color.primary.opacity(0.10) : (isHovered ? Color.primary.opacity(0.04) : .clear),
                     in: RoundedRectangle(cornerRadius: 6))
         .padding(.vertical, 4)
         .onHover { isHovered = $0 }

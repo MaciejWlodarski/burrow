@@ -282,9 +282,9 @@ private struct TerminalFolderLabel: View {
 private struct TerminalTabActions: View {
     @ObservedObject var terminal: TerminalTab
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: FinderUI.rowSpacing) {
             // Icons like the rest of the header; the tooltip names each.
-            terminalHeaderButton("Clear Terminal Output", icon: "clear", accessibility: "Clear Terminal Output") {
+            terminalHeaderButton("Clear Terminal Output", icon: "trash", accessibility: "Clear Terminal Output") {
                 terminal.clear()
             }
             .disabled(terminal.transcript.lines.isEmpty)

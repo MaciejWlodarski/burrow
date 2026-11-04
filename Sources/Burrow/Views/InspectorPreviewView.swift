@@ -127,11 +127,13 @@ public struct InspectorPreviewView: View {
                                 Button("Edit Permissions…", systemImage: "lock") { showChmodEditor = true }
                             } label: {
                                 Image(systemName: "ellipsis")
-                                    .frame(width: 30, height: 22)
                             }
+                            .menuStyle(.borderlessButton)
                             .menuIndicator(.hidden)
-                            .buttonStyle(.bordered)
                             .fixedSize()
+                            // The same chip as its neighbours; a menu label drops its own background.
+                            .frame(width: 32, height: 28)
+                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
                             .help("More actions")
                             .accessibilityLabel("More actions")
                             // Same size as the routine actions, behind a hairline, its icon quieter.
@@ -139,9 +141,8 @@ public struct InspectorPreviewView: View {
                             Button(role: .destructive) { fileOps.moveToTrash([item]) } label: {
                                 Image(systemName: "trash")
                                     .foregroundStyle(FinderUI.metadataColor)
-                                    .frame(width: 30, height: 22)
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(InspectorChipButtonStyle())
                             .help("Move to Trash")
                             .accessibilityLabel("Move to Trash")
                         }
@@ -794,10 +795,8 @@ public struct InspectorPreviewView: View {
     private func inspectorIconButton(_ title: LocalizedStringKey, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .frame(width: 30, height: 22)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.regular)
+        .buttonStyle(InspectorChipButtonStyle())
         .help(title)
         .accessibilityLabel(title)
     }
@@ -884,5 +883,19 @@ enum FolderSizeNames {
         let names = paths.map { FileManager.default.displayName(atPath: $0) }
         let unique = names.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
         return ListFormatter.localizedString(byJoining: unique)
+    }
+}
+
+/// The inspector's quick actions: light square chips instead of bordered pills,
+/// so they stay quieter than the preview and the name above them.
+struct InspectorChipButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13))
+            .foregroundStyle(.primary)
+            .frame(width: 32, height: 28)
+            .background(Color.primary.opacity(configuration.isPressed ? 0.14 : 0.06),
+                        in: RoundedRectangle(cornerRadius: 7))
+            .contentShape(RoundedRectangle(cornerRadius: 7))
     }
 }
