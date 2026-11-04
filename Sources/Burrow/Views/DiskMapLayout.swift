@@ -49,8 +49,13 @@ public enum DiskMapLayoutEngine {
     /// A nested folder's header strip is shorter than a top-level one, so nesting
     /// reads as parent and child rather than two stacked bars.
     static func headerHeight(depth: UInt16) -> Double { depth == 0 ? headerHeightPoints : 18 }
+    /// The gutter each tile leaves on its right and bottom edges, in pixels: top-level
+    /// blocks stand 6 pt apart, tiles inside a folder about 1.5 pt.
+    static func tileGap(depth: UInt16, scale: Double) -> Int32 {
+        depth == 0 ? Int32(max(4, (scale * 6).rounded())) : Int32(max(1, (scale * 1.5).rounded()))
+    }
     /// A header strip narrower than its label would be an empty grey band.
-    private static let minimumHeaderWidthPoints = 72.0
+    private static let minimumHeaderWidthPoints = 120.0
     private static let minimumHeaderHeightPoints = 52.0
     /// A folder filling its parent repeats the same rectangle; stacked headers
     /// of `Users/me/dev/...` chains would only eat the map.
@@ -63,7 +68,11 @@ public enum DiskMapLayoutEngine {
         guard width > 0, height > 0 else { return nil }
         var builder = Builder(tree: tree, scale: scale,
             minimumArea: max(5, Double(width) * Double(height) / 300_000), isCancelled: isCancelled)
-        builder.placeChildren(of: scope, x: 0, y: 0, width: Double(width), height: Double(height))
+        // Every tile leaves its gutter on the right and bottom; the same margin on the
+        // left and top keeps the map's frame even on all four sides.
+        let margin = Double(tileGap(depth: 0, scale: scale))
+        builder.placeChildren(of: scope, x: margin, y: margin,
+                              width: Double(width) - margin, height: Double(height) - margin)
         return builder.wasCancelled ? nil : DiskMapLayout(width: width, height: height, tiles: builder.tiles)
     }
 
@@ -111,7 +120,7 @@ public enum DiskMapLayoutEngine {
                     if area > 0 { remainderStart = id }
                     break
                 }
-                let side = min(width, height)
+                let side = Self.stacksColumn(width, height) ? height : width
                 let candidate = worstRatio(sum: rowArea + area, largest: max(largest, area),
                                            smallest: row.isEmpty ? area : min(smallest, area), side: side)
                 if row.isEmpty || candidate <= worst {
@@ -136,9 +145,14 @@ public enum DiskMapLayoutEngine {
             }
         }
 
+        /// Whether the next strip is a column (tiles stacked top to bottom) rather than a row.
+        /// Labels run horizontally, so a rect only somewhat wider than tall still gets a
+        /// row: its tiles come out wide enough to name instead of as thin unlabeled columns.
+        static func stacksColumn(_ width: Double, _ height: Double) -> Bool { width >= height * 1.5 }
+
         private mutating func emit(_ row: [(id: DiskTree.NodeID, area: Double)], rowArea: Double, parentArea: Double,
                                    x: inout Double, y: inout Double, width: inout Double, height: inout Double) {
-            let vertical = width >= height
+            let vertical = Self.stacksColumn(width, height)
             let thickness = vertical ? min(width, rowArea / height) : min(height, rowArea / width)
             var cursor = vertical ? y : x
             for item in row {
@@ -175,9 +189,14 @@ public enum DiskMapLayoutEngine {
             // A wider inset than the gap between files, so folders read as groups.
             let inset = (x1 - x0 > 12 && y1 - y0 > 12) ? (2 * scale).rounded() : 0
             let header = showsHeader ? (DiskMapLayoutEngine.headerHeight(depth: depth) * scale).rounded() : 0
+            // Children stay inside the group's drawn edge (its rect minus its own gutter),
+            // with the same inset on all four sides once their own gutters are counted.
+            let gap = Double(DiskMapLayoutEngine.tileGap(depth: depth, scale: scale))
+            let childGap = Double(DiskMapLayoutEngine.tileGap(depth: depth + 1, scale: scale))
             depth += 1
             placeChildren(of: id, x: x0 + inset, y: y0 + inset + header,
-                          width: x1 - x0 - 2 * inset, height: y1 - y0 - 2 * inset - header)
+                          width: x1 - gap - x0 - 2 * inset + childGap,
+                          height: y1 - gap - y0 - 2 * inset - header + childGap)
             depth -= 1
         }
 
@@ -271,14 +290,9 @@ public enum DiskMapRenderer {
         let pixels = data.bindMemory(to: UInt32.self, capacity: stride * height)
         fill(pixels, stride: stride, 0, 0, Int32(width), Int32(height), palette.gutter)
 
-        // About 1.5 pt, so neighbouring blocks of one colour stay apart.
-        let innerGap = Int32(max(1, (scale * 1.5).rounded()))
-        // Top-level blocks stand further apart, so a folder never seems to run into
-        // a neighbouring file of the same colour.
-        let outerGap = Int32(max(4, (scale * 6).rounded()))
         for (index, tile) in layout.tiles.enumerated() {
             if index & 0xFFF == 0, isCancelled() { return nil }
-            let gap = tile.depth == 0 ? outerGap : innerGap
+            let gap = DiskMapLayoutEngine.tileGap(depth: tile.depth, scale: scale)
             // Leave a gutter on the right and bottom edges of every tile.
             let x1 = tile.x1 - tile.x0 > gap * 2 ? tile.x1 - gap : tile.x1
             let y1 = tile.y1 - tile.y0 > gap * 2 ? tile.y1 - gap : tile.y1

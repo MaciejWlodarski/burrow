@@ -640,9 +640,7 @@ public struct WizTreeAnalyzerView: View {
         } label: {
             Label("Scan Whole Disk", systemImage: "internaldrive")
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
+        .buttonStyle(AnalysisHeaderButtonStyle())
         .help("Scan the whole disk that contains this folder")
     }
 
@@ -701,9 +699,7 @@ public struct WizTreeAnalyzerView: View {
             Label("Refresh Scan", systemImage: "arrow.clockwise")
                 .labelStyle(.iconOnly)
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
+        .buttonStyle(AnalysisHeaderButtonStyle(iconOnly: true))
         .help("Refresh the disk space analysis")
         .accessibilityLabel("Refresh the disk space analysis")
     }
@@ -1871,5 +1867,21 @@ public struct WizTreeAnalyzerView: View {
                     self.duplicateActionError = message
                 }
             })
+    }
+}
+
+/// The disk analysis header's buttons: capsules as tall as the mode switcher
+/// beside them (22 pt chips plus its 2 pt rim), so the row reads as one set.
+private struct AnalysisHeaderButtonStyle: ButtonStyle {
+    var iconOnly = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(FinderUI.detailFont)
+            .foregroundStyle(Color.primary)
+            .padding(.horizontal, iconOnly ? 0 : 12)
+            .frame(width: iconOnly ? 26 : nil, height: 26)
+            .background(Capsule().fill(Color.primary.opacity(configuration.isPressed ? 0.14 : 0.07)))
+            .contentShape(Capsule())
     }
 }
