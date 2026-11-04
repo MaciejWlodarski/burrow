@@ -1064,7 +1064,7 @@ public struct FSearchSettingsSheetView: View {
     public var body: some View {
         TabView {
             GeneralSettingsPane(appState: appState)
-                .frame(height: 476)
+                .frame(height: 452)
                 .tabItem { Label("General", systemImage: "gearshape") }
             BrowsingSettingsPane()
                 .frame(minHeight: 300, idealHeight: 300)
@@ -1099,16 +1099,20 @@ struct GeneralSettingsPane: View {
             LanguageSettingsSection()
             DefaultFileViewerSettingsSection()
             Section {
-                Toggle("Reopen tabs and panes at launch", isOn: Binding(
+                // The explanation sits under the toggle it explains, not under the button.
+                Toggle(isOn: Binding(
                     get: { appState.restoreSessionEnabled },
                     set: { appState.setSessionRestorationEnabled($0) }
-                ))
-                Button("Clear Saved Session…", role: .destructive) { confirmingSessionClear = true }
+                )) {
+                    Text("Reopen tabs and panes at launch")
+                    Text("Folders, views and searches reopen as you left them.")
+                }
+                LabeledContent("Saved session") {
+                    Button("Clear…", role: .destructive) { confirmingSessionClear = true }
+                }
                 if let notice = appState.sessionPersistenceNotice {
                     Text(notice).font(FinderUI.captionFont).foregroundStyle(.orange)
                 }
-            } footer: {
-                SettingsFootnote(String(localized: "Folders, views and searches reopen as you left them."))
             }
             UpdateSettingsSection()
         }

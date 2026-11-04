@@ -187,6 +187,26 @@ public struct SidebarView: View {
             .accessibilityHint("Show or hide the seven tag colors")
             if tagsAreExpanded {
                 ForEach(FinderTagColor.allCases) { tagColor in tagRow(tagColor) }
+            } else {
+                // Collapsed: one compact row of colour dots, each still a tag search.
+                HStack(spacing: 10) {
+                    ForEach(FinderTagColor.allCases) { tagColor in
+                        let query = "tag:\(tagColor.rawValue)"
+                        Button { runSearch(query) } label: {
+                            Circle()
+                                .fill(tagColor.swiftUIColor)
+                                .overlay(Circle().strokeBorder(isSearchSelected(query) ? Color.primary : Color.primary.opacity(0.2),
+                                                               lineWidth: isSearchSelected(query) ? 1.5 : 0.5))
+                                .frame(width: 12, height: 12)
+                                .frame(width: 18, height: 22)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Show files with tag: \(tagColor.displayName)")
+                        .accessibilityLabel("Tag: \(tagColor.displayName)")
+                    }
+                }
+                .padding(.horizontal, FinderUI.sidebarRowInset + 2)
             }
         }
     }

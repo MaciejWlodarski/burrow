@@ -24,7 +24,7 @@ struct FullDiskAccessSheetView: View {
                             ? "Burrow calculates every folder size and scans the whole disk without asking again."
                             : "Burrow can then read protected folders such as Desktop and Documents, size every folder and scan the whole disk.")
                             .lineSpacing(3)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(FinderUI.metadataColor)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if !granted {
@@ -51,7 +51,7 @@ struct FullDiskAccessSheetView: View {
                                 .accessibilityLabel("Burrow app icon, drag it into the Full Disk Access list")
                             Text("Burrow missing from the list? Drag this icon into the Full Disk Access list.")
                                 .font(FinderUI.detailFont)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(FinderUI.metadataColor)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
@@ -63,7 +63,7 @@ struct FullDiskAccessSheetView: View {
 
                         Text("Without it, Burrow still works; macOS asks once for each protected folder, such as Desktop.")
                             .font(.callout)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(FinderUI.metadataColor)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

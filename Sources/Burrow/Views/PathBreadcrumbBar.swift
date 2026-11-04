@@ -73,8 +73,15 @@ public struct PathBreadcrumbBar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 pathEditor
-                folderActionsMenu
-                    .opacity(isHoveringBar || pane.isEditingPathBar ? 1 : 0)
+                if pane.isEditingPathBar { folderActionsMenu }
+            }
+            // At rest the menu floats over the free end of the bar, so it does not
+            // take width from the breadcrumbs.
+            .overlay(alignment: .trailing) {
+                if !pane.isEditingPathBar {
+                    folderActionsMenu
+                        .opacity(isHoveringBar ? 1 : 0)
+                }
             }
 
             if pane.isEditingPathBar, let message = pathValidationMessage {

@@ -236,7 +236,7 @@ public struct FilePaneView: View {
                 PathBreadcrumbBar(appState: appState, pane: pane)
             }
         }
-        .opacity(appState.isDualPane && !isFocusedPane ? 0.6 : 1)
+        // The inactive pane stays fully legible; tint and underline mark the active one.
         .background {
             ZStack {
                 Color(nsColor: .controlBackgroundColor)
@@ -333,8 +333,9 @@ public struct FilePaneView: View {
             while searchStart < text.endIndex,
                   let range = text[searchStart...].range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) {
                 text[range].font = FinderUI.bodyFont.weight(.semibold)
-                // Accent text, not a block that reads like a text selection.
-                if !isSelected { text[range].foregroundColor = Color.accentColor }
+                // Semibold on a faint accent wash: the name keeps its colour, so the
+                // match neither reads as a link nor vanishes on a selected row.
+                if !isSelected { text[range].backgroundColor = Color.accentColor.opacity(0.18) }
                 searchStart = range.upperBound
             }
         }
@@ -396,6 +397,9 @@ public struct FilePaneView: View {
 
     // MARK: - 1. Native List View with Expandable Outline Tree (`▸`) & Drag/Drop
 
+    /// Wide windows give extra width to Kind, so a size never sits far from its name.
+    static let nameColumnMaxWidth: CGFloat = 420
+
     private var listBrowserView: some View {
         GeometryReader { geometry in
             let showDate = geometry.size.width >= 480
@@ -403,7 +407,7 @@ public struct FilePaneView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     sortableHeaderButton(title: String(localized: "Name"), field: .name)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(maxWidth: showKind ? Self.nameColumnMaxWidth : .infinity, alignment: .leading)
                     sortableHeaderButton(title: String(localized: "Size"), field: .size)
                         .frame(width: 80, alignment: .trailing)
                         .padding(.trailing, 20)
@@ -413,7 +417,7 @@ public struct FilePaneView: View {
                     }
                     if showKind {
                         sortableHeaderButton(title: String(localized: "Kind"), field: .kind)
-                            .frame(width: 150, alignment: .leading)
+                            .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding(.leading, 15)
@@ -571,7 +575,7 @@ public struct FilePaneView: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: showKind ? Self.nameColumnMaxWidth : .infinity, alignment: .leading)
 
             // Size Column
             Group {
@@ -600,7 +604,7 @@ public struct FilePaneView: View {
                     .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .frame(width: 150, alignment: .leading)
+                    .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.leading, 10)

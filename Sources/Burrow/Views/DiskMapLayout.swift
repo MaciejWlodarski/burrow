@@ -88,7 +88,7 @@ public enum DiskMapLayoutEngine {
 
             // Items under 1% of their folder (and too small to label) merge
             // into one "smaller items" tile instead of a confetti of slivers.
-            let mergeArea = max(minimumArea, 28 * 20 * scale * scale, min(parentArea * 0.01, 32 * 32 * scale * scale))
+            let mergeArea = max(minimumArea, 44 * 30 * scale * scale, min(parentArea * 0.01, 48 * 48 * scale * scale))
             let kids = tree.children(of: parent)
             var index = 0
             while index < kids.count {
@@ -193,7 +193,7 @@ public enum DiskMapRenderer {
         }
         /// White reads better on the mid-tone fills (teal, slate, raspberry);
         /// only the light ones (orange, ochre) take near-black text.
-        func prefersDarkText(dark: Bool) -> Bool { luminance > (dark ? 0.3 : 0.18) }
+        func prefersDarkText(dark: Bool) -> Bool { luminance > (dark ? 0.22 : 0.18) }
         var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
         /// Dark backgrounds make saturated fills glare: pull them toward grey and down a little.
         /// Light backgrounds: lift fills toward white so a big tile does not shout.
@@ -305,14 +305,12 @@ public enum DiskMapRenderer {
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         let truncating = NSMutableParagraphStyle()
         truncating.lineBreakMode = .byTruncatingTail
-        let nameFont = NSFont.systemFont(ofSize: CGFloat(11 * scale), weight: .semibold)
-        let sizeFont = NSFont.monospacedDigitSystemFont(ofSize: CGFloat(11 * scale), weight: .regular)
+        let nameFont = NSFont.systemFont(ofSize: CGFloat(12 * scale), weight: .semibold)
+        let sizeFont = NSFont.monospacedDigitSystemFont(ofSize: CGFloat(12 * scale), weight: .regular)
         let header = (DiskMapLayoutEngine.headerHeightPoints * scale).rounded()
-        let inset = 5 * scale, lineHeight = 14 * scale
+        let inset = 6 * scale, lineHeight = 15 * scale
         // Below this a label is noise; hovering still identifies the tile.
         let minimumLabelWidth = 60 * scale, minimumLabelHeight = 40 * scale, minimumNameWidth = 50 * scale
-        let wrapping = NSMutableParagraphStyle()
-        wrapping.lineBreakMode = .byWordWrapping
         // File tiles beside headed folders start their label below the header line.
         let alignsWithHeaders = layout.tiles.contains { $0.depth == 0 && $0.hasHeader }
         var drawn = 0
@@ -369,24 +367,10 @@ public enum DiskMapRenderer {
                 let offset = alignsWithHeaders && tile.depth == 0 && tileHeight >= header + lineHeight * 3 ? header + scale : 0
                 let top = Double(tile.y0) + offset + 4 * scale
                 let room = tileHeight - offset - 8 * scale
-                // A long name may take a second line when the tile is tall enough.
-                let wrapped = NSAttributedString(string: shownName, attributes: [
-                    .font: nameFont, .foregroundColor: textColor, .paragraphStyle: wrapping])
-                // Only break between words: "Checkou / t v2" is worse than a truncation.
-                let wordsFit = shownName.split(separator: " ").allSatisfy {
-                    NSAttributedString(string: String($0), attributes: [.font: nameFont]).size().width <= available
-                }
-                let twoLines = !nameFits && wordsFit && room >= lineHeight * 3
-                    && wrapped.boundingRect(with: CGSize(width: available, height: .greatestFiniteMagnitude),
-                                            options: [.usesLineFragmentOrigin]).height <= lineHeight * 2 + scale
-                guard available >= minimumNameWidth, nameFits || twoLines || available >= truncatedNameWidth else { continue }
-                let nameLines: Double = twoLines ? 2 : 1
-                if twoLines {
-                    wrapped.draw(with: CGRect(x: x, y: top, width: available, height: lineHeight * 2 + scale),
-                                 options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-                } else {
-                    name.draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
-                }
+                // One line only, cut with an ellipsis: a name broken across lines reads as two labels.
+                guard available >= minimumNameWidth, nameFits || available >= truncatedNameWidth else { continue }
+                let nameLines: Double = 1
+                name.draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
                 if sizeWidth <= available, room >= lineHeight * (nameLines + 1) {
                     size.draw(at: CGPoint(x: x, y: top + lineHeight * nameLines))
                 }

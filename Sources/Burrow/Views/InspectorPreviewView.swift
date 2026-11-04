@@ -100,8 +100,8 @@ public struct InspectorPreviewView: View {
                         HStack(spacing: 6) {
                             inspectorIconButton("Quick Look", icon: "eye") { appState.toggleQuickLook() }
                             inspectorIconButton("Share", icon: "square.and.arrow.up") { fileOps.showShareSheet(for: [item]) }
-                            inspectorIconButton("Copy Path", icon: "doc.on.doc") { fileOps.copyPaths([item]) }
                             Menu {
+                                Button("Copy Path", systemImage: "doc.on.doc") { fileOps.copyPaths([item]) }
                                 Button("Open in Terminal", systemImage: "terminal") { fileOps.openInTerminal(at: item.url) }
                                 Button("Open in Editor", systemImage: "chevron.left.forwardslash.chevron.right") { fileOps.openInCodeEditor(at: item.url) }
                                 Divider()
@@ -675,8 +675,7 @@ public struct InspectorPreviewView: View {
                     .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
                     .accessibilityLabel("Preview: \(item.name)")
             }
-            // Left-aligned with the name and details below it.
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity)
             .padding(.vertical, FinderUI.compactSpacing)
         } else if !textPreviewLines.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
