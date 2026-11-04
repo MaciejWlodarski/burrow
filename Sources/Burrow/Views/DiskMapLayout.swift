@@ -386,7 +386,7 @@ public enum DiskMapRenderer {
                 .font: nameFont, .foregroundColor: textColor, .paragraphStyle: truncating])
             // Collapsed folders lead with a small inline folder glyph, so they never read as a
             // header strip. Only where it leaves room for a readable name.
-            let glyph = tile.isCollapsed && width - inset * 2 - 14 * scale >= minimumNameWidth ? 14 * scale : 0
+            let glyph = tile.isCollapsed && width - inset * 2 - 14 * scale >= 40 * scale ? 14 * scale : 0
             let available = width - inset * 2 - glyph
             let sizeWidth = size.size().width
             // A name cut to a few letters ("Brand…") says nothing; leave it to hover.
@@ -427,7 +427,8 @@ public enum DiskMapRenderer {
                 let twoLines = !nameFits && wordsFit && room >= lineHeight * 3
                     && wrapped.boundingRect(with: CGSize(width: available, height: .greatestFiniteMagnitude),
                                             options: [.usesLineFragmentOrigin]).height <= lineHeight * 2 + scale
-                guard available >= minimumNameWidth, nameFits || twoLines || available >= truncatedNameWidth else { continue }
+                // Identity first, as in compact tiles: a middle-truncated name rather than a blank tile.
+                guard nameFits || twoLines || available >= 30 * scale else { continue }
                 let nameLines: Double = twoLines ? 2 : 1
                 if glyph > 0,
                    let symbol = NSImage(systemSymbolName: "folder.fill", accessibilityDescription: nil)?

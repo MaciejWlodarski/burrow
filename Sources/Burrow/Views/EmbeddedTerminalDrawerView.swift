@@ -304,7 +304,14 @@ private struct TerminalTabContent: View {
     @ObservedObject var appState: AppState
     @ObservedObject var terminal: TerminalTab
     @FocusState private var isInputFocused: Bool
-    private var outputLines: [TerminalOutputLine] { terminal.transcript.lines }
+    // A command's trailing newline would leave an empty line before the prompt.
+    private var outputLines: [TerminalOutputLine] {
+        var lines = terminal.transcript.lines[...]
+        while let last = lines.last, !last.isCommand, last.text.trimmingCharacters(in: .whitespaces).isEmpty {
+            lines = lines.dropLast()
+        }
+        return Array(lines)
+    }
     private var isRunning: Bool { terminal.isRunning }
     private static let monoFont = Font.system(size: 13, design: .monospaced)
 
