@@ -1112,7 +1112,7 @@ struct GeneralSettingsPane: View {
                     HStack(spacing: FinderUI.rowSpacing) {
                         // What a clear would remove.
                         if appState.restoreSessionEnabled {
-                            Text(appState.tabs.count == 1 ? String(localized: "1 tab") : String(localized: "\(appState.tabs.count.formatted()) tabs"))
+                            Text(appState.allPanes.count == 1 ? String(localized: "1 tab") : String(localized: "\(appState.allPanes.count.formatted()) tabs"))
                                 .foregroundStyle(.secondary)
                         }
                         Button("Clear…", role: .destructive) { confirmingSessionClear = true }

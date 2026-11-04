@@ -426,7 +426,7 @@ public struct FilePaneView: View {
                         guard response == .OK, let url = panel.url else { return }
                         Task { @MainActor in
                             guard pane.activationContext == context,
-                                  appState.tabs.contains(where: { $0.id == pane.id }) || appState.rightPane.id == pane.id else { return }
+                                  appState.allPanes.contains(where: { $0.id == pane.id }) else { return }
                             pane.navigate(to: url)
                         }
                     }

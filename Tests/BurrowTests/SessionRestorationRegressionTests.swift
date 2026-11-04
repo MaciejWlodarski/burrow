@@ -17,7 +17,8 @@ struct SessionRestorationRegressionTests {
         try await testClearBeatsPendingAppDebounce()
         try testSuccessfulSaveClearsTransientNotice()
         try testAutomaticResumeRules()
-        print("15 session restoration regression groups passed")
+        try testRightPaneTabsRoundTrip()
+        print("16 session restoration regression groups passed")
     }
 
     private func withStore(_ body: (UserDefaults, FinderSessionStore) throws -> Void) throws {
@@ -46,6 +47,26 @@ struct SessionRestorationRegressionTests {
         try expect(Set(fields.keys) == Set(["version", "tabs", "right", "activeIndex", "dualPane", "activeSide"]))
         let pane = (fields["tabs"] as! [[String: Any]])[0]
         try expect(Set(pane.keys) == Set(["path", "view", "sort", "ascending", "foldersOnTop", "hidden", "fuzzy", "query", "scope"]))
+    }
+
+    private func testRightPaneTabsRoundTrip() throws {
+        let base = sample()
+        let source = FinderSessionSnapshot(tabs: base.tabs, right: base.right, activeIndex: base.activeIndex,
+            dualPane: true, activeSide: "right",
+            rightTabs: [FinderPaneSession(path: "/tmp"), base.right], rightActiveIndex: 1)
+        let result = FinderSessionStore.decode(try JSONEncoder().encode(source))
+        try expect(result.snapshot == source && result.canWrite)
+        try expect(result.snapshot?.rightTabs?.count == 2 && result.snapshot?.rightActiveIndex == 1)
+        // A session saved before the right pane had tabs still loads its single right pane.
+        let old = FinderSessionStore.decode(try JSONEncoder().encode(base))
+        try expect(old.snapshot?.rightTabs == nil && old.snapshot?.right == base.right && old.canWrite)
+        // A damaged right-pane tab is protected like a damaged left tab.
+        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(source)) as! [String: Any]
+        var rightTabs = object["rightTabs"] as! [[String: Any]]
+        rightTabs[0]["view"] = "future-view"
+        object["rightTabs"] = rightTabs
+        let damaged = FinderSessionStore.decode(try JSONSerialization.data(withJSONObject: object))
+        try expect(damaged.snapshot?.rightTabs == nil && !damaged.canWrite)
     }
 
     private func testUnknownCorruptAndPartialDataAreProtected() throws {

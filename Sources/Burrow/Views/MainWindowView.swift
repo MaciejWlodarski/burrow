@@ -95,8 +95,9 @@ public struct MainWindowView: View {
 
     private func browserColumn(activeTab: PaneTabState) -> some View {
         VStack(spacing: 0) {
-            // Like Finder, the tab bar appears once there is a second tab.
-            if appState.tabs.count > 1 { tabBar }
+            // Like Finder, the tab bar appears once there is a second tab. In two
+            // panes each pane has its own tabs, so each shows its own bar.
+            if !appState.isDualPane && appState.tabs.count > 1 { tabBar(side: .left) }
             FSearchToolbarSection(appState: appState, activeTab: activeTab)
 
             Group {
@@ -106,6 +107,7 @@ public struct MainWindowView: View {
                             // Each pane keeps its own footer, so both counts are visible.
                             HSplitView {
                                 VStack(spacing: 0) {
+                                    if showsPaneTabBars { tabBar(side: .left) }
                                     FilePaneView(appState: appState, pane: appState.leftTab, paneSide: .left,
                                                  isFocusedPane: appState.activePaneSide == .left)
                                     Divider()
@@ -115,6 +117,7 @@ public struct MainWindowView: View {
                                 }
                                 .frame(minWidth: 260)
                                 VStack(spacing: 0) {
+                                    if showsPaneTabBars { tabBar(side: .right) }
                                     FilePaneView(appState: appState, pane: appState.rightPane, paneSide: .right,
                                                  isFocusedPane: appState.activePaneSide == .right)
                                     Divider()
@@ -201,23 +204,28 @@ public struct MainWindowView: View {
         )
     }
 
-    private var tabBar: some View {
+    /// Both panes show their bars together, so the two path bars stay level.
+    private var showsPaneTabBars: Bool {
+        appState.tabs.count > 1 || appState.rightTabs.count > 1
+    }
+
+    private func tabBar(side: PaneSide) -> some View {
         HStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: FinderUI.compactSpacing) {
-                        ForEach(appState.tabs) { tab in
-                            FinderTabView(tab: tab, appState: appState)
+                        ForEach(appState.tabs(on: side)) { tab in
+                            FinderTabView(tab: tab, appState: appState, side: side)
                                 .id(tab.id)
                         }
                     }
                     .padding(.horizontal, FinderUI.rowSpacing)
                 }
-                .onChange(of: appState.activeTabId) { _, id in
+                .onChange(of: appState.activeTabID(on: side)) { _, id in
                     withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id) }
                 }
             }
-            Button { appState.addNewTab() } label: {
+            Button { appState.addNewTab(side: side) } label: {
                 Image(systemName: "plus").frame(width: 32, height: 30)
             }
             .buttonStyle(.plain)
@@ -235,15 +243,16 @@ public struct MainWindowView: View {
 private struct FinderTabView: View {
     @ObservedObject var tab: PaneTabState
     @ObservedObject var appState: AppState
+    let side: PaneSide
     @ViewState private var isHovered = false
 
-    private var isSelected: Bool { tab.id == appState.activeTabId }
+    private var isSelected: Bool { tab.id == appState.activeTabID(on: side) }
+    private var isOnlyTab: Bool { appState.tabs(on: side).count == 1 }
 
     var body: some View {
         HStack(spacing: 5) {
             Button {
-                appState.activeTabId = tab.id
-                appState.activePaneSide = .left
+                appState.selectTab(tab.id)
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: tab.searchQuery.isEmpty ? "folder" : "magnifyingglass")
@@ -267,9 +276,9 @@ private struct FinderTabView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .opacity(appState.tabs.count > 1 ? 1 : 0)
-            .accessibilityHidden(appState.tabs.count == 1)
-            .disabled(appState.tabs.count == 1)
+            .opacity(isOnlyTab ? 0 : 1)
+            .accessibilityHidden(isOnlyTab)
+            .disabled(isOnlyTab)
             .accessibilityLabel("Close tab \(tab.title)")
             .help("Close tab \(tab.title)")
         }
@@ -280,9 +289,9 @@ private struct FinderTabView: View {
         .onHover { isHovered = $0 }
         .help(tab.currentURL.path)
         .contextMenu {
-            Button("Duplicate Tab") { appState.addNewTab(at: tab.currentURL) }
-            Button("Close Tab") { appState.closeTab(tab.id) }.disabled(appState.tabs.count == 1)
-            Button("Close Other Tabs") { appState.closeOtherTabs(keeping: tab.id) }.disabled(appState.tabs.count == 1)
+            Button("Duplicate Tab") { appState.addNewTab(at: tab.currentURL, side: side) }
+            Button("Close Tab") { appState.closeTab(tab.id) }.disabled(isOnlyTab)
+            Button("Close Other Tabs") { appState.closeOtherTabs(keeping: tab.id) }.disabled(isOnlyTab)
             Divider()
             Button("Reopen Closed Tab") { appState.reopenClosedTab() }
                 .disabled(appState.recentlyClosedTabs.isEmpty)

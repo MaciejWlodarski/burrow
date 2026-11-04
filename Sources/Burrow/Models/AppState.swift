@@ -69,9 +69,45 @@ public final class AppState: ObservableObject {
             synchronizeQuickLookOwnership()
         }
     }
-    @Published public var rightPane: PaneTabState {
+    /// The right pane keeps its own tabs, like the left pane's `tabs`.
+    @Published public var rightTabs: [PaneTabState] = [] {
         didSet { observeSessionPanes(); observeVisibleDirectories(); synchronizeQuickLookOwnership() }
     }
+    @Published public var activeRightTabId: UUID {
+        didSet {
+            if oldValue != activeRightTabId { rightTabs.first { $0.id == oldValue }?.cancelSessionRestoration() }
+            synchronizeQuickLookOwnership()
+        }
+    }
+    /// The right pane's selected tab.
+    public var rightPane: PaneTabState {
+        get { rightTabs.first(where: { $0.id == activeRightTabId }) ?? rightTabs[0] }
+        // Replaces the selected right-pane tab (restoration and tests).
+        set {
+            if let index = rightTabs.firstIndex(where: { $0.id == activeRightTabId }) {
+                rightTabs[index] = newValue
+            } else {
+                rightTabs = [newValue]
+            }
+            activeRightTabId = newValue.id
+        }
+    }
+    /// Every tab in both panes.
+    public var allPanes: [PaneTabState] { tabs + rightTabs }
+
+    public func tabs(on side: PaneSide) -> [PaneTabState] { side == .left ? tabs : rightTabs }
+    public func activeTabID(on side: PaneSide) -> UUID { side == .left ? activeTabId : activeRightTabId }
+    public func side(ofTab id: UUID) -> PaneSide? {
+        tabs.contains { $0.id == id } ? .left : (rightTabs.contains { $0.id == id } ? .right : nil)
+    }
+    public func selectTab(_ id: UUID) {
+        guard let side = side(ofTab: id) else { return }
+        if side == .left { activeTabId = id } else { activeRightTabId = id }
+        activePaneSide = side
+        persistTabsState()
+    }
+    /// New tabs open in the pane being worked in.
+    private var tabSide: PaneSide { isDualPane ? activePaneSide : .left }
     @Published public var activePaneSide: PaneSide = .left {
         didSet {
             if oldValue != activePaneSide {
@@ -95,7 +131,7 @@ public final class AppState: ObservableObject {
 
     private func observeSessionPanes() {
         guard sessionObservationReady else { return }
-        sessionObservers = (tabs + [rightPane]).map { pane in
+        sessionObservers = (allPanes).map { pane in
             pane.objectWillChange.sink { [weak self] _ in self?.scheduleSessionSave() }
         }
         scheduleSessionSave()
@@ -218,7 +254,10 @@ public final class AppState: ObservableObject {
             ?? [PaneTabState(initialURL: defaultStartURL)]
         self.tabs = restoredTabs
         self.activeTabId = restoredTabs[snapshot?.activeIndex ?? 0].id
-        self.rightPane = snapshot?.right.makePausedPane() ?? PaneTabState(initialURL: homeURL)
+        let restoredRightTabs = (snapshot?.rightTabs ?? snapshot.map { [$0.right] })?.map { $0.makePausedPane() }
+            ?? [PaneTabState(initialURL: homeURL)]
+        self.rightTabs = restoredRightTabs
+        self.activeRightTabId = restoredRightTabs[min(snapshot?.rightActiveIndex ?? 0, restoredRightTabs.count - 1)].id
         self.restoreSessionEnabled = store.isEnabled
         self.sessionPersistenceNotice = restored.notice
         if let snapshot {
@@ -277,7 +316,7 @@ public final class AppState: ObservableObject {
         // resume timeout. Folders on a volume that is not mounted and saved
         // disk maps (a whole-disk scan) stay paused until the user resumes.
         if snapshot != nil {
-            for pane in restoredTabs + [rightPane]
+            for pane in restoredTabs + restoredRightTabs
             where pane.wasRestoredFromSession && PaneTabState.resumesAutomatically(path: pane.currentURL.path, viewMode: pane.viewMode) {
                 Task { @MainActor in await pane.resumeSession() }
             }
@@ -296,7 +335,7 @@ public final class AppState: ObservableObject {
             Task { @MainActor in
                 self.indexedFileCount = count
                 self.indexBuildDurationMs = durationMs
-                for tab in self.tabs + [self.rightPane] where !tab.searchQuery.isEmpty {
+                for tab in self.allPanes where !tab.searchQuery.isEmpty {
                     tab.triggerSearch()
                 }
             }
@@ -345,7 +384,7 @@ public final class AppState: ObservableObject {
         let changed = pendingDirectoryChanges
         pendingDirectoryChanges.removeAll()
         directoryReloadScheduled = false
-        for tab in tabs + [rightPane] where tab.isAffectedByDirectoryChanges(changed) {
+        for tab in allPanes where tab.isAffectedByDirectoryChanges(changed) {
             tab.reloadDirectory(invalidateCaches: false)
         }
     }
@@ -353,7 +392,7 @@ public final class AppState: ObservableObject {
     /// Keeps the visible-folder watcher in sync with what panes display.
     private func observeVisibleDirectories() {
         guard visibleDirectoryWatcher != nil else { return }
-        visibleDirectoryObservers = (tabs + [rightPane]).map { pane in
+        visibleDirectoryObservers = (allPanes).map { pane in
             pane.objectWillChange.sink { [weak self] _ in self?.scheduleVisibleDirectorySync() }
         }
         scheduleVisibleDirectorySync()
@@ -367,7 +406,7 @@ public final class AppState: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.visibleDirectorySyncScheduled = false
-                let paths = (self.tabs + [self.rightPane]).reduce(into: Set<String>()) { $0.formUnion($1.visibleDirectoryPaths) }
+                let paths = (self.allPanes).reduce(into: Set<String>()) { $0.formUnion($1.visibleDirectoryPaths) }
                 self.visibleDirectoryWatcher?.update(paths: paths)
             }
         }
@@ -379,7 +418,7 @@ public final class AppState: ObservableObject {
         FSearchIndex.shared.enqueueDirectoryRefresh(path)
         FileIconCache.shared.invalidate(containing: path)
         FolderSizeCache.shared.revalidate(containing: path)
-        for tab in tabs + [rightPane] where tab.isAffectedByDirectoryChanges([path]) {
+        for tab in allPanes where tab.isAffectedByDirectoryChanges([path]) {
             tab.reloadDirectory(invalidateCaches: false)
         }
     }
@@ -391,7 +430,7 @@ public final class AppState: ObservableObject {
             FileIconCache.shared.invalidate(containing: path)
             FolderSizeCache.shared.revalidate(containing: path)
         }
-        for tab in tabs + [rightPane] where tab.isAffectedByDirectoryChanges(paths) {
+        for tab in allPanes where tab.isAffectedByDirectoryChanges(paths) {
             tab.reloadDirectory(invalidateCaches: false)
         }
     }
@@ -424,7 +463,9 @@ public final class AppState: ObservableObject {
         let snapshot = FinderSessionSnapshot(tabs: tabs.map { FinderPaneSession(pane: $0) },
             right: FinderPaneSession(pane: rightPane),
             activeIndex: tabs.firstIndex { $0.id == activeTabId } ?? 0,
-            dualPane: isDualPane, activeSide: activePaneSide.rawValue)
+            dualPane: isDualPane, activeSide: activePaneSide.rawValue,
+            rightTabs: rightTabs.map { FinderPaneSession(pane: $0) },
+            rightActiveIndex: rightTabs.firstIndex { $0.id == activeRightTabId } ?? 0)
         if sessionStore.save(snapshot) {
             if sessionPersistenceNotice != nil { sessionPersistenceNotice = nil }
         } else if sessionPersistenceNotice == nil {
@@ -525,19 +566,31 @@ public final class AppState: ObservableObject {
 
     // MARK: - Tab Management
 
-    public func addNewTab(at url: URL? = nil) {
-        let targetURL = url ?? activeTab.currentURL
+    /// Opens a tab in `side` (default: the pane being worked in), copying that pane's view settings.
+    public func addNewTab(at url: URL? = nil, side: PaneSide? = nil) {
+        let side = isDualPane ? (side ?? tabSide) : .left
+        let source = side == .left ? leftTab : rightPane
+        let targetURL = url ?? source.currentURL
         let newTab = PaneTabState(initialURL: targetURL)
-        newTab.viewMode = activeTab.viewMode
-        newTab.showHiddenFiles = activeTab.showHiddenFiles
-        newTab.searchScope = activeTab.searchScope
-        newTab.fuzzyEnabled = activeTab.fuzzyEnabled
+        newTab.viewMode = source.viewMode
+        newTab.showHiddenFiles = source.showHiddenFiles
+        newTab.searchScope = source.searchScope
+        newTab.fuzzyEnabled = source.fuzzyEnabled
         // Apply inherited display preferences without discarding shared analysis.
         newTab.reloadDirectory(invalidateCaches: false)
         FSearchIndex.shared.ensureDirectoryIndexed(newTab.currentURL.path)
-        tabs.append(newTab)
-        activeTabId = newTab.id
-        activePaneSide = .left
+        append(newTab, on: side)
+    }
+
+    private func append(_ tab: PaneTabState, on side: PaneSide) {
+        if side == .left {
+            tabs.append(tab)
+            activeTabId = tab.id
+        } else {
+            rightTabs.append(tab)
+            activeRightTabId = tab.id
+        }
+        activePaneSide = side
         persistTabsState()
     }
 
@@ -555,9 +608,10 @@ public final class AppState: ObservableObject {
             if isDualPane { activePaneSide = .left }
             activeTabId = existing.id
             existing.reloadDirectory()
-        } else if isDualPane && shows(rightPane) {
+        } else if isDualPane, let existing = rightTabs.first(where: shows) {
+            activeRightTabId = existing.id
             activePaneSide = .right
-            rightPane.reloadDirectory()
+            existing.reloadDirectory()
         } else {
             addNewTab(at: target)
         }
@@ -565,40 +619,41 @@ public final class AppState: ObservableObject {
     }
 
     public func closeTab(_ id: UUID) {
-        guard tabs.count > 1 else { return }
-        if let idx = tabs.firstIndex(where: { $0.id == id }) {
-            tabs[idx].cancelSessionRestoration()
-            recentlyClosedTabs.append(tabs[idx])
-            if recentlyClosedTabs.count > 10 { recentlyClosedTabs.removeFirst() }
-            tabs.remove(at: idx)
-            if activeTabId == id {
-                let nextIdx = min(idx, tabs.count - 1)
-                activeTabId = tabs[nextIdx].id
-            }
-            persistTabsState()
+        guard let side = side(ofTab: id) else { return }
+        var list = tabs(on: side)
+        guard list.count > 1, let idx = list.firstIndex(where: { $0.id == id }) else { return }
+        list[idx].cancelSessionRestoration()
+        recentlyClosedTabs.append(list[idx])
+        if recentlyClosedTabs.count > 10 { recentlyClosedTabs.removeFirst() }
+        list.remove(at: idx)
+        let next = list[min(idx, list.count - 1)].id
+        if side == .left {
+            tabs = list
+            if activeTabId == id { activeTabId = next }
+        } else {
+            rightTabs = list
+            if activeRightTabId == id { activeRightTabId = next }
         }
+        persistTabsState()
     }
 
     public func reopenClosedTab() {
         guard let tab = recentlyClosedTabs.popLast() else { return }
-        tabs.append(tab)
-        activeTabId = tab.id
-        activePaneSide = .left
+        append(tab, on: tabSide)
         tab.refresh()
-        persistTabsState()
     }
 
     public func selectAdjacentTab(offset: Int) {
-        guard let index = tabs.firstIndex(where: { $0.id == activeTabId }), !tabs.isEmpty else { return }
-        activeTabId = tabs[(index + offset + tabs.count) % tabs.count].id
-        activePaneSide = .left
-        persistTabsState()
+        let side = tabSide
+        let list = tabs(on: side)
+        guard let index = list.firstIndex(where: { $0.id == activeTabID(on: side) }), !list.isEmpty else { return }
+        selectTab(list[(index + offset + list.count) % list.count].id)
     }
 
     public func closeOtherTabs(keeping id: UUID) {
-        for tab in tabs where tab.id != id { closeTab(tab.id) }
-        activeTabId = id
-        activePaneSide = .left
+        guard let side = side(ofTab: id) else { return }
+        for tab in tabs(on: side) where tab.id != id { closeTab(tab.id) }
+        selectTab(id)
     }
 
     public func reloadVisiblePanes() {

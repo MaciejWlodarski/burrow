@@ -64,16 +64,25 @@ struct FinderPaneSession: Codable, Equatable, Sendable {
 struct FinderSessionSnapshot: Codable, Equatable, Sendable {
     let version: Int
     var tabs: [FinderPaneSession]
+    /// The right pane's selected tab; kept on its own so older builds still read the session.
     var right: FinderPaneSession
     var activeIndex: Int
     var dualPane: Bool
     var activeSide: String
+    /// Every right-pane tab (nil in sessions saved before the right pane had tabs).
+    var rightTabs: [FinderPaneSession]?
+    var rightActiveIndex: Int?
 
-    init(tabs: [FinderPaneSession], right: FinderPaneSession, activeIndex: Int, dualPane: Bool, activeSide: String) {
+    init(tabs: [FinderPaneSession], right: FinderPaneSession, activeIndex: Int, dualPane: Bool, activeSide: String,
+         rightTabs: [FinderPaneSession]? = nil, rightActiveIndex: Int? = nil) {
         version = 1
         self.tabs = tabs
         self.right = right
         self.activeIndex = tabs.isEmpty ? 0 : max(0, min(activeIndex, tabs.count - 1))
+        if let rightTabs, !rightTabs.isEmpty {
+            self.rightTabs = rightTabs
+            self.rightActiveIndex = max(0, min(rightActiveIndex ?? 0, rightTabs.count - 1))
+        }
         self.dualPane = dualPane
         self.activeSide = dualPane && activeSide == "right" ? "right" : "left"
     }
@@ -145,8 +154,23 @@ final class FinderSessionStore {
             } else { valid = false }
         }
         guard !tabs.isEmpty else { return FinderSessionLoad(snapshot: nil, canWrite: false, notice: protectedNotice) }
+        // Right-pane tabs are optional; a damaged list falls back to the single saved right pane.
+        var rightTabs: [FinderPaneSession]?
+        var rightActiveIndex: Int?
+        if let rightRecords = object["rightTabs"] as? [Any], !rightRecords.isEmpty, rightRecords.count <= 128 {
+            let decoded = rightRecords.compactMap { record -> FinderPaneSession? in
+                guard let bytes = try? JSONSerialization.data(withJSONObject: record, options: [.fragmentsAllowed]),
+                      let pane = try? JSONDecoder().decode(FinderPaneSession.self, from: bytes), pane.isValid else { return nil }
+                return pane
+            }
+            if decoded.count == rightRecords.count {
+                rightTabs = decoded
+                rightActiveIndex = object["rightActiveIndex"] as? Int ?? 0
+            } else { valid = false }
+        }
         return FinderSessionLoad(snapshot: FinderSessionSnapshot(tabs: tabs, right: right,
-            activeIndex: mappedIndex, dualPane: header.dualPane, activeSide: header.activeSide), canWrite: valid,
+            activeIndex: mappedIndex, dualPane: header.dualPane, activeSide: header.activeSide,
+            rightTabs: rightTabs, rightActiveIndex: rightActiveIndex), canWrite: valid,
             notice: valid ? nil : protectedNotice)
     }
 
@@ -155,6 +179,7 @@ final class FinderSessionStore {
               defaults.object(forKey: Self.dataKey) == nil || defaults.data(forKey: Self.dataKey) != nil,
               !snapshot.tabs.isEmpty, snapshot.tabs.count <= 128,
               snapshot.tabs.allSatisfy(\.isValid), snapshot.right.isValid,
+              (snapshot.rightTabs ?? []).count <= 128, (snapshot.rightTabs ?? []).allSatisfy(\.isValid),
               let bytes = try? JSONEncoder().encode(snapshot), bytes.count <= 4 * 1024 * 1024 else { return false }
         if bytes != lastWritten {
             defaults.set(bytes, forKey: Self.dataKey)
