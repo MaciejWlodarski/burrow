@@ -33,7 +33,7 @@
 
 https://github.com/user-attachments/assets/154919ab-4196-4dbc-abe3-9a577abc60cc
 
-![Burrow with two panes: System Applications as a list and Utilities as icons, with Favorites, Locations and Cloud in the sidebar](docs/images/dual-pane.png)
+![Burrow in dual pane, each pane with its own tabs: a project folder on the left and one of its subfolders on the right](docs/images/dual-pane.png)
 
 ## Highlights
 
@@ -54,9 +54,9 @@ Burrow is a single native app with no third-party dependencies. It is built from
 
 ## Disk map
 
-![Disk map of /System/Library: size tree above a cushion-shaded treemap colored by file type](docs/images/disk-map.png)
+![Disk map of a project folder: total and file-type bar, a size tree with share bars, and a treemap with named folder groups colored by file type](docs/images/disk-map.png)
 
-Press **⌘4** and choose **Whole Disk**, or map any folder. Burrow works like WizTree, but on macOS:
+Press **⌘4** and choose **Scan Whole Disk**, or map any folder. Burrow works like WizTree, but on macOS:
 
 - **Fast whole-disk scans.** Eight parallel `getattrlistbulk` workers. On the author's Mac a scan of about 3.9 million entries takes around 20 seconds.
 - **Every level at once.** The treemap shows the full depth, not just the top folders. Hover for details, click to reveal an item in the tree, double-click to zoom in without rescanning.
