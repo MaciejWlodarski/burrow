@@ -246,9 +246,9 @@ private func terminalHeaderButton(_ help: LocalizedStringKey, icon: String, acce
                                   action: @escaping () -> Void) -> some View {
     Button(action: action) {
         Image(systemName: icon)
-            .font(FinderUI.detailFont)
+            .font(.system(size: 14))
             .foregroundStyle(FinderUI.metadataColor)
-            .frame(width: 24, height: 24)
+            .frame(width: 28, height: 28)
             .contentShape(Rectangle())
     }
     .buttonStyle(.borderless)
@@ -282,11 +282,16 @@ private struct TerminalFolderLabel: View {
 private struct TerminalTabActions: View {
     @ObservedObject var terminal: TerminalTab
     var body: some View {
-        HStack(spacing: 2) {
-            terminalHeaderButton("Clear Terminal Output", icon: "eraser", accessibility: "Clear Terminal Output") {
-                terminal.clear()
-            }
-            .disabled(terminal.transcript.lines.isEmpty)
+        HStack(spacing: 4) {
+            // The least familiar action says what it does.
+            Button("Clear") { terminal.clear() }
+                .buttonStyle(.borderless)
+                .font(FinderUI.detailFont)
+                .foregroundStyle(FinderUI.metadataColor)
+                .padding(.horizontal, 6)
+                .help("Clear Terminal Output")
+                .accessibilityLabel("Clear Terminal Output")
+                .disabled(terminal.transcript.lines.isEmpty)
             terminalHeaderButton("Open Folder in External Terminal", icon: "arrow.up.forward.app",
                                  accessibility: "Open Folder in External Terminal") {
                 FileOperationsManager.shared.openInTerminal(at: terminal.directory)

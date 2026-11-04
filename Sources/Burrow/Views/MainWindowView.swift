@@ -154,6 +154,15 @@ public struct MainWindowView: View {
             InspectorPreviewView(appState: appState, activeTab: activeTab)
                 // A hairline from below the toolbar down, like the sidebar's edge in
                 // Finder; the toolbar itself stays one continuous bar.
+                // The status bar's strip continues under the inspector, so the window's
+                // bottom edge reads as one line.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    VStack(spacing: 0) {
+                        Divider()
+                        Color.clear.frame(height: 30).background(.bar)
+                    }
+                    .accessibilityHidden(true)
+                }
                 .overlay(alignment: .leading) {
                     Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1).allowsHitTesting(false)
                 }

@@ -335,6 +335,7 @@ public struct WizTreeAnalyzerView: View {
     @ViewState private var mapViewport: CGSize = .zero
     /// nil until the divider is dragged: then about 40% of the space, in whole rows.
     @ViewState private var treePaneHeight: CGFloat?
+    @ViewState private var isHoveringSplit = false
     @ViewState private var treePaneDrag: CGFloat = 0
     @ViewState private var mapHoverLocation: CGPoint = .zero
     @ViewState private var hoveredTile: DiskMapTile?
@@ -838,20 +839,13 @@ public struct WizTreeAnalyzerView: View {
 
     /// A thin divider with a taller drag target that snaps the tree to whole rows.
     private func splitHandle(baseHeight: CGFloat, maximumHeight: CGFloat) -> some View {
-        Divider()
-            .frame(height: 1)
-            .overlay {
-                // A visible grip says the divider can be dragged.
-                Capsule()
-                    .fill(Color.secondary.opacity(0.45))
-                    .frame(width: 36, height: 4)
-                    .allowsHitTesting(false)
-            }
+        // The same strip as the terminal drawer's handle.
+        SplitGripStrip(isHighlighted: isHoveringSplit)
             .overlay {
                 Color.clear
-                    .frame(height: 9)
                     .contentShape(Rectangle())
                     .onHover { inside in
+                        isHoveringSplit = inside
                         if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
                     }
                     .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
@@ -984,17 +978,17 @@ public struct WizTreeAnalyzerView: View {
             if availableWidth >= 650 {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.07))
+                        Capsule().fill(Color.primary.opacity(0.06))
                         Capsule()
                             // Neutral: category colour belongs to the summary bar and the map,
                             // and blue means selection. Never thinner than a short pill,
                             // so small shares don't read as bullets.
-                            .fill(isSelected ? selectionForegroundColor.opacity(0.85) : Color.primary.opacity(0.5))
+                            .fill(isSelected ? selectionForegroundColor.opacity(0.85) : Color.primary.opacity(0.32))
                             .frame(width: max(10, geometry.size.width * CGFloat(barFraction)))
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 6)
+                .frame(height: 4)
                 .accessibilityHidden(true)
             }
             if availableWidth >= 480 {
@@ -1017,9 +1011,12 @@ public struct WizTreeAnalyzerView: View {
                     .frame(width: 64, alignment: .trailing)
             }
         }
-        .padding(.horizontal, FinderUI.sectionSpacing)
+        .padding(.horizontal, FinderUI.sectionSpacing - 5)
         .padding(.vertical, 5)
-        .background(isSelected ? selectionBackgroundColor : (index.isMultiple(of: 2) ? Color.clear : FinderUI.stripeColor))
+        // Inset rounded rows, the same as the file list and search results.
+        .background(isSelected ? selectionBackgroundColor : (index.isMultiple(of: 2) ? Color.clear : FinderUI.stripeColor),
+                    in: RoundedRectangle(cornerRadius: 5))
+        .padding(.horizontal, 5)
         .contentShape(Rectangle())
         .help(synthetic ? String(localized: "Space used by the system, APFS snapshots, purgeable data, and folders without access") : tree.path(id))
         .accessibilityElement(children: .combine)

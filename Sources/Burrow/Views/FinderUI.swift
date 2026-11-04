@@ -39,7 +39,7 @@ enum FinderUI {
     /// Search matches: a wash strong enough to find in both appearances.
     static let matchHighlight = Color(nsColor: NSColor(name: nil) { appearance in
         let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.28 : 0.16)
+        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.22 : 0.16)
     })
 }
 
@@ -80,10 +80,34 @@ struct SearchMatchRenderer: TextRenderer {
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
             for run in line where run[SearchMatchAttribute.self] != nil {
-                let rect = run.typographicBounds.rect.insetBy(dx: -1, dy: -1)
-                context.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(FinderUI.matchHighlight))
+                let rect = run.typographicBounds.rect.insetBy(dx: -2, dy: -1)
+                context.fill(Path(roundedRect: rect, cornerRadius: 4), with: .color(FinderUI.matchHighlight))
             }
             for run in line { context.draw(run) }
         }
+    }
+}
+
+/// The one look for every draggable horizontal split (tree and map, files and
+/// terminal): a 10 pt strip on the window surface, a hairline along its top edge
+/// and a centred grip.
+struct SplitGripStrip: View {
+    var isHighlighted = false
+    var isFocused = false
+    static let height: CGFloat = 10
+
+    var body: some View {
+        ZStack {
+            Color(nsColor: .windowBackgroundColor)
+            VStack(spacing: 0) {
+                Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
+                Spacer(minLength: 0)
+            }
+            Capsule()
+                .fill(isFocused ? Color.accentColor : Color.secondary.opacity(isHighlighted ? 0.8 : 0.45))
+                .frame(width: 34, height: 3)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: Self.height)
     }
 }

@@ -103,7 +103,7 @@ public struct InspectorPreviewView: View {
                                      ? "\(item.kindDisplayString) · \(previewPixelWidth.formatted()) × \(previewPixelHeight.formatted())"
                                      : item.kindDisplayString)
                                     .font(FinderUI.detailFont)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(FinderUI.metadataColor)
                                 if let git = item.gitStatus {
                                     Text("Git: \(git.badgeDescription)")
                                         .font(FinderUI.detailFont.weight(.semibold))

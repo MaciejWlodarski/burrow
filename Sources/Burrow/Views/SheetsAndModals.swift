@@ -1065,7 +1065,7 @@ public struct FSearchSettingsSheetView: View {
         TabView {
             // Sized to its groups, so the window has no empty band below them.
             GeneralSettingsPane(appState: appState)
-                .frame(height: 324)
+                .frame(height: 338)
                 .tabItem { Label("General", systemImage: "gearshape") }
             BrowsingSettingsPane()
                 .frame(minHeight: 300, idealHeight: 300)
@@ -1105,8 +1105,8 @@ struct GeneralSettingsPane: View {
                     get: { appState.restoreSessionEnabled },
                     set: { appState.setSessionRestorationEnabled($0) }
                 )) {
-                    Text("Reopen tabs and panes at launch")
-                    Text("Folders, views and searches reopen as you left them.")
+                    SettingsRowLabel(title: "Reopen tabs and panes at launch",
+                                     detail: "Folders, views and searches reopen as you left them.")
                 }
                 LabeledContent("Saved session") {
                     HStack(spacing: FinderUI.rowSpacing) {
@@ -1335,6 +1335,23 @@ struct LanguageSettingsSection: View {
     }
 }
 
+/// A settings row title with its explanation: 12 pt, readable secondary contrast,
+/// the same in every group.
+struct SettingsRowLabel: View {
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+            Text(detail)
+                .font(FinderUI.detailFont)
+                .lineSpacing(2)
+                .foregroundStyle(FinderUI.metadataColor)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 /// Lets the user hand folder opening and "Show in Finder" over to Burrow.
 struct DefaultFileViewerSettingsSection: View {
     @ViewState private var isDefault = DefaultFileViewer.isDefault
@@ -1345,7 +1362,7 @@ struct DefaultFileViewerSettingsSection: View {
         Section {
             // Title, state and button share one line; the explanation gets the
             // full width of the group below them instead of a narrow column.
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 LabeledContent("Default file browser") {
                     HStack(spacing: FinderUI.rowSpacing) {
                         Text(isDefault ? "Currently Burrow" : "Currently Finder")
@@ -1360,8 +1377,9 @@ struct DefaultFileViewerSettingsSection: View {
                     }
                 }
                 Text("Folders opened from other apps and “Show in Finder” open in Burrow. The Desktop and the Dock’s Trash stay with Finder.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(FinderUI.detailFont)
+                    .lineSpacing(2)
+                    .foregroundStyle(FinderUI.metadataColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let errorMessage {
@@ -1461,8 +1479,8 @@ struct UpdateSettingsSection: View {
                 get: { updates.automaticChecksEnabled },
                 set: { updates.automaticChecksEnabled = $0 }
             )) {
-                Text("Check for updates automatically")
-                Text("Checks GitHub once a day. Nothing about you or your files is sent.")
+                SettingsRowLabel(title: "Check for updates automatically",
+                                 detail: "Checks GitHub once a day. Nothing about you or your files is sent.")
             }
         }
     }

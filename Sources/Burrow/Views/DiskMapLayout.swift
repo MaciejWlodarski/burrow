@@ -356,7 +356,7 @@ public enum DiskMapRenderer {
             // Tiles too small for name and size still get a one-line name when one fits.
             let isCompact = !isGroup && (width < minimumLabelWidth || tileHeight < minimumLabelHeight
                 || width - 12 * scale < minimumNameWidth)
-            if isCompact && (width < 40 * scale || tileHeight < 24 * scale) { continue }
+            if isCompact && (width < 36 * scale || tileHeight < 22 * scale) { continue }
             let textColor: NSColor
             if isGroup || tile.isCollapsed || tile.isRemainder {
                 textColor = palette.folderText
@@ -407,15 +407,11 @@ public enum DiskMapRenderer {
                 let available = width - 12 * scale
                 let compactName = NSAttributedString(string: shownName, attributes: [
                     .font: compactFont, .foregroundColor: textColor, .paragraphStyle: middleTruncating])
-                // The whole name, or else just the size: a name cut to "Ch…" says nothing.
-                let origin = CGPoint(x: Double(tile.x0) + 6 * scale, y: Double(tile.y0) + 4 * scale)
-                if compactName.size().width <= available {
-                    compactName.draw(in: CGRect(x: origin.x, y: origin.y, width: available, height: lineHeight))
-                } else if sizeWidth <= available {
-                    size.draw(at: origin)
-                } else {
-                    continue
-                }
+                // Identity before size: a one-line name, shortened in the middle when needed.
+                // Room for a few letters either side of the ellipsis, or the whole name.
+                guard compactName.size().width <= available || available >= 42 * scale else { continue }
+                compactName.draw(in: CGRect(x: Double(tile.x0) + 6 * scale, y: Double(tile.y0) + 4 * scale,
+                                            width: available, height: lineHeight))
             } else {
                 // The name always leads; the size follows when it fits whole.
                 let offset = alignsWithHeaders && tile.depth == 0 && tileHeight >= header + lineHeight * 3 ? header + scale : 0

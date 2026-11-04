@@ -308,7 +308,7 @@ public struct FilePaneView: View {
         }
         let folder = parts.popLast() ?? ""
         let lead = parts.isEmpty ? "" : parts.joined(separator: " › ") + " › "
-        let leadColor = isSelected ? selectionForegroundColor.opacity(0.8) : Color.primary.opacity(0.55)
+        let leadColor = isSelected ? selectionForegroundColor.opacity(0.8) : FinderUI.metadataColor
         let folderColor = isSelected ? selectionForegroundColor : FinderUI.metadataColor
         return Text(verbatim: lead).foregroundColor(leadColor) + Text(verbatim: folder).foregroundColor(folderColor)
     }
@@ -445,8 +445,8 @@ public struct FilePaneView: View {
             let showDate = geometry.size.width >= 480
             // Kind stays in a half-width pane at a narrower width instead of
             // leaving an empty band after the date.
-            // 132 pt holds "Numbers Spreadsheet"; Name gives way first.
-            let kindWidth: CGFloat = geometry.size.width >= 760 ? 150 : (geometry.size.width >= 560 ? 132 : 0)
+            // 144 pt holds "Numbers Spreadsheet"; Name gives way first.
+            let kindWidth: CGFloat = geometry.size.width >= 760 ? 150 : (geometry.size.width >= 560 ? 144 : 0)
             let showKind = kindWidth > 0
             // No disclosure gutter in a folder without subfolders.
             let showsDisclosure = pane.displayedItems.contains { $0.isDirectory && $0.fileExtension.lowercased() != "app" }
