@@ -12,11 +12,16 @@ enum FinderCommandRouting {
     /// The local monitor runs before responder delivery. Use the event's own
     /// window and its live responder, never a global focus flag or key window.
     static func shouldRouteFileKeyEvent(_ event: NSEvent) -> Bool {
-        guard let window = event.window, !(window is NSPanel),
+        guard let window = event.window, !(window is NSPanel), !isSettingsWindow(window),
               window.sheetParent == nil, window.attachedSheet == nil else { return false }
         let responder = window.firstResponder
         return !(responder is NSTextView || responder is NSTextField ||
                  responder is FinderFileKeyboardOwner)
+    }
+
+    /// File commands never act from the Settings window.
+    static func isSettingsWindow(_ window: NSWindow) -> Bool {
+        window.identifier?.rawValue.localizedCaseInsensitiveContains("settings") == true
     }
 
     static var isEditingText: Bool {
@@ -26,7 +31,7 @@ enum FinderCommandRouting {
 
     static var canUseFileCommands: Bool {
         guard let window = NSApp?.keyWindow else { return false }
-        return !isEditingText && !(window is NSPanel) &&
+        return !isEditingText && !(window is NSPanel) && !isSettingsWindow(window) &&
             window.attachedSheet == nil && window.sheetParent == nil
     }
 

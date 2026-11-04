@@ -25,7 +25,7 @@ public enum FinderViewMode: String, CaseIterable, Identifiable {
         case .list: return "list.bullet"
         case .icons: return "square.grid.2x2"
         case .columns: return "rectangle.split.3x1"
-        case .wiztree: return "square.grid.3x1.below.line.grid.1x2.fill"
+        case .wiztree: return "chart.pie"
         }
     }
 }

@@ -89,7 +89,7 @@ public struct FilePaneView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            PathBreadcrumbBar(appState: appState, pane: pane)
+            paneHeader
 
             if let diagnostic = pane.navigationDiagnostic, let failureID = pane.navigationFailureID {
                 HStack(alignment: .top, spacing: FinderUI.rowSpacing) {
@@ -205,14 +205,6 @@ public struct FilePaneView: View {
                 if !pane.isSessionPaused { paneBackgroundContextMenu }
             }
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 0)
-                .stroke(
-                    appState.isDualPane && isFocusedPane ? Color.accentColor.opacity(0.65) : Color.clear,
-                    lineWidth: 2
-                )
-                .allowsHitTesting(false)
-        )
         .onDisappear { dropLoad.cancel() }
         .onChange(of: pane.id) { _, _ in dropLoad.cancel() }
         .onChange(of: pane.currentURL.path) { _, _ in dropLoad.cancel() }
@@ -231,6 +223,173 @@ public struct FilePaneView: View {
                 RenameItemSheet(item: item, pane: pane)
             }
         }
+    }
+
+    /// Breadcrumbs while browsing; while searching, what was found and where,
+    /// since the results no longer belong to the folder shown in the path.
+    /// With two panes, an accent line marks the pane that receives commands.
+    private var paneHeader: some View {
+        Group {
+            if hasSearchQuery {
+                searchResultsHeader
+            } else {
+                PathBreadcrumbBar(appState: appState, pane: pane)
+            }
+        }
+        // The inactive pane stays fully legible; tint and underline mark the active one.
+        .background {
+            ZStack {
+                Color(nsColor: .controlBackgroundColor)
+                if appState.isDualPane && isFocusedPane { FinderUI.activePaneTint }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if appState.isDualPane && isFocusedPane {
+                Rectangle().fill(Color.accentColor).frame(height: 2).allowsHitTesting(false)
+            }
+        }
+    }
+
+    private var searchResultsHeader: some View {
+        let count = pane.displayedItems.count
+        let query = pane.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let folder = FileManager.default.displayName(atPath: pane.currentURL.path)
+        let scope: String
+        switch pane.searchScope {
+        case .currentFolder: scope = String(localized: "in “\(folder)”")
+        case .recursiveFolder: scope = String(localized: "in “\(folder)” and its subfolders")
+        case .wholeIndex: scope = String(localized: "in all indexed folders")
+        }
+        return HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+            Text(pane.isSearching && count == 0 ? String(localized: "Searching for “\(query)”…")
+                 : count == 1 ? String(localized: "1 result for “\(query)”") : String(localized: "\(count) results for “\(query)”"))
+                .fontWeight(.semibold)
+                .lineLimit(1)
+            // Where to search, changeable right where the results are described.
+            Menu {
+                Picker("Search In", selection: Binding(get: { pane.searchScope }, set: { mode in
+                    pane.searchScope = mode
+                    if pane !== appState.activeTab { pane.triggerSearch() }
+                })) {
+                    Text("All Indexed Folders").tag(SearchScopeMode.wholeIndex)
+                    Text("“\(folder)” and Subfolders").tag(SearchScopeMode.recursiveFolder)
+                    Text("“\(folder)” Only").tag(SearchScopeMode.currentFolder)
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Text(scope).lineLimit(1).truncationMode(.middle)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .foregroundStyle(.secondary)
+            .help("Choose where to search")
+            Spacer(minLength: 0)
+        }
+        .font(FinderUI.detailFont)
+        .padding(.horizontal, FinderUI.panelInset)
+        .frame(height: 34)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .bottom) { Divider() }
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The folder holding a result reads first; the way to it recedes.
+    private func resultLocation(_ path: String, isSelected: Bool) -> Text {
+        let base = pane.searchScope == .wholeIndex
+            ? FSearchIndex.shared.configuredRoots.filter { path == $0 || path.hasPrefix($0 + "/") }.max { $0.count < $1.count }
+            : pane.currentURL.path
+        var parts: [String]
+        if let base, base != "/", path == base || path.hasPrefix(base + "/") {
+            parts = [FileManager.default.displayName(atPath: base)]
+                + path.dropFirst(base.count).split(separator: "/").map(String.init)
+        } else {
+            parts = Self.shortLocation(of: path).components(separatedBy: " › ")
+        }
+        let folder = parts.popLast() ?? ""
+        let lead = parts.isEmpty ? "" : parts.joined(separator: " › ") + " › "
+        // One readable secondary colour for the whole line; the smaller size keeps it subordinate.
+        let leadColor = isSelected ? selectionForegroundColor.opacity(0.85) : FinderUI.metadataColor
+        let folderColor = leadColor
+        return Text(verbatim: lead).foregroundColor(leadColor) + Text(verbatim: folder).foregroundColor(folderColor)
+    }
+
+    /// "Burrow Demo › Studio › Invoices": the folders nearest the result
+    /// say where it is; the full path is in the tooltip.
+    static func shortLocation(of path: String) -> String {
+        let home = NSHomeDirectory()
+        let relative = path == home ? "~" : path.hasPrefix(home + "/") ? "~/" + path.dropFirst(home.count + 1) : path
+        // The whole location; the text view shortens the middle only when it overflows.
+        return relative.split(separator: "/").joined(separator: " › ")
+    }
+
+    /// The name with matches in semibold on a rounded accent wash (macOS 15+),
+    /// or the flat attributed wash on older systems.
+    @ViewBuilder
+    private func highlightedNameText(_ name: String, isSelected: Bool) -> some View {
+        #if compiler(>=6.0)
+        if #available(macOS 15.0, *) {
+            matchText(name, isSelected: isSelected)
+                .textRenderer(SearchMatchRenderer())
+        } else {
+            Text(highlightedName(name, isSelected: isSelected))
+        }
+        #else
+        Text(highlightedName(name, isSelected: isSelected))
+        #endif
+    }
+
+    #if compiler(>=6.0)
+    @available(macOS 15.0, *)
+    private func matchText(_ name: String, isSelected: Bool) -> Text {
+        var result = Text(verbatim: "")
+        var cursor = name.startIndex
+        for range in matchRanges(in: name) {
+            if cursor < range.lowerBound { result = result + Text(verbatim: String(name[cursor..<range.lowerBound])) }
+            let match = Text(verbatim: String(name[range])).fontWeight(.semibold)
+            result = result + (isSelected ? match : match.customAttribute(SearchMatchAttribute()))
+            cursor = range.upperBound
+        }
+        if cursor < name.endIndex { result = result + Text(verbatim: String(name[cursor...])) }
+        return result
+    }
+    #endif
+
+    /// Non-overlapping ranges of the typed terms inside a name, in order.
+    private func matchRanges(in name: String) -> [Range<String.Index>] {
+        let terms = pane.searchQuery.split(separator: " ").map(String.init)
+            .filter { !$0.isEmpty && !$0.contains(":") && $0.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." } }
+        guard hasSearchQuery, !terms.isEmpty else { return [] }
+        var ranges: [Range<String.Index>] = []
+        for term in terms {
+            var start = name.startIndex
+            while start < name.endIndex,
+                  let range = name.range(of: term, options: [.caseInsensitive, .diacriticInsensitive], range: start..<name.endIndex) {
+                if !ranges.contains(where: { $0.overlaps(range) }) { ranges.append(range) }
+                start = range.upperBound
+            }
+        }
+        return ranges.sorted { $0.lowerBound < $1.lowerBound }
+    }
+
+    /// Search results show the typed text in bold within each name.
+    private func highlightedName(_ name: String, isSelected: Bool) -> AttributedString {
+        var text = AttributedString(name)
+        let terms = pane.searchQuery.split(separator: " ").map(String.init)
+            .filter { !$0.isEmpty && !$0.contains(":") && $0.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." } }
+        guard hasSearchQuery, !terms.isEmpty else { return text }
+        for term in terms {
+            var searchStart = text.startIndex
+            while searchStart < text.endIndex,
+                  let range = text[searchStart...].range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) {
+                text[range].font = FinderUI.bodyFont.weight(.semibold)
+                // Semibold on a faint accent wash: the name keeps its colour, so the
+                // match neither reads as a link nor vanishes on a selected row.
+                if !isSelected { text[range].backgroundColor = FinderUI.matchHighlight }
+                searchStart = range.upperBound
+            }
+        }
+        return text
     }
 
     private var restoredSessionPlaceholder: some View {
@@ -274,7 +433,7 @@ public struct FilePaneView: View {
                         guard response == .OK, let url = panel.url else { return }
                         Task { @MainActor in
                             guard pane.activationContext == context,
-                                  appState.tabs.contains(where: { $0.id == pane.id }) || appState.rightPane.id == pane.id else { return }
+                                  appState.allPanes.contains(where: { $0.id == pane.id }) else { return }
                             pane.navigate(to: url)
                         }
                     }
@@ -291,33 +450,42 @@ public struct FilePaneView: View {
     private var listBrowserView: some View {
         GeometryReader { geometry in
             let showDate = geometry.size.width >= 480
-            let showKind = geometry.size.width >= 700
+            // Kind stays in a half-width pane at a narrower width instead of
+            // leaving an empty band after the date.
+            // 144 pt holds "Numbers Spreadsheet"; Name gives way first.
+            let kindWidth: CGFloat = geometry.size.width >= 760 ? 150 : (geometry.size.width >= 560 ? 144 : 0)
+            let showKind = kindWidth > 0
+            // No disclosure gutter in a folder without subfolders.
+            let showsDisclosure = pane.displayedItems.contains { $0.isDirectory && $0.fileExtension.lowercased() != "app" }
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     sortableHeaderButton(title: String(localized: "Name"), field: .name)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     sortableHeaderButton(title: String(localized: "Size"), field: .size)
-                        .frame(width: 85, alignment: .trailing)
-                        .padding(.trailing, 14)
+                        .frame(width: 80, alignment: .trailing)
+                        .padding(.trailing, 20)
                     if showDate {
-                        sortableHeaderButton(title: String(localized: "Modified"), field: .dateModified)
-                            .frame(width: 145, alignment: .leading)
+                        // Leading in every layout; 160 pt holds "Nov 12, 2025 at 12:58 PM".
+                        sortableHeaderButton(title: String(localized: "Date Modified"), field: .dateModified)
+                            .frame(width: 160, alignment: .leading)
                     }
                     if showKind {
                         sortableHeaderButton(title: String(localized: "Kind"), field: .kind)
-                            .frame(width: 110, alignment: .leading)
+                            .frame(width: kindWidth, alignment: .leading)
                     }
                 }
-                .padding(.horizontal, 14)
-                .frame(height: 28)
-                .background(.bar)
+                .padding(.leading, 15)
+                .padding(.trailing, 19)
+                .frame(height: 26)
+                .background(Color(nsColor: .controlBackgroundColor))
                 Divider()
 
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 1) {
                             ForEach(Array(pane.displayedItems.enumerated()), id: \.element.id) { index, item in
-                                fileListRow(item: item, index: index, showDate: showDate, showKind: showKind)
+                                fileListRow(item: item, index: index, showDate: showDate, kindWidth: kindWidth,
+                                            showsDisclosure: showsDisclosure)
                                     .id(item.path)
                             }
                         }
@@ -345,11 +513,12 @@ public struct FilePaneView: View {
             HStack(spacing: 4) {
                 Text(title)
                     .font(FinderUI.captionFont.weight(pane.sortField == field ? .semibold : .medium))
-                    .foregroundStyle(pane.sortField == field ? .primary : .secondary)
+                    .foregroundStyle(pane.sortField == field ? Color.primary : FinderUI.metadataColor)
                 if pane.sortField == field {
                     Image(systemName: pane.sortAscending ? "chevron.up" : "chevron.down")
                         .font(.system(size: 8.5, weight: .bold))
-                        .foregroundStyle(Color.accentColor)
+                        // Grey like Finder: blue stays for selection and active state.
+                        .foregroundStyle(.secondary)
                 }
             }
             .contentShape(Rectangle())
@@ -360,7 +529,9 @@ public struct FilePaneView: View {
         .accessibilityValue(pane.sortField == field ? (pane.sortAscending ? String(localized: "Ascending") : String(localized: "Descending")) : String(localized: "Not sorted"))
     }
 
-    private func fileListRow(item: FileItem, index: Int, showDate: Bool, showKind: Bool) -> some View {
+    private func fileListRow(item: FileItem, index: Int, showDate: Bool, kindWidth: CGFloat,
+                             showsDisclosure: Bool) -> some View {
+        let showKind = kindWidth > 0
         let isSelected = pane.selectedPaths.contains(item.path)
         let isCutItem = fileOps.isCut(item.path)
         let isFolderDropTarget = (dropTargetFolderPath == item.path)
@@ -389,22 +560,29 @@ public struct FilePaneView: View {
                         .buttonStyle(.plain)
                         .help(pane.isExpanded(item.path) ? String(localized: "Collapse folder") : String(localized: "Expand folder"))
                         .accessibilityLabel(pane.isExpanded(item.path) ? String(localized: "Collapse folder \(item.name)") : String(localized: "Expand folder \(item.name)"))
-                    } else {
+                    } else if showsDisclosure {
                         Spacer()
                             .frame(width: 14)
                     }
                 }
 
+                // Two-line search rows get a larger icon to match their height.
                 Image(nsImage: FileIconCache.shared.icon(for: item))
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: 20, height: 20)
+                    // System folder art fills its box more than document art; 2 pt less
+                    // keeps the two-line results optically even.
+                    // A 32 pt box across both lines anchors the row; folder art fills its box
+                    // more than document art, so it is drawn 4 pt smaller.
+                    .frame(width: showSubpath ? (item.isDirectory ? 26 : 32) : 20,
+                           height: showSubpath ? (item.isDirectory ? 26 : 32) : 20)
+                    .frame(width: showSubpath ? 32 : 20)
                     .opacity(item.isHidden || isCutItem ? 0.5 : 1.0)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(item.name)
-                            .font(FinderUI.bodyFont.weight(item.isDirectory ? .medium : .regular))
+                        highlightedNameText(item.name, isSelected: isSelected)
+                            .font(FinderUI.bodyFont)
                             .foregroundStyle(isSelected ? selectionForegroundColor : (item.isHidden ? Color.secondary : Color.primary))
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -435,10 +613,12 @@ public struct FilePaneView: View {
                     }
 
                     if showSubpath {
-                        Text(item.parentPath.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-                            .font(FinderUI.captionFont)
-                            .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
+                        resultLocation(item.parentPath, isSelected: isSelected)
+                            // Smaller and quieter than the name: the same path often repeats.
+                            .font(.system(size: 11))
                             .lineLimit(1)
+                            .truncationMode(.head)
+                            .help(item.parentPath)
                     }
 
                     if let grep = item.grepMatch {
@@ -470,32 +650,35 @@ public struct FilePaneView: View {
                     Text(FormatHelpers.formatBytes(item.size))
                 }
             }
-            .font(.system(size: 11.5, design: .monospaced))
-            .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
-            .frame(width: 85, alignment: .trailing)
-            .padding(.trailing, 14)
+            .font(FinderUI.bodyFont.monospacedDigit())
+            .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
+            .lineLimit(1)
+            .frame(width: 80, alignment: .trailing)
+            .padding(.trailing, 20)
 
             if showDate {
                 Text(FormatHelpers.formatDate(item.modificationDate))
-                    .font(FinderUI.detailFont)
-                    .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
+                    .font(FinderUI.bodyFont)
+                    .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                     .lineLimit(1)
-                    .frame(width: 145, alignment: .leading)
+                    .frame(width: 160, alignment: .leading)
             }
             if showKind {
                 Text(item.kindDisplayString)
-                    .font(FinderUI.detailFont)
-                    .foregroundStyle(isSelected ? selectionForegroundColor : Color.secondary)
+                    .font(FinderUI.bodyFont)
+                    .foregroundStyle(isSelected ? selectionForegroundColor : FinderUI.metadataColor)
                     .lineLimit(1)
-                    .frame(width: 110, alignment: .leading)
+                    .truncationMode(.tail)
+                    .frame(width: kindWidth, alignment: .leading)
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.leading, 10)
+        .padding(.trailing, 14)
         .padding(.vertical, showSubpath || item.grepMatch != nil ? 6 : 5)
         .opacity(isCutItem ? 0.5 : 1.0)
         .background(
             isSelected ? selectionBackgroundColor : (isFolderDropTarget ? Color.accentColor.opacity(0.18)
-                : (index.isMultiple(of: 2) ? Color.clear : Color(nsColor: .alternatingContentBackgroundColors[1]))),
+                : (index.isMultiple(of: 2) ? Color.clear : FinderUI.stripeColor)),
             in: RoundedRectangle(cornerRadius: 5)
         )
         .overlay(
@@ -551,8 +734,9 @@ public struct FilePaneView: View {
 
     private var iconGridBrowserView: some View {
         let iconDim = CGFloat(appState.iconGridSize)
-        let cellWidth = max(96, iconDim + 44)
-        let columns = [GridItem(.adaptive(minimum: cellWidth, maximum: cellWidth + 24), spacing: 14)]
+        let cellWidth = max(110, iconDim + 60)
+        // Top-aligned cells keep thumbnails, names and sizes on shared lines.
+        let columns = [GridItem(.adaptive(minimum: cellWidth, maximum: cellWidth + 24), spacing: 14, alignment: .top)]
         return ScrollView {
             ZStack(alignment: .topLeading) {
                 LazyVGrid(columns: columns, spacing: FinderUI.sectionSpacing) {
@@ -568,6 +752,7 @@ public struct FilePaneView: View {
                                     .scaledToFit()
                                     .frame(width: iconDim, height: iconDim)
                                     .clipShape(RoundedRectangle(cornerRadius: item.supportsRichThumbnail ? 6 : 0))
+                                    .shadow(color: .black.opacity(item.supportsRichThumbnail ? 0.18 : 0), radius: 2, y: 1)
                                     .opacity(item.isHidden || isCutItem ? 0.5 : 1.0)
 
                                 if let git = item.gitStatus {
@@ -589,7 +774,7 @@ public struct FilePaneView: View {
                                     }
                                 }
                                 Text(item.name)
-                                    .font(FinderUI.detailFont.weight(item.isDirectory ? .medium : .regular))
+                                    .font(FinderUI.bodyFont)
                                     .foregroundStyle(isSelected ? selectionForegroundColor : Color.primary)
                                     .lineLimit(2)
                                     .multilineTextAlignment(.center)
@@ -601,6 +786,8 @@ public struct FilePaneView: View {
                                 RoundedRectangle(cornerRadius: 5)
                                     .fill(isSelected ? selectionBackgroundColor : Color.clear)
                             )
+                            // The size sits right under the name, however many lines it takes.
+                            .padding(.bottom, -2)
 
                             Group {
                                 if item.isDirectory {
@@ -610,7 +797,7 @@ public struct FilePaneView: View {
                                 }
                             }
                             .font(FinderUI.captionFont)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(FinderUI.metadataColor)
                         }
                         .frame(width: cellWidth)
                         .padding(6)

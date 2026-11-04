@@ -7,56 +7,44 @@ public struct FSearchToolbarSection: View {
     @ObservedObject var activeTab: PaneTabState
     @ObservedObject var fileOps = FileOperationsManager.shared
     @ObservedObject var folderSorts = FolderSortPreferences.shared
-    @FocusState private var isSearchFocused: Bool
 
     public init(appState: AppState, activeTab: PaneTabState) {
         self.appState = appState
         self.activeTab = activeTab
     }
 
+    @ViewState private var isSearchPresented = false
+
+    private var windowTitle: String {
+        let query = activeTab.searchQuery.trimmingCharacters(in: .whitespaces)
+        // The query is already in the field and the results header.
+        return query.isEmpty ? activeTab.title : String(localized: "Search")
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                searchField
-
-                Menu {
-                    Picker("Search Scope", selection: $activeTab.searchScope) {
-                        ForEach(SearchScopeMode.allCases) { mode in
-                            Label(scopeLabel(mode), systemImage: mode.iconName).tag(mode)
-                        }
-                    }
-                    Divider()
-                    Toggle("Tolerate Typos", isOn: $activeTab.fuzzyEnabled)
-                } label: {
-                    Label(scopeLabel(activeTab.searchScope), systemImage: activeTab.searchScope.iconName)
-                        .font(FinderUI.detailFont)
-                }
-                .fixedSize()
-                .help("Choose where to search for files")
-                .onChange(of: activeTab.searchScope) { _, _ in activeTab.triggerSearch() }
-                .onChange(of: activeTab.fuzzyEnabled) { _, _ in activeTab.triggerSearch() }
-
-                filterMenu
-            }
-            .padding(.horizontal, FinderUI.panelInset)
-            .padding(.vertical, FinderUI.chromeInset)
-
             if !activeTab.activeFilterPills.isEmpty {
                 activeFilters
+                Divider()
             }
-            Divider()
         }
         .background(.bar)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    appState.showSidebar.toggle()
-                } label: {
-                    Label("Sidebar", systemImage: "sidebar.left")
+        // Observed here, so the title follows the query as it is typed.
+        .navigationTitle(windowTitle)
+        .sheet(isPresented: $appState.showFSearchHelpPopover) {
+            VStack(spacing: 0) {
+                FSearchSyntaxCheatsheetView(activeTab: activeTab)
+                HStack {
+                    Spacer()
+                    Button("Done") { appState.showFSearchHelpPopover = false }
+                        .keyboardShortcut(.defaultAction)
                 }
-                .help("Show or hide the sidebar (⌃⌘S)")
-                .accessibilityValue(appState.showSidebar ? String(localized: "Visible") : String(localized: "Hidden"))
+                .padding([.horizontal, .bottom], 14)
             }
+            // Trying an example closes the sheet to show its results.
+            .onChange(of: activeTab.searchQuery) { _, _ in appState.showFSearchHelpPopover = false }
+        }
+        .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button { activeTab.goBack() } label: {
                     Label("Back", systemImage: "chevron.left")
@@ -68,22 +56,6 @@ public struct FSearchToolbarSection: View {
                 }
                 .disabled(activeTab.historyForward.isEmpty)
                 .help("Forward (⌘])")
-            }
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 7) {
-                    Image(systemName: activeTab.searchQuery.isEmpty ? "folder.fill" : "magnifyingglass")
-                        .foregroundStyle(activeTab.searchQuery.isEmpty ? Color.accentColor : .secondary)
-                    Text(activeTab.searchQuery.isEmpty ? activeTab.title : String(localized: "Search Results"))
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                // Native toolbar containers gained larger rounded chrome on
-                // newer macOS. Give the custom title breathing room inside it.
-                .padding(.horizontal, FinderUI.chromeInset)
-                .padding(.vertical, 6)
-                .frame(maxWidth: 260)
-                .help(activeTab.currentURL.path)
             }
             ToolbarItem {
                 Picker("View", selection: $activeTab.viewMode) {
@@ -138,15 +110,6 @@ public struct FSearchToolbarSection: View {
                 .help("Sorting and folder order")
             }
             ToolbarItem {
-                Button {
-                    fileOps.showShareSheet(for: activeTab.selectedItems)
-                } label: {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-                .disabled(activeTab.selectedItems.isEmpty)
-                .help("Share the selected files")
-            }
-            ToolbarItem {
                 Menu {
                     Button("New Folder…", systemImage: "folder.badge.plus") { appState.showNewFolderSheet = true }
                     Button("New File…", systemImage: "doc.badge.plus") { appState.showNewFileSheet = true }
@@ -162,11 +125,26 @@ public struct FSearchToolbarSection: View {
                     Button("Add Folder to Favorites", systemImage: "star") {
                         appState.addBookmark(for: activeTab.currentURL)
                     }
+                    Button("Share…", systemImage: "square.and.arrow.up") {
+                        fileOps.showShareSheet(for: activeTab.selectedItems)
+                    }
+                    .disabled(activeTab.selectedItems.isEmpty)
                     Divider()
                     Button("Open in Finder", systemImage: "macwindow") {
                         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: activeTab.currentURL.path)
                     }
                     Toggle("Terminal", isOn: $appState.showTerminalDrawer)
+                    if appState.isDualPane {
+                        Divider()
+                        Button("Copy Selection to Other Pane", systemImage: "doc.on.doc") {
+                            let destination = appState.activePaneSide == .left ? appState.rightPane : appState.leftTab
+                            fileOps.performTransfer(sourceURLs: activeTab.selectedItems.map(\.url), into: destination.currentURL, isMove: false)
+                        }
+                        .disabled(activeTab.selectedItems.isEmpty || fileOps.isBusy)
+                        Button("Compare Folders…", systemImage: "arrow.left.arrow.right") { appState.showCompareSheet = true }
+                        Divider()
+                    }
+                    Menu("Search Filters", systemImage: "line.3.horizontal.decrease.circle") { filterMenuItems }
                     Button("Quick Search…", systemImage: "magnifyingglass") {
                         appState.showQuickFSearchModal = true
                     }
@@ -177,93 +155,64 @@ public struct FSearchToolbarSection: View {
                 }
                 .help("New folder, hidden files and other actions")
             }
+            // A little air between "what to show" and "how the window is split".
+            // ToolbarSpacer exists only in the macOS 26 SDK (Swift 6.2 toolchains).
+            #if compiler(>=6.2)
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed)
+            }
+            #endif
             ToolbarItemGroup {
-                Button { appState.showTerminalDrawer.toggle() } label: {
-                    Label("Terminal", systemImage: "terminal")
-                }
-                .tint(appState.showTerminalDrawer ? .accentColor : .secondary)
-                .help("Show or hide the terminal (Ctrl+`)")
-                .accessibilityValue(appState.showTerminalDrawer ? String(localized: "Visible") : String(localized: "Hidden"))
+                // On reads as an accent-coloured glyph on the normal capsule:
+                // visible, but quieter than a solid fill.
                 Button { appState.toggleDualPane() } label: {
                     Label("Two Panes", systemImage: "rectangle.split.2x1")
+                        .foregroundStyle(appState.isDualPane ? Color.accentColor : Color.primary)
                 }
-                .tint(appState.isDualPane ? .accentColor : .secondary)
                 .help("Two-pane view (⇧⌘D)")
                 .accessibilityValue(appState.isDualPane ? String(localized: "On") : String(localized: "Off"))
                 Button { appState.showInspector.toggle() } label: {
-                    Label("Inspector", systemImage: "sidebar.right")
+                    Label("Inspector", systemImage: "sidebar.trailing")
+                        .foregroundStyle(appState.showInspector ? Color.accentColor : Color.primary)
                 }
-                .tint(appState.showInspector ? .accentColor : .secondary)
                 .help("Show or hide the inspector (⌘I)")
                 .accessibilityValue(appState.showInspector ? String(localized: "Visible") : String(localized: "Hidden"))
             }
         }
-        .onChange(of: appState.focusSearchFieldTrigger) { _, _ in isSearchFocused = true }
+        // A native toolbar search field, as in Finder. Where to search is a
+        // scope bar that appears only while searching.
+        .searchable(text: $activeTab.searchQuery, isPresented: $isSearchPresented,
+                    placement: .toolbar, prompt: Text("Search"))
+        .searchScopes($activeTab.searchScope, activation: .onSearchPresentation) {
+            ForEach(SearchScopeMode.allCases) { mode in
+                Text(scopeLabel(mode)).tag(mode)
+            }
+        }
+        .onChange(of: activeTab.searchQuery) { _, _ in activeTab.triggerSearch() }
+        .onChange(of: activeTab.searchScope) { _, _ in activeTab.triggerSearch() }
+        .onChange(of: activeTab.fuzzyEnabled) { _, _ in activeTab.triggerSearch() }
+        .onChange(of: appState.focusSearchFieldTrigger) { _, _ in isSearchPresented = true }
     }
 
-    private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search files and folders", text: $activeTab.searchQuery)
-                .textFieldStyle(.plain)
-                .focused($isSearchFocused)
-                .onChange(of: activeTab.searchQuery) { _, _ in activeTab.triggerSearch() }
-                .onExitCommand {
-                    activeTab.clearSearch()
-                    isSearchFocused = false
-                }
-                .accessibilityLabel("Search files and folders")
-            if activeTab.isSearching {
-                ProgressView().controlSize(.small)
-                    .accessibilityLabel("Searching files")
-            } else if !activeTab.searchQuery.isEmpty {
-                Button { activeTab.clearSearch() } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).frame(width: 24, height: 24)
-                }
-                .help("Clear search (Esc)")
-                .accessibilityLabel("Clear search")
-            } else if !isSearchFocused {
-                Text("⌘F").font(FinderUI.captionFont).foregroundStyle(.tertiary)
-            }
+    @ViewBuilder
+    private var filterMenuItems: some View {
+        Section("File Kind") {
+            filter("Folders", "folder", "type:dir")
+            filter("Documents", "doc.text", "type:doc")
+            filter("Images", "photo", "type:image")
+            filter("Video", "film", "type:video")
+            filter("Source Code", "chevron.left.forwardslash.chevron.right", "type:code")
+            filter("Archives", "doc.zipper", "type:archive")
         }
-        .font(FinderUI.bodyFont)
-        .buttonStyle(.plain)
-        .padding(.horizontal, 10)
-        .frame(height: FinderUI.chromeHeight)
-        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
-        .overlay {
-            RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(isSearchFocused ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: isSearchFocused ? 2 : 1)
+        Section("Quick Filters") {
+            filter("Larger Than 10 MB", "internaldrive", "size:>10mb")
+            filter("Changed in the Last Week", "clock", "mtime:<7d")
+            filter("Modified in Git", "point.3.connected.trianglepath.dotted", "git:modified")
         }
-    }
-
-    private var filterMenu: some View {
-        Menu {
-            Section("File Kind") {
-                filter("Folders", "folder", "type:dir")
-                filter("Documents", "doc.text", "type:doc")
-                filter("Images", "photo", "type:image")
-                filter("Video", "film", "type:video")
-                filter("Source Code", "chevron.left.forwardslash.chevron.right", "type:code")
-                filter("Archives", "doc.zipper", "type:archive")
-            }
-            Section("Quick Filters") {
-                filter("Larger Than 10 MB", "internaldrive", "size:>10mb")
-                filter("Changed in the Last Week", "clock", "mtime:<7d")
-                filter("Modified in Git", "point.3.connected.trianglepath.dotted", "git:modified")
-            }
-            Divider()
-            Button("Search Syntax…", systemImage: "questionmark.circle") {
-                appState.showFSearchHelpPopover = true
-            }
-        } label: {
-            Label("Filters", systemImage: "line.3.horizontal.decrease.circle")
-                .font(FinderUI.detailFont)
-        }
-        .fixedSize()
-        .popover(isPresented: $appState.showFSearchHelpPopover) {
-            FSearchSyntaxCheatsheetView(activeTab: activeTab)
+        Divider()
+        Toggle("Tolerate Typos", isOn: $activeTab.fuzzyEnabled)
+        Button("Search Syntax…", systemImage: "questionmark.circle") {
+            appState.showFSearchHelpPopover = true
         }
     }
 

@@ -150,44 +150,36 @@ public struct EmbeddedTerminalDrawerView: View {
     }
     public var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 4) {
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 4) {
-                            ForEach(workspace.tabs) { tab in
-                                HStack(spacing: 4) {
-                                    Button { workspace.select(tab.id) } label: {
-                                        Text("Terminal \(tab.ordinal)")
-                                            .lineLimit(1).padding(.horizontal, 8).padding(.vertical, 5)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityAddTraits(workspace.selectedID == tab.id ? .isSelected : [])
-                                    Button { workspace.close(tab.id) } label: { Image(systemName: "xmark").frame(width: 24, height: 24) }
-                                        .buttonStyle(.plain).help("Close the tab and cancel its command")
-                                        .accessibilityLabel("Close Terminal \(tab.ordinal)")
-                                }
-                                .background(workspace.selectedID == tab.id ? Color.accentColor.opacity(0.14) : Color.clear,
-                                            in: RoundedRectangle(cornerRadius: 6))
-                                .id(tab.id)
-                            }
-                        }
-                    }
-                    .onChange(of: workspace.selectedID) { _, id in
-                        if let id { proxy.scrollTo(id, anchor: .center) }
-                    }
-                    .onAppear {
-                        if let id = workspace.selectedID { proxy.scrollTo(id, anchor: .center) }
-                    }
+            // One header: tabs (or a title while there is only one), the folder,
+            // then the actions. The output below starts right after it.
+            HStack(spacing: FinderUI.rowSpacing) {
+                if workspace.tabs.count > 1 {
+                    tabStrip
+                } else {
+                    Label("Terminal", systemImage: "terminal")
+                        .font(FinderUI.detailFont.weight(.semibold))
+                        .fixedSize()
                 }
-                Button { _ = workspace.add(directory: activeTab.currentURL) } label: { Image(systemName: "plus").frame(width: 26, height: 26) }
-                    .buttonStyle(.plain).disabled(workspace.tabs.count >= TerminalWorkspace.tabLimit)
-                    .help("New terminal tab in the active pane’s folder")
-                    .accessibilityLabel("New Terminal Tab")
-                Button { appState.showTerminalDrawer = false } label: { Image(systemName: "chevron.down").frame(width: 26, height: 26) }
-                    .buttonStyle(.plain).help("Hide Terminal (Ctrl+`)")
-                    .accessibilityLabel("Hide Terminal")
+                if let tab = workspace.selected {
+                    TerminalFolderLabel(terminal: tab, browsedPath: activeTab.currentURL.standardizedFileURL.path)
+                }
+                Spacer(minLength: FinderUI.rowSpacing)
+                if let tab = workspace.selected {
+                    TerminalTabActions(terminal: tab)
+                    Divider().frame(height: 16)
+                }
+                terminalHeaderButton("New Terminal Tab", icon: "plus",
+                                     accessibility: "New Terminal Tab") {
+                    _ = workspace.add(directory: activeTab.currentURL)
+                }
+                .disabled(workspace.tabs.count >= TerminalWorkspace.tabLimit)
+                terminalHeaderButton("Hide Terminal (Ctrl+`)", icon: "chevron.down", accessibility: "Hide Terminal") {
+                    appState.showTerminalDrawer = false
+                }
             }
-            .padding(.horizontal, FinderUI.panelInset).padding(.vertical, 4)
+            .padding(.leading, FinderUI.sectionSpacing)
+            .padding(.trailing, FinderUI.panelInset)
+            .frame(height: 32)
             .background(Color(nsColor: .windowBackgroundColor))
             Divider()
             if let tab = workspace.selected {
@@ -201,134 +193,222 @@ public struct EmbeddedTerminalDrawerView: View {
         }
         .onAppear { workspace.ensureInitial(directory: activeTab.currentURL) }
     }
+
+    private var tabStrip: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 2) {
+                    ForEach(workspace.tabs) { tab in
+                        let isSelected = workspace.selectedID == tab.id
+                        HStack(spacing: 2) {
+                            Button { workspace.select(tab.id) } label: {
+                                Text("Terminal \(tab.ordinal)")
+                                    .font(FinderUI.detailFont.weight(isSelected ? .semibold : .regular))
+                                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                                    .lineLimit(1)
+                                    .padding(.leading, 10)
+                                    .padding(.vertical, 4)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
+                            Button { workspace.close(tab.id) } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 18, height: 18)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.trailing, 4)
+                            .help("Close the tab and cancel its command")
+                            .accessibilityLabel("Close Terminal \(tab.ordinal)")
+                        }
+                        // Grey like the other mode pills; blue stays for selection in lists.
+                        .background(isSelected ? Color.primary.opacity(0.08) : Color.clear, in: Capsule())
+                        .id(tab.id)
+                    }
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: 420, alignment: .leading)
+            .onChange(of: workspace.selectedID) { _, id in
+                if let id { proxy.scrollTo(id, anchor: .center) }
+            }
+            .onAppear {
+                if let id = workspace.selectedID { proxy.scrollTo(id, anchor: .center) }
+            }
+        }
+    }
+}
+
+/// Header controls shared by the drawer: borderless, secondary, 24 pt targets.
+private func terminalHeaderButton(_ help: LocalizedStringKey, icon: String, accessibility: LocalizedStringKey,
+                                  action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+        Image(systemName: icon)
+            .font(.system(size: 14))
+            .foregroundStyle(FinderUI.metadataColor)
+            .frame(width: 28, height: 28)
+            .contentShape(Rectangle())
+    }
+    .buttonStyle(.borderless)
+    .help(help)
+    .accessibilityLabel(accessibility)
+}
+
+/// The selected tab's folder, kept current as `cd` moves it. Shown only when the
+/// shell has moved away from the folder being browsed; the prompt names it anyway.
+private struct TerminalFolderLabel: View {
+    @ObservedObject var terminal: TerminalTab
+    let browsedPath: String
+    var body: some View {
+        if terminal.directory.standardizedFileURL.path != browsedPath {
+            label
+        }
+    }
+
+    private var label: some View {
+        Text(terminal.directory.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+            .font(FinderUI.detailFont)
+            .foregroundStyle(FinderUI.metadataColor)
+            .lineLimit(1)
+            .truncationMode(.head)
+            .textSelection(.enabled)
+            .help(terminal.directory.path)
+            .accessibilityLabel("Current folder: \(terminal.directory.path)")
+    }
+}
+
+private struct TerminalTabActions: View {
+    @ObservedObject var terminal: TerminalTab
+    var body: some View {
+        HStack(spacing: FinderUI.rowSpacing) {
+            // Icons like the rest of the header; the tooltip names each.
+            terminalHeaderButton("Clear Terminal Output", icon: "trash", accessibility: "Clear Terminal Output") {
+                terminal.clear()
+            }
+            .disabled(terminal.transcript.lines.isEmpty)
+            terminalHeaderButton("Open Folder in External Terminal", icon: "arrow.up.forward.app",
+                                 accessibility: "Open Folder in External Terminal") {
+                FileOperationsManager.shared.openInTerminal(at: terminal.directory)
+            }
+        }
+    }
 }
 
 private struct TerminalTabContent: View {
     @ObservedObject var appState: AppState
     @ObservedObject var terminal: TerminalTab
     @FocusState private var isInputFocused: Bool
-    private var outputLines: [TerminalOutputLine] { terminal.transcript.lines }
+    // A command's trailing newline would leave an empty line before the prompt.
+    private var outputLines: [TerminalOutputLine] {
+        var lines = terminal.transcript.lines[...]
+        while let last = lines.last, !last.isCommand, last.text.trimmingCharacters(in: .whitespaces).isEmpty {
+            lines = lines.dropLast()
+        }
+        return Array(lines)
+    }
     private var isRunning: Bool { terminal.isRunning }
+    private static let monoFont = Font.system(size: 13, design: .monospaced)
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: FinderUI.rowSpacing) {
-                Label("Terminal", systemImage: "terminal")
-                    .font(FinderUI.titleFont)
-                    .fixedSize()
-
-                Text(terminal.directory.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-                    .font(FinderUI.detailFont.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .help(terminal.directory.path)
-                    .accessibilityLabel("Current folder: \(terminal.directory.path)")
-
-                terminalIconButton("Clear Terminal Output", icon: "trash") {
-                    terminal.clear()
-                }
-                .disabled(outputLines.isEmpty)
-
-                terminalIconButton("Open Folder in External Terminal", icon: "arrow.up.forward.app") {
-                    FileOperationsManager.shared.openInTerminal(at: terminal.directory)
-                }
-
-            }
-            .padding(.horizontal, FinderUI.panelInset)
-            .padding(.vertical, FinderUI.compactSpacing)
-            .background(Color(nsColor: .windowBackgroundColor))
-
-            Divider()
-
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
+                  // The prompt continues the transcript right after the last output, like a terminal.
+                  // The prompt keeps the transcript's own line pitch.
+                  VStack(alignment: .leading, spacing: 2) {
+                    LazyVStack(alignment: .leading, spacing: 2) {
                         if outputLines.isEmpty {
                             Text(isRunning ? String(localized: "Running command…") : String(localized: "No output. Enter a command below."))
                                 .font(FinderUI.detailFont)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        ForEach(outputLines) { line in
-                            Text(line.text)
-                                .font(FinderUI.detailFont.monospaced().weight(line.isCommand ? .semibold : .regular))
-                                .foregroundStyle(
-                                    line.isCommand
-                                    ? Color.accentColor
-                                    : (line.isError ? Color.red : Color.primary)
-                                )
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        ForEach(Array(outputLines.enumerated()), id: \.element.id) { index, line in
+                            outputLine(line)
+                                // A little air before each command groups it with its output.
+                                .padding(.top, line.isCommand && index > 0 ? 8 : 0)
                                 .id(line.id)
                         }
                     }
-                    .padding(.horizontal, FinderUI.panelInset)
-                    .padding(.vertical, FinderUI.rowSpacing)
+                    inputRow.id(Self.inputRowID)
+                  }
+                  .padding(.horizontal, FinderUI.sectionSpacing)
+                  .padding(.vertical, FinderUI.rowSpacing + 2)
                 }
-                .background(Color(nsColor: .textBackgroundColor))
                 .onChange(of: outputLines.last?.id) { _, _ in
-                    if let last = outputLines.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                    proxy.scrollTo(Self.inputRowID, anchor: .bottom)
                 }
             }
 
-            Divider()
-
-            HStack(spacing: FinderUI.rowSpacing) {
-                Text("\(terminal.directory.lastPathComponent) %")
-                    .font(FinderUI.detailFont.monospaced().weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: 100, alignment: .leading)
-                    .help(terminal.directory.path)
-                    .accessibilityHidden(true)
-
-                TextField("Enter a zsh command…", text: $terminal.commandInput)
-                    .textFieldStyle(.plain)
-                    .font(FinderUI.bodyFont.monospaced())
-                    .focused($isInputFocused)
-                    .disabled(isRunning)
-                    .accessibilityLabel("Terminal command")
-                    .help("Press Return to run the command in the current folder. Interactive commands require an external terminal.")
-                    .onSubmit {
-                        let cmd = terminal.commandInput
-                        guard !isRunning, !cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                        terminal.commandInput = ""
-                        terminal.execute(cmd)
-                    }
-
-                if isRunning {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel("Running command")
-                    Button("Cancel") { terminal.cancel() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .help("Cancel the current command")
-                }
-            }
-            .padding(.horizontal, FinderUI.panelInset)
-            .padding(.vertical, FinderUI.rowSpacing)
-            .background(Color(nsColor: .controlBackgroundColor))
         }
+        // One step off the file list's surface, so the two regions never blur together.
+        .background(Color(nsColor: .textBackgroundColor).overlay(Color.primary.opacity(0.035)))
         .onAppear { isInputFocused = true }
-
     }
 
-    private func terminalIconButton(_ label: LocalizedStringKey, icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(FinderUI.detailFont)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
+    private static let inputRowID = "terminal-input-row"
+
+    private var inputRow: some View {
+        HStack(spacing: FinderUI.rowSpacing) {
+            Text("\(terminal.directory.lastPathComponent) %")
+                .font(Self.monoFont)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 140, alignment: .leading)
+                .fixedSize()
+                .help(terminal.directory.path)
+                .accessibilityHidden(true)
+
+            // The hint a step lighter than the prompt, so the prompt reads as content.
+            TextField("Enter a zsh command…", text: $terminal.commandInput,
+                      prompt: Text("Enter a zsh command…").foregroundColor(Color(nsColor: .secondaryLabelColor).opacity(0.8)))
+                .textFieldStyle(.plain)
+                .font(Self.monoFont)
+                .focused($isInputFocused)
+                .disabled(isRunning)
+                .accessibilityLabel("Terminal command")
+                .help("Press Return to run the command in the current folder. Interactive commands require an external terminal.")
+                .onSubmit {
+                    let cmd = terminal.commandInput
+                    guard !isRunning, !cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                    terminal.commandInput = ""
+                    terminal.execute(cmd)
+                }
+
+            if isRunning {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Running command")
+                Button("Cancel") { terminal.cancel() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Cancel the current command")
+            }
         }
-        .buttonStyle(.borderless)
-        .help(label)
-        .accessibilityLabel(label)
     }
 
+    /// Commands read "Studio % ls -lh": the prompt quiet, the command firm.
+    /// Output is plain; errors use the system red.
+    @ViewBuilder
+    private func outputLine(_ line: TerminalOutputLine) -> some View {
+        Group {
+            if line.isCommand, let split = line.text.range(of: "] % "), line.text.hasPrefix("[") {
+                let folder = String(line.text[line.text.index(after: line.text.startIndex)..<split.lowerBound])
+                let command = String(line.text[split.upperBound...])
+                (Text(verbatim: "\(folder) % ").foregroundColor(.secondary)
+                    + Text(verbatim: command).fontWeight(.semibold).foregroundColor(.primary))
+                    .font(Self.monoFont)
+            } else {
+                Text(line.text)
+                    .font(Self.monoFont.weight(line.isCommand ? .semibold : .regular))
+                    .foregroundStyle(line.isError ? Color(nsColor: .systemRed) : Color.primary.opacity(0.85))
+            }
+        }
+        .lineSpacing(3)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }

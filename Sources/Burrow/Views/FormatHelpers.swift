@@ -51,6 +51,8 @@ public enum FormatHelpers {
         let df = DateFormatter()
         df.dateStyle = .medium
         df.timeStyle = .short
+        // "Today at 12:58", as Finder shows recent dates.
+        df.doesRelativeDateFormatting = true
         return df
     }()
 

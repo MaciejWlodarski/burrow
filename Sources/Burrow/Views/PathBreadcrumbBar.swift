@@ -16,6 +16,9 @@ public struct PathBreadcrumbBar: View {
     @ViewState private var editablePathText: String = ""
     @ViewState private var pathValidationMessage: String? = nil
     @ViewState private var isPathFieldFocused = false
+    /// The folder menu and the current folder's subfolder arrow appear on hover,
+    /// so the resting bar is just the path.
+    @ViewState private var isHoveringBar = false
 
     public init(appState: AppState, pane: PaneTabState) {
         self.appState = appState
@@ -70,12 +73,15 @@ public struct PathBreadcrumbBar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 pathEditor
-                pathActionButton(icon: "doc.on.doc", label: String(localized: "Copy Current Folder Path"), help: pane.currentURL.path) {
-                    activatePane()
-                    FileOperationsManager.shared.copyPathString(pane.currentURL.path)
+                if pane.isEditingPathBar { folderActionsMenu }
+            }
+            // At rest the menu floats over the free end of the bar, so it does not
+            // take width from the breadcrumbs.
+            .overlay(alignment: .trailing) {
+                if !pane.isEditingPathBar {
+                    folderActionsMenu
+                        .opacity(isHoveringBar ? 1 : 0)
                 }
-                .accessibilityIdentifier("folder.address.copy")
-                folderActionsMenu
             }
 
             if pane.isEditingPathBar, let message = pathValidationMessage {
@@ -87,13 +93,13 @@ public struct PathBreadcrumbBar: View {
                     .padding(.horizontal, 8)
             }
         }
-        .font(FinderUI.bodyFont)
-        .padding(.horizontal, FinderUI.chromeInset)
-        .padding(.vertical, 6)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .font(FinderUI.detailFont)
+        .padding(.horizontal, FinderUI.rowSpacing)
+        .padding(.vertical, 3)
         .overlay(alignment: .bottom) {
             Divider()
         }
+        .onHover { isHoveringBar = $0 }
         .onAppear { editablePathText = pane.currentURL.path }
         .onChange(of: pane.isEditingPathBar) { _, editing in
             if !editing { resetEditor() }
@@ -115,11 +121,12 @@ public struct PathBreadcrumbBar: View {
 
     private var pathEditor: some View {
         HStack(spacing: 6) {
-            Image(systemName: "folder")
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
-                .contentShape(Rectangle())
-                .onTapGesture { beginEditingFromBreadcrumbs() }
+            // The disk icon already starts the breadcrumbs; the folder glyph marks the editable field.
+            if pane.isEditingPathBar {
+                Image(systemName: "folder")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
 
             if pane.isEditingPathBar {
                 FolderAddressTextField(
@@ -154,13 +161,17 @@ public struct PathBreadcrumbBar: View {
                 breadcrumbs
             }
         }
-        .padding(.leading, 10)
+        .padding(.leading, pane.isEditingPathBar ? 10 : 2)
         .padding(.trailing, pane.isEditingPathBar ? 10 : 0)
-        .frame(minHeight: 32)
-        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
+        .frame(minHeight: 28)
+        // The breadcrumbs sit flat in the header; only the editable path is a field.
+        .background(pane.isEditingPathBar ? Color(nsColor: .textBackgroundColor) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
         .overlay {
-            RoundedRectangle(cornerRadius: FinderUI.cornerRadius)
-                .strokeBorder(pathValidationMessage != nil ? Color.red : (isPathFieldFocused ? Color.accentColor : Color.secondary.opacity(0.25)), lineWidth: 1)
+            if pane.isEditingPathBar {
+                RoundedRectangle(cornerRadius: FinderUI.cornerRadius)
+                    .strokeBorder(pathValidationMessage != nil ? Color.red : (isPathFieldFocused ? Color.accentColor : Color.secondary.opacity(0.25)), lineWidth: 1)
+            }
         }
     }
 
@@ -199,10 +210,9 @@ public struct PathBreadcrumbBar: View {
                         Button(segment.isRoot ? segment.name : segment.url.path) { navigate(to: segment.url) }
                     }
                 } label: {
-                    Image(systemName: "chevron.left.2")
-                        .font(.system(size: 9, weight: .semibold))
+                    Text(verbatim: "…")
                         .foregroundStyle(.secondary)
-                        .frame(width: 20, height: 22)
+                        .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
@@ -223,7 +233,8 @@ public struct PathBreadcrumbBar: View {
                         Text(segment.name)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                            .fontWeight(isCurrent ? .semibold : .regular)
+                            // Primary, not bold: the window title above already names this folder.
+                            .foregroundStyle(isCurrent ? Color.primary : Color.primary.opacity(0.8))
                     }
                     .padding(.horizontal, 5)
                     .frame(minHeight: 22)
@@ -242,6 +253,7 @@ public struct PathBreadcrumbBar: View {
                     open: { navigate(to: $0) }
                 )
                 .frame(width: 16, height: 22)
+                .opacity(!isCurrent || isHoveringBar ? 1 : 0)
                 .help("Subfolders: \(segment.name)")
             }
         }
@@ -287,8 +299,9 @@ public struct PathBreadcrumbBar: View {
                 Label("New Folder…", systemImage: "folder.badge.plus")
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .frame(width: FinderUI.iconButtonSize, height: FinderUI.iconButtonSize)
+            Image(systemName: "ellipsis")
+                .foregroundStyle(.secondary)
+                .frame(width: FinderUI.iconButtonSize, height: 24)
                 .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)

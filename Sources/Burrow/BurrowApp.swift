@@ -15,17 +15,9 @@ struct BurrowApp: App {
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
         .windowStyle(.titleBar)
-        .windowToolbarStyle(.unified(showsTitle: false))
+        .windowToolbarStyle(.unified(showsTitle: true))
         .defaultSize(width: 1200, height: 760)
         .commands {
-            // App Settings (Cmd+,)
-            CommandGroup(replacing: .appSettings) {
-                Button("Settings…") {
-                    appState.showSettingsSheet = true
-                }
-                .keyboardShortcut(",", modifiers: [.command])
-            }
-
             // File Menu Additions
             CommandGroup(replacing: .newItem) {
                 Button("New Tab") {
@@ -51,7 +43,8 @@ struct BurrowApp: App {
 
                 Button("Close Tab") {
                     if appState.isDualPane && appState.activePaneSide == .right {
-                        appState.toggleDualPane()
+                        // The right pane's last tab closes the pane itself.
+                        if appState.rightTabs.count > 1 { appState.closeTab(appState.activeRightTabId) } else { appState.toggleDualPane() }
                     } else if appState.tabs.count > 1 {
                         appState.closeTab(appState.activeTabId)
                     } else {
@@ -270,10 +263,10 @@ struct BurrowApp: App {
             CommandGroup(after: .windowArrangement) {
                 Button("Show Next Tab") { appState.selectAdjacentTab(offset: 1) }
                     .keyboardShortcut("]", modifiers: [.command, .shift])
-                    .disabled(appState.tabs.count < 2)
+                    .disabled(appState.tabs(on: appState.isDualPane ? appState.activePaneSide : .left).count < 2)
                 Button("Show Previous Tab") { appState.selectAdjacentTab(offset: -1) }
                     .keyboardShortcut("[", modifiers: [.command, .shift])
-                    .disabled(appState.tabs.count < 2)
+                    .disabled(appState.tabs(on: appState.isDualPane ? appState.activePaneSide : .left).count < 2)
             }
             CommandGroup(replacing: .help) {
                 Button("Burrow Guide") { Self.openProjectPage("blob/main/docs/GUIDE.md") }
@@ -285,6 +278,11 @@ struct BurrowApp: App {
                 Button("Report an Issue…") { Self.openProjectPage("issues/new/choose") }
                 Button("Burrow on GitHub") { Self.openProjectPage("") }
             }
+        }
+
+        // Settings… (⌘,) opens this window; other entry points set showSettingsSheet.
+        Settings {
+            FSearchSettingsSheetView(appState: AppState.shared)
         }
     }
 

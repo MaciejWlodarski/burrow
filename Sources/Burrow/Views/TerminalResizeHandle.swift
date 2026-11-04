@@ -10,15 +10,10 @@ struct TerminalResizeHandle: View {
     @ViewState private var isHovered = false
 
     var body: some View {
-        ZStack {
-            Color(nsColor: .windowBackgroundColor)
-            Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
-            Capsule()
-                .fill(keyboardFocus.hasFocus ? Color.accentColor : Color.secondary.opacity(isHovered ? 0.8 : 0.45))
-                .frame(width: 34, height: 3)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: TerminalDrawerLayout.dividerHeight)
+        // The list above ends under a hairline; the grip sits on its own strip,
+        // the same as the disk map's tree and map split.
+        SplitGripStrip(isHighlighted: isHovered, isFocused: keyboardFocus.hasFocus)
+            .frame(height: TerminalDrawerLayout.dividerHeight)
         .contentShape(Rectangle())
         .background(TerminalResizeCursor(focus: keyboardFocus, onIncrease: onIncrease, onDecrease: onDecrease))
         .onHover { isHovered = $0 }
