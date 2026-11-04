@@ -39,7 +39,7 @@ public struct DiskMapLayout: Sendable {
 /// Recursion stops at sub-pixel sizes, so tile count follows the bitmap's area
 /// rather than the number of files on disk.
 public enum DiskMapLayoutEngine {
-    static let headerHeightPoints = 14.0
+    static let headerHeightPoints = 18.0
     private static let minimumHeaderWidthPoints = 44.0
     private static let minimumHeaderHeightPoints = 56.0
     /// A folder filling its parent repeats the same rectangle; stacked headers
@@ -165,40 +165,53 @@ public enum DiskMapLayoutEngine {
     }
 }
 
-/// Rasterizes a layout directly into a pixel buffer: per-tile cushion shading
-/// costs one table lookup per pixel, which keeps full-disk maps interactive.
+/// Rasterizes a layout directly into a pixel buffer. Tiles are flat colour
+/// with a one-pixel gutter, so neighbouring files stay distinct without the
+/// glare of cushion shading, and labels never cut off a size.
 public enum DiskMapRenderer {
-    private struct RGB {
+    struct RGB {
         let red: Double, green: Double, blue: Double
         init(_ red: Double, _ green: Double, _ blue: Double) {
             self.red = red
             self.green = green
             self.blue = blue
         }
+        /// Relative luminance, to pick a legible label colour.
+        var luminance: Double { 0.2126 * red + 0.7152 * green + 0.0722 * blue }
+        var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
     }
 
-    private static let background = RGB(0.10, 0.11, 0.13)
-    private static let folderBody = RGB(0.17, 0.19, 0.23)
-    private static let folderHeader = RGB(0.24, 0.28, 0.35)
-    private static let remainder = RGB(0.36, 0.38, 0.42)
-    private static let synthetic = RGB(0.30, 0.30, 0.31)
+    private struct Palette {
+        let gutter: RGB, folderBody: RGB, folderHeader: RGB, folderText: NSColor
+        let remainder: RGB, synthetic: RGB
 
-    private static func color(_ category: FileKindCategory) -> RGB {
+        static let light = Palette(gutter: RGB(0.97, 0.97, 0.98), folderBody: RGB(0.97, 0.97, 0.98),
+                                   folderHeader: RGB(0.88, 0.89, 0.91), folderText: NSColor(white: 0.18, alpha: 1),
+                                   remainder: RGB(0.74, 0.76, 0.79), synthetic: RGB(0.80, 0.80, 0.82))
+        static let dark = Palette(gutter: RGB(0.11, 0.11, 0.12), folderBody: RGB(0.11, 0.11, 0.12),
+                                  folderHeader: RGB(0.22, 0.23, 0.25), folderText: NSColor(white: 0.92, alpha: 1),
+                                  remainder: RGB(0.34, 0.35, 0.38), synthetic: RGB(0.28, 0.28, 0.30))
+    }
+
+    /// The same hues as `FileKindCategory.treemapColor`, so the legend,
+    /// the tree bars and the map agree.
+    static func color(_ category: FileKindCategory) -> RGB {
         switch category {
-        case .folder: return RGB(0.26, 0.46, 0.86)
-        case .code: return RGB(0.42, 0.40, 0.90)
-        case .document: return RGB(0.16, 0.66, 0.70)
-        case .image: return RGB(0.94, 0.33, 0.52)
-        case .audio: return RGB(0.26, 0.78, 0.66)
-        case .video: return RGB(0.96, 0.58, 0.18)
-        case .archive: return RGB(0.90, 0.76, 0.20)
-        case .executable: return RGB(0.90, 0.30, 0.26)
-        case .other: return RGB(0.28, 0.66, 0.92)
+        case .folder: return RGB(0.47, 0.53, 0.62)
+        case .code: return RGB(0.55, 0.47, 0.85)
+        case .document: return RGB(0.22, 0.60, 0.66)
+        case .image: return RGB(0.86, 0.38, 0.50)
+        case .audio: return RGB(0.36, 0.68, 0.45)
+        case .video: return RGB(0.92, 0.56, 0.27)
+        case .archive: return RGB(0.85, 0.69, 0.27)
+        case .executable: return RGB(0.82, 0.34, 0.31)
+        case .other: return RGB(0.56, 0.60, 0.66)
         }
     }
 
-    public static func image(layout: DiskMapLayout, tree: DiskTree, scale: Double,
+    public static func image(layout: DiskMapLayout, tree: DiskTree, scale: Double, dark: Bool = true,
                              isCancelled: () -> Bool = { false }) -> CGImage? {
+        let palette = dark ? Palette.dark : Palette.light
         let width = layout.width, height = layout.height
         let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         let info = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
@@ -207,72 +220,52 @@ public enum DiskMapRenderer {
               let data = context.data else { return nil }
         let stride = context.bytesPerRow / 4
         let pixels = data.bindMemory(to: UInt32.self, capacity: stride * height)
-        fill(pixels, stride: stride, 0, 0, Int32(width), Int32(height), background, shade: nil)
+        fill(pixels, stride: stride, 0, 0, Int32(width), Int32(height), palette.gutter)
 
-        var shadeX = [Double](), shadeY = [Double]()
+        let gap = Int32(max(1, scale.rounded()))
         for (index, tile) in layout.tiles.enumerated() {
             if index & 0xFFF == 0, isCancelled() { return nil }
-            let w = Int(tile.x1 - tile.x0), h = Int(tile.y1 - tile.y0)
+            // Leave a gutter on the right and bottom edges of every tile.
+            let x1 = tile.x1 - tile.x0 > gap * 2 ? tile.x1 - gap : tile.x1
+            let y1 = tile.y1 - tile.y0 > gap * 2 ? tile.y1 - gap : tile.y1
             if tile.isFolder && tree.childCount(tile.node) > 0 {
-                fill(pixels, stride: stride, tile.x0, tile.y0, tile.x1, tile.y1, folderBody, shade: nil)
+                fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderBody)
                 if tile.hasHeader {
                     let header = Int32((DiskMapLayoutEngine.headerHeightPoints * scale).rounded())
-                    fill(pixels, stride: stride, tile.x0, tile.y0, tile.x1, tile.y0 + header + 1, folderHeader, shade: nil)
+                    fill(pixels, stride: stride, tile.x0, tile.y0, x1, min(y1, tile.y0 + header + 1), palette.folderHeader)
                 }
                 continue
             }
             let base: RGB
-            if tile.isRemainder { base = remainder }
-            else if tree.isSynthetic(tile.node) { base = synthetic }
+            if tile.isRemainder { base = palette.remainder }
+            else if tree.isSynthetic(tile.node) { base = palette.synthetic }
             else { base = color(tree.category(tile.node)) }
-            cushion(&shadeX, count: w)
-            cushion(&shadeY, count: h)
-            fill(pixels, stride: stride, tile.x0, tile.y0, tile.x1, tile.y1, base, shade: (shadeX, shadeY))
+            fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, base)
         }
 
-        drawLabels(context, layout: layout, tree: tree, scale: scale)
+        drawLabels(context, layout: layout, tree: tree, scale: scale, palette: palette)
         return context.makeImage()
     }
 
-    /// Parabolic height profile of a tile edge; bright centre, dark rim.
-    private static func cushion(_ table: inout [Double], count: Int) {
-        table.removeAll(keepingCapacity: true)
-        table.reserveCapacity(count)
-        guard count > 1 else { table.append(1); return }
-        for index in 0..<count {
-            let position = (Double(index) + 0.5) / Double(count) * 2 - 1
-            table.append(1 - position * position)
-        }
-    }
-
-    private static func packed(_ red: Double, _ green: Double, _ blue: Double) -> UInt32 {
-        let r = UInt32(min(255, max(0, red * 255))), g = UInt32(min(255, max(0, green * 255)))
-        let b = UInt32(min(255, max(0, blue * 255)))
+    private static func packed(_ color: RGB) -> UInt32 {
+        let r = UInt32(min(255, max(0, color.red * 255))), g = UInt32(min(255, max(0, color.green * 255)))
+        let b = UInt32(min(255, max(0, color.blue * 255)))
         return 0xFF00_0000 | (r << 16) | (g << 8) | b
     }
 
     private static func fill(_ pixels: UnsafeMutablePointer<UInt32>, stride: Int, _ x0: Int32, _ y0: Int32,
-                             _ x1: Int32, _ y1: Int32, _ color: RGB, shade: (x: [Double], y: [Double])?) {
+                             _ x1: Int32, _ y1: Int32, _ color: RGB) {
         let left = Int(x0), right = Int(x1), top = Int(y0), bottom = Int(y1)
-        guard let shade else {
-            let value = packed(color.red, color.green, color.blue)
-            for y in top..<bottom {
-                let row = pixels + y * stride
-                for x in left..<right { row[x] = value }
-            }
-            return
-        }
+        guard right > left, bottom > top else { return }
+        let value = packed(color)
         for y in top..<bottom {
             let row = pixels + y * stride
-            let vertical = shade.y[y - top]
-            for x in left..<right {
-                let light = 0.62 + 0.55 * vertical * shade.x[x - left]
-                row[x] = packed(color.red * light, color.green * light, color.blue * light)
-            }
+            for x in left..<right { row[x] = value }
         }
     }
 
-    private static func drawLabels(_ context: CGContext, layout: DiskMapLayout, tree: DiskTree, scale: Double) {
+    private static func drawLabels(_ context: CGContext, layout: DiskMapLayout, tree: DiskTree, scale: Double,
+                                   palette: Palette) {
         let height = CGFloat(layout.height)
         context.saveGState()
         defer { context.restoreGState() }
@@ -281,26 +274,45 @@ public enum DiskMapRenderer {
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingMiddle
-        let folderFont = NSFont.systemFont(ofSize: CGFloat(10 * scale), weight: .semibold)
-        let fileFont = NSFont.systemFont(ofSize: CGFloat(10 * scale), weight: .medium)
+        let truncating = NSMutableParagraphStyle()
+        truncating.lineBreakMode = .byTruncatingTail
+        let nameFont = NSFont.systemFont(ofSize: CGFloat(11 * scale), weight: .semibold)
+        let sizeFont = NSFont.monospacedDigitSystemFont(ofSize: CGFloat(11 * scale), weight: .regular)
         let header = (DiskMapLayoutEngine.headerHeightPoints * scale).rounded()
+        let inset = 5 * scale, lineHeight = 14 * scale
         var drawn = 0
         for tile in layout.tiles where drawn < 800 && !tile.isRemainder {
-            let width = Double(tile.x1 - tile.x0), tileHeight = Double(tile.y1 - tile.y0)
+            let width = Double(tile.x1 - tile.x0) - scale, tileHeight = Double(tile.y1 - tile.y0) - scale
             let isGroup = tile.isFolder && tree.childCount(tile.node) > 0
-            if isGroup ? !tile.hasHeader : width / scale < 56 || tileHeight / scale < 18 { continue }
-            let text = "\(tree.name(tile.node))  \(FormatHelpers.formatBytes(tree.allocatedSize(tile.node)))"
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: isGroup ? folderFont : fileFont,
-                .foregroundColor: NSColor.white,
-                .paragraphStyle: paragraph
-            ]
-            let inset = 3 * scale
-            NSAttributedString(string: text, attributes: attributes).draw(in: CGRect(
-                x: Double(tile.x0) + inset, y: Double(tile.y0) + scale,
-                width: width - inset * 2, height: header))
+            if isGroup && !tile.hasHeader { continue }
+            let textColor: NSColor
+            if isGroup {
+                textColor = palette.folderText
+            } else {
+                let base = tree.isSynthetic(tile.node) ? palette.synthetic : color(tree.category(tile.node))
+                textColor = base.luminance > 0.62 ? NSColor(white: 0.1, alpha: 0.9) : NSColor.white
+            }
+            let size = NSAttributedString(string: FormatHelpers.formatBytes(tree.allocatedSize(tile.node)), attributes: [
+                .font: sizeFont, .foregroundColor: textColor.withAlphaComponent(isGroup ? 0.7 : 0.85)])
+            let available = width - inset * 2
+            // A tile that cannot show its full size shows nothing.
+            guard available >= size.size().width, tileHeight >= lineHeight + 2 * scale else { continue }
+            let name = NSAttributedString(string: tree.name(tile.node), attributes: [
+                .font: nameFont, .foregroundColor: textColor, .paragraphStyle: truncating])
+            let top = Double(tile.y0) + (isGroup ? (header - lineHeight) / 2 : 3 * scale)
+            if !isGroup && tileHeight >= lineHeight * 2 + 6 * scale && available >= 40 * scale {
+                name.draw(in: CGRect(x: Double(tile.x0) + inset, y: top, width: available, height: lineHeight))
+                size.draw(at: CGPoint(x: Double(tile.x0) + inset, y: top + lineHeight))
+            } else {
+                let sizeWidth = size.size().width
+                let nameWidth = available - sizeWidth - 6 * scale
+                if nameWidth >= 28 * scale {
+                    name.draw(in: CGRect(x: Double(tile.x0) + inset, y: top, width: nameWidth, height: lineHeight))
+                    size.draw(at: CGPoint(x: Double(tile.x0) + inset + available - sizeWidth, y: top))
+                } else if !isGroup {
+                    size.draw(at: CGPoint(x: Double(tile.x0) + inset, y: top))
+                }
+            }
             drawn += 1
         }
     }

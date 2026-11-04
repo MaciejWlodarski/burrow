@@ -25,7 +25,7 @@ enum FinderUI {
     static let iconButtonSize: CGFloat = 28
     static let bodyFont: Font = .body
     static let detailFont: Font = .callout
-    static let captionFont: Font = .caption
+    static let captionFont: Font = .subheadline
     static let titleFont: Font = .headline
 }
 

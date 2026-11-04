@@ -15,17 +15,9 @@ struct BurrowApp: App {
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
         .windowStyle(.titleBar)
-        .windowToolbarStyle(.unified(showsTitle: false))
+        .windowToolbarStyle(.unified(showsTitle: true))
         .defaultSize(width: 1200, height: 760)
         .commands {
-            // App Settings (Cmd+,)
-            CommandGroup(replacing: .appSettings) {
-                Button("Settings…") {
-                    appState.showSettingsSheet = true
-                }
-                .keyboardShortcut(",", modifiers: [.command])
-            }
-
             // File Menu Additions
             CommandGroup(replacing: .newItem) {
                 Button("New Tab") {
@@ -285,6 +277,11 @@ struct BurrowApp: App {
                 Button("Report an Issue…") { Self.openProjectPage("issues/new/choose") }
                 Button("Burrow on GitHub") { Self.openProjectPage("") }
             }
+        }
+
+        // Settings… (⌘,) opens this window; other entry points set showSettingsSheet.
+        Settings {
+            FSearchSettingsSheetView(appState: AppState.shared)
         }
     }
 

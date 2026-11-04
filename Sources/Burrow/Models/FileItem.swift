@@ -117,7 +117,7 @@ public enum FileKindCategory: String, CaseIterable, Sendable {
         case .video: return String(localized: "Video")
         case .archive: return String(localized: "Archive")
         case .executable: return String(localized: "Executable")
-        case .other: return String(localized: "File")
+        case .other: return String(localized: "Other")
         }
     }
 
@@ -135,18 +135,10 @@ public enum FileKindCategory: String, CaseIterable, Sendable {
         }
     }
 
+    /// Shared by the disk map, its legend and the size bars.
     public var treemapColor: Color {
-        switch self {
-        case .folder: return .blue
-        case .code: return .indigo
-        case .document: return .teal
-        case .image: return .pink
-        case .audio: return .mint
-        case .video: return .orange
-        case .archive: return .yellow
-        case .executable: return .red
-        case .other: return .cyan
-        }
+        let rgb = DiskMapRenderer.color(self)
+        return Color(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 
     public static func detect(extension ext: String, isDirectory: Bool) -> FileKindCategory {
@@ -309,6 +301,7 @@ public struct FileItem: Identifiable, Hashable, Sendable {
         case .executable: category = String(localized: "Executable")
         case .other: category = String(localized: "File")
         }
+        if let described = FileKindDescriptions.description(forExtension: fileExtension) { return described }
         return fileExtension.isEmpty ? category : "\(category) \(fileExtension.uppercased())"
     }
 
@@ -595,5 +588,27 @@ public final class FileIconCache: ObservableObject {
             }
             startThumbnail(work)
         }
+    }
+}
+
+/// The system's own name for a file type ("PDF document", "HEIF image"), as
+/// Finder shows it. Cached per extension: sorting by kind asks for it often.
+enum FileKindDescriptions {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var cache: [String: String?] = [:]
+
+    static func description(forExtension ext: String) -> String? {
+        guard !ext.isEmpty else { return nil }
+        let key = ext.lowercased()
+        lock.lock()
+        if let cached = cache[key] { lock.unlock(); return cached }
+        lock.unlock()
+        var value: String?
+        if let type = UTType(filenameExtension: key), !type.isDynamic,
+           let text = type.localizedDescription, !text.isEmpty {
+            value = text.prefix(1).uppercased() + text.dropFirst()
+        }
+        lock.lock(); cache[key] = value; lock.unlock()
+        return value
     }
 }

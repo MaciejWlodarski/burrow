@@ -53,32 +53,6 @@ public struct InspectorPreviewView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "info.circle.fill")
-                    .font(FinderUI.bodyFont)
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
-                Text("Inspector")
-                    .font(FinderUI.titleFont)
-                Spacer()
-                if activeTab.primarySelectedItem != nil {
-                    Button {
-                        appState.toggleQuickLook()
-                    } label: {
-                        Label("Quick Look", systemImage: "eye")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Open native Quick Look (Space)")
-                }
-            }
-            .padding(.horizontal, FinderUI.panelInset)
-            .frame(minHeight: 40)
-            .background(Color(nsColor: .windowBackgroundColor))
-
-            Divider()
-
             if activeTab.selectedItems.count > 1 {
                 ScrollView {
                     selectionSummary
@@ -86,12 +60,15 @@ public struct InspectorPreviewView: View {
             } else if let item = activeTab.primarySelectedItem {
                 ScrollView {
                     VStack(alignment: .leading, spacing: FinderUI.sectionSpacing) {
+                        // Live Visual Preview (Image or Code/Text)
+                        livePreviewBox(for: item)
+
                         // Top Identity Card
                         HStack(spacing: 12) {
                             Image(nsImage: FileIconCache.shared.icon(for: item))
                                 .resizable()
                                 .interpolation(.high)
-                                .frame(width: 48, height: 48)
+                                .frame(width: 36, height: 36)
                                 .accessibilityHidden(true)
 
                             VStack(alignment: .leading, spacing: 3) {
@@ -109,74 +86,25 @@ public struct InspectorPreviewView: View {
                                         .foregroundStyle(.orange)
                                 }
                             }
-                            Spacer()
+                            Spacer(minLength: 0)
+                            Button {
+                                appState.toggleQuickLook()
+                            } label: {
+                                Image(systemName: "eye")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Open native Quick Look (Space)")
+                            .accessibilityLabel("Quick Look")
                         }
 
-                        // Interactive macOS Color Tags Picker
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack(spacing: FinderUI.rowSpacing) {
-                                Text("macOS Tags")
-                                    .font(FinderUI.detailFont.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityAddTraits(.isHeader)
-                                Spacer()
-                                if !item.tags.isEmpty {
-                                    Button("Clear") {
-                                        fileOps.clearTags(for: [item])
-                                        activeTab.reloadDirectory()
-                                    }
-                                    .buttonStyle(.borderless)
-                                    .controlSize(.small)
-                                    .help("Remove all tags from this item")
-                                }
-                            }
-                            HStack(spacing: FinderUI.compactSpacing) {
-                                ForEach(FinderTagColor.allCases) { tagColor in
-                                    let isTagged = item.tags.contains(tagColor)
-                                    Button {
-                                        fileOps.toggleTag(tagColor, for: [item])
-                                        activeTab.reloadDirectory()
-                                    } label: {
-                                        Circle()
-                                            .fill(tagColor.swiftUIColor)
-                                            .frame(width: 16, height: 16)
-                                            .overlay(
-                                                Circle()
-                                                    .stroke(isTagged ? Color.primary : Color.clear, lineWidth: 2)
-                                            )
-                                            .overlay {
-                                                if isTagged {
-                                                    Image(systemName: "checkmark")
-                                                        .font(.system(size: 9, weight: .bold))
-                                                        .foregroundStyle(.white)
-                                                        .shadow(color: .black.opacity(0.8), radius: 1)
-                                                }
-                                            }
-                                            .frame(width: 24, height: 24)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help(isTagged ? String(localized: "Remove tag: \(tagColor.displayName)") : String(localized: "Add tag: \(tagColor.displayName)"))
-                                    .accessibilityLabel("Tag: \(tagColor.displayName)")
-                                    .accessibilityValue(isTagged ? String(localized: "Added") : String(localized: "Not added"))
-                                    .accessibilityAddTraits(isTagged ? .isSelected : [])
-                                }
-                                Spacer()
-                            }
-                        }
-                        .padding(8)
-                        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
-
-                        // Live Visual Preview (Image or Code/Text)
-                        livePreviewBox(for: item)
 
                         Divider()
 
                         // Metadata + Interactive chmod Permissions
                         VStack(alignment: .leading, spacing: 7) {
-                            Text("Details and Permissions")
+                            Text("Details")
                                 .font(FinderUI.detailFont.weight(.semibold))
-                                .foregroundStyle(.secondary)
 
                             metadataRow(
                                 label: "Size",
@@ -250,18 +178,73 @@ public struct InspectorPreviewView: View {
                             }
 
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Full path:")
+                                Text("Where")
                                     .font(FinderUI.detailFont)
                                     .foregroundStyle(.secondary)
-                                Text(item.path)
-                                    .font(FinderUI.detailFont.monospaced())
+                                Text(item.parentPath)
+                                    .font(FinderUI.detailFont)
                                     .foregroundStyle(.primary)
                                     .textSelection(.enabled)
-                                    .padding(6)
+                                    .fixedSize(horizontal: false, vertical: true)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
+                                    .help(item.path)
                             }
                         }
+
+                        Divider()
+
+                        // Interactive macOS Color Tags Picker
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(spacing: FinderUI.rowSpacing) {
+                                Text("Tags")
+                                    .font(FinderUI.detailFont.weight(.semibold))
+                                    .accessibilityAddTraits(.isHeader)
+                                Spacer()
+                                if !item.tags.isEmpty {
+                                    Button("Clear") {
+                                        fileOps.clearTags(for: [item])
+                                        activeTab.reloadDirectory()
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .controlSize(.small)
+                                    .help("Remove all tags from this item")
+                                }
+                            }
+                            HStack(spacing: FinderUI.compactSpacing) {
+                                ForEach(FinderTagColor.allCases) { tagColor in
+                                    let isTagged = item.tags.contains(tagColor)
+                                    Button {
+                                        fileOps.toggleTag(tagColor, for: [item])
+                                        activeTab.reloadDirectory()
+                                    } label: {
+                                        Circle()
+                                            .fill(tagColor.swiftUIColor)
+                                            .frame(width: 16, height: 16)
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(isTagged ? Color.primary : Color.clear, lineWidth: 2)
+                                            )
+                                            .overlay {
+                                                if isTagged {
+                                                    Image(systemName: "checkmark")
+                                                        .font(.system(size: 9, weight: .bold))
+                                                        .foregroundStyle(.white)
+                                                        .shadow(color: .black.opacity(0.8), radius: 1)
+                                                }
+                                            }
+                                            .frame(width: 24, height: 24)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(isTagged ? String(localized: "Remove tag: \(tagColor.displayName)") : String(localized: "Add tag: \(tagColor.displayName)"))
+                                    .accessibilityLabel("Tag: \(tagColor.displayName)")
+                                    .accessibilityValue(isTagged ? String(localized: "Added") : String(localized: "Not added"))
+                                    .accessibilityAddTraits(isTagged ? .isSelected : [])
+                                }
+                                Spacer()
+                            }
+                        }
+
 
                         // Checksums (SHA-256 & MD5) for Files
                         if !item.isDirectory {
@@ -275,7 +258,6 @@ public struct InspectorPreviewView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Quick Actions")
                                 .font(FinderUI.detailFont.weight(.semibold))
-                                .foregroundStyle(.secondary)
 
                             if item.isExtractableArchive {
                                 inspectorActionButton(title: "Extract Archive Here", icon: "archivebox.fill") {
@@ -688,16 +670,17 @@ public struct InspectorPreviewView: View {
                 Image(nsImage: nsImg)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxHeight: 190)
-                    .clipShape(RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
+                    .frame(maxHeight: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
                     .accessibilityLabel("Preview: \(item.name)")
                 Text("\(previewPixelWidth) × \(previewPixelHeight) px")
-                    .font(FinderUI.detailFont.monospaced())
+                    .font(FinderUI.captionFont)
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
-            .padding(8)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
+            .padding(.vertical, FinderUI.compactSpacing)
         } else if !textPreviewLines.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {

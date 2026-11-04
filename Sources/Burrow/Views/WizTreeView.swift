@@ -293,6 +293,7 @@ enum DiskMapPresentation {
 }
 
 public struct WizTreeAnalyzerView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var appState: AppState
     @ObservedObject var pane: PaneTabState
     public let paneSide: PaneSide
@@ -392,13 +393,10 @@ public struct WizTreeAnalyzerView: View {
             // Top WizTree Control & Telemetry Bar
             analyzerHeaderBar
 
-            Divider()
-
-            // Category Distribution Strip
             if !categoryStats.isEmpty {
                 categoryBreakdownStrip
-                Divider()
             }
+            Divider()
 
             if let diagnostic = scanDiagnostic {
                 analysisNotice(diagnostic)
@@ -409,12 +407,6 @@ public struct WizTreeAnalyzerView: View {
             if let error = duplicateActionError {
                 analysisNotice(error, isError: true)
             }
-            Text(scanScopeNote)
-                .font(FinderUI.captionFont)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, FinderUI.sectionSpacing)
-                .padding(.vertical, FinderUI.compactSpacing)
             // Main Content
             if let scan = activeMapScan, mapTree == nil {
                 mapScanProgress(scan)
@@ -513,7 +505,7 @@ public struct WizTreeAnalyzerView: View {
                     analyzerTitle
                     analysisModePicker
                         .pickerStyle(.segmented)
-                        .frame(width: 420)
+                        .fixedSize()
                     Spacer(minLength: 0)
                     wholeDiskButton
                     refreshScanButton
@@ -543,21 +535,18 @@ public struct WizTreeAnalyzerView: View {
                     Button("Cancel Scan") { cancelScan() }.controlSize(.small)
                 }
             }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: FinderUI.rowSpacing) { analysisTelemetry }
-                VStack(alignment: .leading, spacing: FinderUI.compactSpacing) { analysisTelemetry }
-            }
-            .font(FinderUI.captionFont)
-            .monospacedDigit()
-            .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: FinderUI.rowSpacing) { analysisTelemetry }
+                .font(FinderUI.detailFont)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, FinderUI.sectionSpacing)
-        .padding(.vertical, FinderUI.rowSpacing)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .padding(.top, 10)
+        .padding(.bottom, FinderUI.rowSpacing)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private var analyzerTitle: some View {
-        Label("Disk Space Analysis", systemImage: "square.grid.3x1.below.line.grid.1x2.fill")
+        Text("Disk Space Analysis")
             .font(FinderUI.titleFont)
             .fixedSize()
     }
@@ -599,24 +588,29 @@ public struct WizTreeAnalyzerView: View {
 
     @ViewBuilder
     private var analysisTelemetry: some View {
-        Text("\(telemetryTotalTitle): \(FormatHelpers.formatBytes(totalScannedBytes))")
-            .fontWeight(.semibold)
+        Text(FormatHelpers.formatBytes(totalScannedBytes))
+            .font(.title3.weight(.semibold))
+            .monospacedDigit()
             .foregroundStyle(.primary)
             .fixedSize()
-        Text("Files: \(totalScannedFiles.formatted())")
+        Text(telemetryDetails)
             .fixedSize()
-        if scanDurationMs > 0 {
-            Text("Time: \(scanDurationMs >= 1000 ? String(format: "%.1f s", scanDurationMs / 1000) : FormatHelpers.formatLatency(scanDurationMs))")
-                .fixedSize()
-        }
+        Image(systemName: "info.circle")
+            .foregroundStyle(.tertiary)
+            .help(scanScopeNote)
+            .accessibilityLabel(scanScopeNote)
+    }
+
+    /// "used · 44 files · 213 GB free · scanned 1:04 PM"
+    private var telemetryDetails: String {
+        var parts = [telemetryTotalTitle.lowercased(), String(localized: "\(totalScannedFiles.formatted()) files")]
         if isMapMode, let free = mapTree?.volumeFreeBytes {
-            Text("Free: \(FormatHelpers.formatBytes(free))")
-                .fixedSize()
+            parts.append(String(localized: "\(FormatHelpers.formatBytes(free)) free on disk"))
         }
         if isMapMode, let mapTree {
-            Text("Scanned: \(mapTree.scannedAt.formatted(date: .omitted, time: .shortened))")
-                .fixedSize()
+            parts.append(String(localized: "scanned \(mapTree.scannedAt.formatted(date: .omitted, time: .shortened))"))
         }
+        return parts.joined(separator: " · ")
     }
 
     private var telemetryTotalTitle: String {
@@ -728,49 +722,44 @@ public struct WizTreeAnalyzerView: View {
     // MARK: - Category Legend & Proportional Bar
 
     private var categoryBreakdownStrip: some View {
-        VStack(spacing: 6) {
-            // Proportional Multi-Color Bar
+        VStack(alignment: .leading, spacing: 8) {
             GeometryReader { geo in
-                HStack(spacing: 1.5) {
+                HStack(spacing: 2) {
                     ForEach(categoryStats, id: \.0.rawValue) { cat, bytes, _ in
                         let frac = totalScannedBytes > 0 ? CGFloat(bytes) / CGFloat(totalScannedBytes) : 0
                         if frac > 0.005 {
-                            RoundedRectangle(cornerRadius: 2.5)
-                                .fill(cat.treemapColor.gradient)
+                            Rectangle()
+                                .fill(cat.treemapColor)
                                 .frame(width: max(4, geo.size.width * frac))
                         }
                     }
                 }
+                .clipShape(Capsule())
             }
-            .frame(height: 7)
+            .frame(height: 6)
 
-            // Legend Pills
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: 16) {
                     ForEach(categoryStats.prefix(7), id: \.0.rawValue) { cat, bytes, count in
-                        let pct = totalScannedBytes > 0 ? Double(bytes) * 100.0 / Double(totalScannedBytes) : 0
                         HStack(spacing: 5) {
                             Circle()
                                 .fill(cat.treemapColor)
                                 .frame(width: 8, height: 8)
                             Text(cat.displayName)
-                                .font(FinderUI.captionFont.weight(.semibold))
-                            Text("\(FormatHelpers.formatBytes(bytes)) (\(String(format: "%.1f%%", pct)))")
-                                .font(FinderUI.captionFont)
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                            Text("Files: \(count)")
-                                .font(FinderUI.captionFont)
+                                .foregroundStyle(.primary)
+                            Text(FormatHelpers.formatBytes(bytes))
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
                         }
+                        .help(String(localized: "\(count.formatted()) files"))
                     }
                 }
+                .font(FinderUI.detailFont)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+        .padding(.horizontal, FinderUI.sectionSpacing)
+        .padding(.bottom, 10)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     // MARK: - Split Workspace: Expandable Tree + Full-Depth Treemap
@@ -779,6 +768,8 @@ public struct WizTreeAnalyzerView: View {
         VSplitView {
             // Optional detail columns collapse in narrow panes, like the file list.
             GeometryReader { geometry in
+                VStack(spacing: 0) {
+                diskTreeHeader(availableWidth: geometry.size.width)
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 0) {
@@ -792,6 +783,7 @@ public struct WizTreeAnalyzerView: View {
                         if let target { proxy.scrollTo(target, anchor: .center) }
                     }
                 }
+                }
             }
             .frame(minHeight: 120, idealHeight: 240)
 
@@ -799,10 +791,27 @@ public struct WizTreeAnalyzerView: View {
                 // Live Hover / Selection HUD Bar
                 treemapHudBar(tree)
                 diskMapCanvas(tree)
-                    .background(Color(nsColor: .underPageBackgroundColor).opacity(0.45))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .padding(FinderUI.rowSpacing)
+                    .background(Color(nsColor: .controlBackgroundColor))
             }
             .frame(minHeight: 220, idealHeight: 420)
         }
+    }
+
+    private func diskTreeHeader(availableWidth: CGFloat) -> some View {
+        HStack(spacing: FinderUI.rowSpacing) {
+            Text("Name").frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 22)
+            if availableWidth >= 480 { Text("Share of Total").frame(width: availableWidth >= 650 ? 132 : 48, alignment: .trailing) }
+            Text("Size").frame(width: 80, alignment: .trailing)
+            if availableWidth >= 760 { Text("Files").frame(width: 64, alignment: .trailing) }
+        }
+        .font(FinderUI.captionFont.weight(.medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, FinderUI.sectionSpacing)
+        .frame(height: 24)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     private func diskTreeRow(_ row: DiskMapRow, tree: DiskTree, index: Int, availableWidth: CGFloat) -> some View {
@@ -859,7 +868,7 @@ public struct WizTreeAnalyzerView: View {
                     .accessibilityHidden(true)
             }
             Text(tree.name(id))
-                .font(FinderUI.detailFont.weight(tree.isDirectory(id) ? .semibold : .regular))
+                .font(FinderUI.detailFont)
                 .foregroundStyle(foreground)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -875,39 +884,38 @@ public struct WizTreeAnalyzerView: View {
             if availableWidth >= 650 {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.primary.opacity(0.07))
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(tree.category(id).treemapColor.gradient)
+                        Capsule().fill(Color.primary.opacity(0.07))
+                        Capsule()
+                            .fill(tree.isDirectory(id) ? Color.secondary.opacity(0.55) : tree.category(id).treemapColor)
                             .frame(width: max(3, geometry.size.width * CGFloat(fraction)))
                     }
                 }
-                .frame(width: 140, height: 11)
+                .frame(width: 80, height: 6)
                 .accessibilityHidden(true)
             }
             if availableWidth >= 480 {
-                Text(String(format: "%5.1f%%", fraction * 100.0))
-                    .font(FinderUI.captionFont)
+                Text(String(format: "%.1f%%", fraction * 100.0))
+                    .font(FinderUI.detailFont)
                     .monospacedDigit()
                     .foregroundStyle(secondary)
-                    .frame(width: 56, alignment: .trailing)
+                    .frame(width: 44, alignment: .trailing)
             }
             Text(FormatHelpers.formatBytes(size))
-                .font(FinderUI.captionFont.weight(.semibold))
+                .font(FinderUI.detailFont)
                 .monospacedDigit()
                 .foregroundStyle(foreground)
-                .frame(width: 90, alignment: .trailing)
+                .frame(width: 80, alignment: .trailing)
             if availableWidth >= 760 {
-                Text("Files: \(tree.fileCount(id).formatted())")
-                    .font(FinderUI.captionFont)
+                Text(tree.fileCount(id).formatted())
+                    .font(FinderUI.detailFont)
                     .monospacedDigit()
                     .foregroundStyle(secondary)
-                    .frame(width: 100, alignment: .trailing)
+                    .frame(width: 64, alignment: .trailing)
             }
         }
         .padding(.horizontal, FinderUI.sectionSpacing)
         .padding(.vertical, 5)
-        .background(isSelected ? selectionBackgroundColor : (index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.025)))
+        .background(isSelected ? selectionBackgroundColor : (index.isMultiple(of: 2) ? Color.clear : Color(nsColor: .alternatingContentBackgroundColors[1])))
         .contentShape(Rectangle())
         .help(synthetic ? String(localized: "Space used by the system, APFS snapshots, purgeable data, and folders without access") : tree.path(id))
         .accessibilityElement(children: .combine)
@@ -964,20 +972,20 @@ public struct WizTreeAnalyzerView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Image(systemName: "hand.point.up.left.fill")
-                    .font(FinderUI.captionFont)
-                    .foregroundStyle(.secondary)
-                Text("Click an item to locate it in the tree. Double-click a folder to zoom in.")
-                    .font(FinderUI.captionFont)
-                    .foregroundStyle(.secondary)
+                Text(tree.name(mapScope))
+                    .font(FinderUI.detailFont.weight(.semibold))
                     .lineLimit(1)
+                Text("· \(FormatHelpers.formatBytes(tree.allocatedSize(mapScope)))")
+                    .font(FinderUI.detailFont)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
             }
             Spacer()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4.5)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .overlay(alignment: .bottom) { Divider() }
+        .padding(.horizontal, FinderUI.sectionSpacing)
+        .frame(height: 28)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .help("Click an item to locate it in the tree. Double-click a folder to zoom in.")
     }
 
     private func remainderSize(_ tile: DiskMapTile, in tree: DiskTree) -> Int64 {
@@ -1056,6 +1064,7 @@ public struct WizTreeAnalyzerView: View {
                 mapViewport = size
                 renderMap()
             }
+            .onChange(of: colorScheme) { _, _ in renderMap() }
         }
     }
 
@@ -1589,6 +1598,7 @@ public struct WizTreeAnalyzerView: View {
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         let width = Int(mapViewport.width * scale), height = Int(mapViewport.height * scale)
         let scope = mapScope
+        let dark = colorScheme == .dark
         mapRenderTask = Task { @MainActor in
             // Coalesces live window resizing.
             try? await Task.sleep(nanoseconds: 50_000_000)
@@ -1597,7 +1607,7 @@ public struct WizTreeAnalyzerView: View {
                 tree.read {
                     guard let layout = DiskMapLayoutEngine.layout(tree: tree, scope: scope, width: width, height: height,
                                                                   scale: Double(scale), isCancelled: { Task.isCancelled }),
-                          let image = DiskMapRenderer.image(layout: layout, tree: tree, scale: Double(scale),
+                          let image = DiskMapRenderer.image(layout: layout, tree: tree, scale: Double(scale), dark: dark,
                                                             isCancelled: { Task.isCancelled }) else { return nil }
                     return DiskMapRendering(layout: layout, image: image)
                 }

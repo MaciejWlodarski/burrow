@@ -1050,249 +1050,240 @@ public struct ConflictResolutionSheetView: View {
 
 // MARK: - 6. Settings & fsearch Engine Configuration Sheet (Cmd+,)
 
+
+/// The Settings window (⌘,): native toolbar tabs with grouped forms, like
+/// System Settings. Choices apply at once; only the search index has an
+/// explicit rebuild, because rebuilding reads every indexed folder again.
 public struct FSearchSettingsSheetView: View {
     @ObservedObject var appState: AppState
-    @ObservedObject var fileOps = FileOperationsManager.shared
-
-    @ViewState private var roots: [String] = FSearchIndex.shared.configuredRoots
-    @ViewState private var skippedDirsText: String = FSearchIndex.shared.skippedDirectoryNames.sorted().joined(separator: ", ")
-    @ViewState private var skipHeavyDirs: Bool = FSearchIndex.shared.skipHeavyDevDirs
-    @ViewState private var useMMapCache: Bool = FSearchIndex.shared.usePersistentMMapCache
-    @ViewState private var conflictPolicy: FileConflictPolicy = FileOperationsManager.shared.defaultConflictPolicy
-    @ViewState private var newRootPath: String = ""
-    @ViewState private var rootPathError: String?
-    @ViewState private var repairIndexSettings = false
-    @ViewState private var confirmingSessionClear = false
-    @ViewState private var indexSettingsError: String?
 
     public init(appState: AppState) {
         self.appState = appState
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-        ScrollView {
-        VStack(alignment: .leading, spacing: FinderUI.sectionSpacing) {
-            HStack {
-                Image(systemName: "gearshape.2.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
-                Text("Burrow Settings")
-                    .font(FinderUI.titleFont)
-                Spacer()
-            }
+        TabView {
+            GeneralSettingsPane(appState: appState)
+                .frame(height: 430)
+                .tabItem { Label("General", systemImage: "gearshape") }
+            BrowsingSettingsPane()
+                .frame(minHeight: 300, idealHeight: 300)
+                .tabItem { Label("Browsing", systemImage: "folder") }
+            IndexSettingsPane(appState: appState)
+                .frame(minHeight: 470, idealHeight: 470)
+                .tabItem { Label("Search Index", systemImage: "magnifyingglass") }
+        }
+        .frame(width: 560)
+    }
+}
 
-            Divider()
+/// Short explanatory text under a settings group.
+private struct SettingsFootnote: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text)
+            .font(FinderUI.captionFont)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
 
+struct GeneralSettingsPane: View {
+    @ObservedObject var appState: AppState
+    @ViewState private var confirmingSessionClear = false
+
+    var body: some View {
+        Form {
             LanguageSettingsSection()
-            Divider()
-
             DefaultFileViewerSettingsSection()
-            Divider()
-
-            FolderSortSettingsSection()
-            Divider()
-
-            UpdateSettingsSection()
-            Divider()
-
-            VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                Toggle("Save and restore session", isOn: Binding(
+            Section {
+                Toggle("Reopen tabs and panes at launch", isOn: Binding(
                     get: { appState.restoreSessionEnabled },
                     set: { appState.setSessionRestorationEnabled($0) }
                 ))
-                Text("Session changes take effect immediately, regardless of the buttons at the bottom. Paths, tab order, both panes, views, and search text are saved locally. Selections, the clipboard, undo, and operations are not restored. Folders open right away; only tabs on a disconnected disk and saved disk maps are held until you choose “Resume”.")
-                    .font(FinderUI.captionFont).foregroundStyle(.secondary)
-                Text("Turning this off stops saving and restoring but keeps the previous save. Turning it on saves the current session. Clearing deletes the save and turns this option off; open tabs and smart folders stay unchanged.")
-                    .font(FinderUI.captionFont).foregroundStyle(.secondary)
+                LabeledContent("Saved session") {
+                    Button("Clear…", role: .destructive) { confirmingSessionClear = true }
+                }
                 if let notice = appState.sessionPersistenceNotice {
                     Text(notice).font(FinderUI.captionFont).foregroundStyle(.orange)
                 }
-                Button("Clear Saved Session and Turn Off Restoration", role: .destructive) {
-                    confirmingSessionClear = true
-                }.buttonStyle(.bordered)
-                .confirmationDialog("Delete the saved session?", isPresented: $confirmingSessionClear) {
-                    Button("Clear and Turn Off Restoration", role: .destructive) { appState.clearSavedSession() }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("The saved session can't be recovered. Open tabs will stay unchanged.")
-                }
+            } footer: {
+                SettingsFootnote(String(localized: "Folders, views and searches come back as you left them. Selections and the clipboard are not saved."))
             }
-            Divider()
+            UpdateSettingsSection()
+        }
+        .formStyle(.grouped)
+        .confirmationDialog("Delete the saved session?", isPresented: $confirmingSessionClear) {
+            Button("Clear and Turn Off Restoration", role: .destructive) { appState.clearSavedSession() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The saved session can't be recovered. Open tabs will stay unchanged.")
+        }
+    }
+}
 
+struct BrowsingSettingsPane: View {
+    @ObservedObject private var fileOps = FileOperationsManager.shared
+    @ViewState private var conflictPolicy: FileConflictPolicy = FileOperationsManager.shared.defaultConflictPolicy
+
+    var body: some View {
+        Form {
+            FolderSortSettingsSection()
+            Section {
+                Picker("When a file already exists", selection: $conflictPolicy) {
+                    ForEach(FileConflictPolicy.allCases) { policy in
+                        Text(policy.displayName).tag(policy)
+                    }
+                }
+                .onChange(of: conflictPolicy) { _, value in fileOps.defaultConflictPolicy = value }
+            } footer: {
+                SettingsFootnote(String(localized: "Used when copying or moving files onto items with the same name."))
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+struct IndexSettingsPane: View {
+    @ObservedObject var appState: AppState
+
+    @ViewState private var roots: [String] = FSearchIndex.shared.configuredRoots
+    @ViewState private var skippedDirsText: String = FSearchIndex.shared.skippedDirectoryNames.sorted().joined(separator: ", ")
+    @ViewState private var skipHeavyDirs: Bool = FSearchIndex.shared.skipHeavyDevDirs
+    @ViewState private var useMMapCache: Bool = FSearchIndex.shared.usePersistentMMapCache
+    @ViewState private var rootPathError: String?
+    @ViewState private var repairIndexSettings = false
+    @ViewState private var indexSettingsError: String?
+    @ViewState private var savedConfiguration = IndexSettingsPane.currentConfiguration()
+
+    private static func currentConfiguration() -> IndexingConfiguration {
+        IndexingConfiguration(roots: FSearchIndex.shared.configuredRoots,
+                              skippedDirectoryNames: FSearchIndex.shared.skippedDirectoryNames,
+                              skipHeavyDevDirs: FSearchIndex.shared.skipHeavyDevDirs,
+                              usePersistentMMapCache: FSearchIndex.shared.usePersistentMMapCache)
+    }
+
+    private var editedConfiguration: IndexingConfiguration {
+        IndexingConfiguration(
+            roots: roots,
+            skippedDirectoryNames: Set(skippedDirsText.split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }),
+            skipHeavyDevDirs: skipHeavyDirs, usePersistentMMapCache: useMMapCache)
+    }
+
+    private var hasChanges: Bool {
+        let edited = editedConfiguration
+        return edited.roots != savedConfiguration.roots
+            || edited.skippedDirectoryNames != savedConfiguration.skippedDirectoryNames
+            || edited.skipHeavyDevDirs != savedConfiguration.skipHeavyDevDirs
+            || edited.usePersistentMMapCache != savedConfiguration.usePersistentMMapCache
+    }
+
+    var body: some View {
+        Form {
             if let notice = FSearchIndex.shared.indexingPreferencesNotice {
-                Text(notice).font(FinderUI.detailFont).foregroundStyle(.orange)
-                Toggle("Repair: replace settings with those below and keep a copy of the original", isOn: $repairIndexSettings)
+                Section {
+                    Text(notice).foregroundStyle(.orange)
+                    Toggle("Repair: replace settings with those below and keep a copy of the original", isOn: $repairIndexSettings)
+                }
             }
-            if let indexSettingsError {
-                Text(indexSettingsError).font(FinderUI.detailFont).foregroundStyle(.red)
-            }
-            // Indexed Roots
-            VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
-                Text("Indexed Folders")
-                    .font(FinderUI.bodyFont.weight(.medium))
-
-                ScrollView {
-                    VStack(spacing: 4) {
-                        ForEach(roots, id: \.self) { root in
-                            HStack {
-                                Image(systemName: "folder.fill")
-                                    .foregroundStyle(Color.accentColor)
-                                    .accessibilityHidden(true)
-                                Text(root)
-                                    .font(FinderUI.detailFont)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .help(root)
-                                Spacer()
-                                Button(role: .destructive) {
-                                    roots.removeAll { $0 == root }
-                                } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundStyle(.red)
-                                }
-                                .buttonStyle(.borderless)
-                                .accessibilityLabel("Remove \(root) from indexed folders")
-                                .help("Remove from the index; files stay on disk")
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
+            Section {
+                if roots.isEmpty {
+                    Text("Add a folder to include its files in the index.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(roots, id: \.self) { root in
+                    HStack(spacing: FinderUI.rowSpacing) {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: root))
+                            .resizable()
+                            .frame(width: 18, height: 18)
+                            .accessibilityHidden(true)
+                        Text(root.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(root)
+                        Spacer()
+                        Button {
+                            roots.removeAll { $0 == root }
+                        } label: {
+                            Image(systemName: "minus.circle")
                         }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Remove \(root) from indexed folders")
+                        .help("Remove from the index; files stay on disk")
                     }
                 }
-                .frame(height: 115)
-                .overlay {
-                    if roots.isEmpty {
-                        Text("Add a folder to include its files in the index.")
-                            .font(FinderUI.detailFont)
-                            .foregroundStyle(.secondary)
-                    }
+                HStack {
+                    Spacer()
+                    Button("Add Folder…", action: chooseRoot)
                 }
-
-                HStack(spacing: FinderUI.rowSpacing) {
-                    TextField("Folder path, e.g. ~/Work", text: $newRootPath)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("New indexed folder")
-                        .onSubmit(addRoot)
-                        .onChange(of: newRootPath) { _, _ in rootPathError = nil }
-                    Button("Add", action: addRoot)
-                        .buttonStyle(.bordered)
-                        .disabled(newRootPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-
+            } header: {
+                Text("Indexed Folders")
+            } footer: {
                 if let rootPathError {
                     Label(rootPathError, systemImage: "exclamationmark.circle")
-                        .font(FinderUI.detailFont)
+                        .font(FinderUI.captionFont)
                         .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            Divider()
-
-            // Exclusions & MMap Cache
-            Toggle("Skip heavy developer folders and caches", isOn: $skipHeavyDirs)
-                .font(FinderUI.bodyFont)
-
-            VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                Text("Ignored folder names (comma-separated)")
-                    .font(FinderUI.detailFont)
-                    .foregroundStyle(.secondary)
-                TextField("node_modules, .git, .build...", text: $skippedDirsText)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-                    .accessibilityLabel("Ignored folder names")
+            Section {
+                Toggle("Skip developer folders and caches", isOn: $skipHeavyDirs)
+                TextField("Ignored folder names", text: $skippedDirsText, prompt: Text(verbatim: "node_modules, .git, .build"))
+                Toggle("Keep the index on disk for a faster launch", isOn: $useMMapCache)
+            } footer: {
+                SettingsFootnote(String(localized: "Separate ignored folder names with commas."))
             }
 
-            Toggle("Save the index to disk to speed up launch", isOn: $useMMapCache)
-                .font(FinderUI.bodyFont)
-                .help("Use the persistent mmap index cache")
-
-            Picker("Default action on file conflict", selection: $conflictPolicy) {
-                ForEach(FileConflictPolicy.allCases) { p in
-                    Text(p.displayName).tag(p)
+            Section {
+                LabeledContent("Files in index") {
+                    Text(appState.indexedFileCount.formatted()).monospacedDigit()
                 }
-            }
-            .font(FinderUI.bodyFont)
-
-            // Engine Diagnostics Footer
-            VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-                Text("Files in index: \(appState.indexedFileCount.formatted()) · Bloom filters: \(FSearchIndex.shared.trigramCacheCount)")
-                Text("Cache: \((FSearchIndex.shared.cacheFilePath as NSString).lastPathComponent)")
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(FSearchIndex.shared.cacheFilePath)
-            }
-            .font(FinderUI.captionFont.monospacedDigit())
-            .foregroundStyle(.secondary)
-
-
-        }
-        .font(FinderUI.bodyFont)
-        .controlSize(.regular)
-        .padding(FinderUI.sheetPadding)
-        }
-        Divider()
-        settingsActions
-            .controlSize(.regular)
-            .padding(.horizontal, FinderUI.sheetPadding)
-            .padding(.vertical, FinderUI.panelInset)
-            .background(FinderUI.sidebarSurface)
-        }
-        .frame(width: 580)
-        .frame(maxHeight: 760)
-    }
-
-    private var settingsActions: some View {
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    appState.showSettingsSheet = false
-                }
-                .keyboardShortcut(.cancelAction)
-                Button("Save and Rebuild Index") {
-                    let parsedSkip = Set(
-                        skippedDirsText
-                            .split(separator: ",")
-                            .map { $0.trimmingCharacters(in: .whitespaces) }
-                            .filter { !$0.isEmpty }
-                    )
-                    do {
-                        try FSearchIndex.shared.saveConfigurationAndRebuild(IndexingConfiguration(
-                            roots: roots, skippedDirectoryNames: parsedSkip,
-                            skipHeavyDevDirs: skipHeavyDirs, usePersistentMMapCache: useMMapCache),
-                            explicitlyRepair: repairIndexSettings)
-                        fileOps.defaultConflictPolicy = conflictPolicy
-                        appState.showSettingsSheet = false
-                    } catch {
-                        indexSettingsError = String(localized: "Index settings were not saved. Check the values or explicitly confirm the repair.")
+                HStack {
+                    if let indexSettingsError {
+                        Text(indexSettingsError).font(FinderUI.captionFont).foregroundStyle(.red)
                     }
+                    Spacer()
+                    Button(hasChanges ? String(localized: "Apply and Rebuild Index") : String(localized: "Rebuild Index"), action: apply)
+                        .disabled(appState.isIndexing && !hasChanges)
                 }
-                .keyboardShortcut(.defaultAction)
             }
+        }
+        .formStyle(.grouped)
     }
 
-    private func addRoot() {
-        guard !newRootPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let expandedPath = (newRootPath as NSString).expandingTildeInPath
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: expandedPath, isDirectory: &isDirectory), isDirectory.boolValue else {
-            rootPathError = String(localized: "No folder found at the given path.")
+    private func apply() {
+        indexSettingsError = nil
+        guard hasChanges else {
+            FSearchIndex.shared.startIndexing()
             return
         }
-        guard !roots.contains(expandedPath) else {
+        do {
+            try FSearchIndex.shared.saveConfigurationAndRebuild(editedConfiguration, explicitlyRepair: repairIndexSettings)
+            savedConfiguration = editedConfiguration
+        } catch {
+            indexSettingsError = String(localized: "Index settings were not saved. Check the values or explicitly confirm the repair.")
+        }
+    }
+
+    private func chooseRoot() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = String(localized: "Add")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let path = url.standardizedFileURL.path
+        guard !roots.contains(path) else {
             rootPathError = String(localized: "This path is already in the list of indexed folders.")
             return
         }
-        roots.append(expandedPath)
-        newRootPath = ""
+        roots.append(path)
         rootPathError = nil
     }
 }
 
-/// Lets the user hand folder opening and "Show in Finder" over to Burrow.
 /// The app follows the system language unless one is chosen here. macOS reads
 /// the choice at launch, so it applies after Burrow restarts.
 struct LanguageSettingsSection: View {
@@ -1310,13 +1301,12 @@ struct LanguageSettingsSection: View {
     @ViewState private var changed = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
+        Section {
             Picker("Language", selection: $choice) {
                 Text("System Default").tag(Choice.system)
                 Text(verbatim: "English").tag(Choice.en)
                 Text(verbatim: "Polski").tag(Choice.pl)
             }
-            .fixedSize()
             .onChange(of: choice) { _, value in
                 if value == .system {
                     UserDefaults.standard.removeObject(forKey: Self.key)
@@ -1325,45 +1315,40 @@ struct LanguageSettingsSection: View {
                 }
                 changed = true
             }
-            Group {
-                if changed {
-                    Text("Restart Burrow to apply the new language.")
-                } else {
-                    Text("Burrow uses the language of macOS unless you choose one here.")
-                }
+        } footer: {
+            if changed {
+                SettingsFootnote(String(localized: "Restart Burrow to apply the new language."))
             }
-            .font(FinderUI.captionFont)
-            .foregroundStyle(.secondary)
         }
     }
 }
 
+/// Lets the user hand folder opening and "Show in Finder" over to Burrow.
 struct DefaultFileViewerSettingsSection: View {
     @ViewState private var isDefault = DefaultFileViewer.isDefault
     @ViewState private var isWorking = false
     @ViewState private var errorMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-            HStack(spacing: 8) {
-                Label(isDefault ? String(localized: "Burrow is the default file browser") : String(localized: "Finder is the default file browser"),
-                      systemImage: isDefault ? "checkmark.circle.fill" : "folder")
-                    .foregroundStyle(isDefault ? Color.green : Color.primary)
-                Spacer()
-                if isDefault {
-                    Button("Restore Finder") { apply(makeDefault: false) }
-                        .disabled(isWorking)
-                } else {
-                    Button("Make Default") { apply(makeDefault: true) }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isWorking)
+        Section {
+            LabeledContent("Default file browser") {
+                HStack(spacing: FinderUI.rowSpacing) {
+                    Text(verbatim: isDefault ? "Burrow" : "Finder")
+                        .foregroundStyle(.secondary)
+                    if isDefault {
+                        Button("Restore Finder") { apply(makeDefault: false) }
+                            .disabled(isWorking)
+                    } else {
+                        Button("Use Burrow") { apply(makeDefault: true) }
+                            .disabled(isWorking)
+                    }
                 }
             }
-            Text("Folders opened from the Dock, Spotlight, Terminal (open), and other apps, as well as “Show in Finder” commands, will go to Burrow. The Desktop, the Trash in the Dock, and Finder's own windows still belong to Finder. Running apps may need to be restarted to notice the change.")
-                .font(FinderUI.captionFont).foregroundStyle(.secondary)
             if let errorMessage {
                 Text(errorMessage).font(FinderUI.captionFont).foregroundStyle(.orange)
             }
+        } footer: {
+            SettingsFootnote(String(localized: "Folders opened from other apps and “Show in Finder” open in Burrow. The Desktop and the Dock’s Trash stay with Finder."))
         }
         .onAppear { isDefault = DefaultFileViewer.isDefault }
     }
@@ -1382,7 +1367,7 @@ struct DefaultFileViewerSettingsSection: View {
 }
 
 /// Default sort for every folder, plus the folders that keep their own.
-/// Changes apply at once, like the session settings.
+/// Changes apply at once.
 struct FolderSortSettingsSection: View {
     @ObservedObject private var preferences = FolderSortPreferences.shared
 
@@ -1398,67 +1383,51 @@ struct FolderSortSettingsSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
-            Text("Folder Sorting")
-                .font(FinderUI.bodyFont.weight(.medium))
-            HStack(spacing: FinderUI.rowSpacing) {
-                Picker("Sort by default", selection: binding(\.field)) {
-                    ForEach(SortField.allCases) { field in
-                        Text(field.displayName).tag(field)
-                    }
+        Section {
+            Picker("Sort folders by", selection: binding(\.field)) {
+                ForEach(SortField.allCases) { field in
+                    Text(field.displayName).tag(field)
                 }
-                .fixedSize()
-                Picker("Direction", selection: binding(\.ascending)) {
-                    Text("Ascending").tag(true)
-                    Text("Descending").tag(false)
-                }
-                .labelsHidden()
-                .fixedSize()
             }
-            Toggle("Folders on Top", isOn: binding(\.foldersOnTop))
-            Text("Changing the sort order with the columns or the Sort menu applies only to the current folder and is remembered. Other folders use the default setting.")
-                .font(FinderUI.captionFont).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Picker("Order", selection: binding(\.ascending)) {
+                Text("Ascending").tag(true)
+                Text("Descending").tag(false)
+            }
+            Toggle("Keep folders on top", isOn: binding(\.foldersOnTop))
+        } header: {
+            Text("Sorting")
+        } footer: {
+            SettingsFootnote(String(localized: "Sorting a folder by its columns is remembered for that folder."))
+        }
 
-            if !preferences.folderSorts.isEmpty {
-                Text("Folders with custom sorting")
-                    .font(FinderUI.detailFont.weight(.medium))
-                    .padding(.top, 4)
-                ScrollView {
-                    VStack(spacing: 4) {
-                        ForEach(preferences.folderSorts.keys.sorted(), id: \.self) { path in
-                            HStack {
-                                Image(systemName: "folder.fill")
-                                    .foregroundStyle(Color.accentColor)
-                                    .accessibilityHidden(true)
-                                Text(path)
-                                    .font(FinderUI.detailFont)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .help(path)
-                                Spacer()
-                                Text(preferences.folderSorts[path]?.summary ?? "")
-                                    .font(FinderUI.captionFont)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                Button {
-                                    preferences.resetSort(for: URL(fileURLWithPath: path))
-                                } label: {
-                                    Image(systemName: "minus.circle.fill").foregroundStyle(.red)
-                                }
-                                .buttonStyle(.borderless)
-                                .help("Restore the default sorting for this folder")
-                                .accessibilityLabel("Restore the default sorting for \(path)")
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
+        if !preferences.folderSorts.isEmpty {
+            Section {
+                ForEach(preferences.folderSorts.keys.sorted(), id: \.self) { path in
+                    HStack {
+                        Text(path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(path)
+                        Spacer()
+                        Text(preferences.folderSorts[path]?.summary ?? "")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Button {
+                            preferences.resetSort(for: URL(fileURLWithPath: path))
+                        } label: {
+                            Image(systemName: "minus.circle")
                         }
+                        .buttonStyle(.borderless)
+                        .help("Restore the default sorting for this folder")
+                        .accessibilityLabel("Restore the default sorting for \(path)")
                     }
                 }
-                .frame(maxHeight: 130)
-                Button("Restore Defaults in All Folders") { preferences.resetAllFolders() }
-                    .buttonStyle(.bordered)
+                HStack {
+                    Spacer()
+                    Button("Restore Defaults in All Folders") { preferences.resetAllFolders() }
+                }
+            } header: {
+                Text("Folders with custom sorting")
             }
         }
     }
@@ -1468,13 +1437,13 @@ struct UpdateSettingsSection: View {
     @ObservedObject private var updates = UpdateChecker.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: FinderUI.compactSpacing) {
+        Section {
             Toggle("Check for updates automatically", isOn: Binding(
                 get: { updates.automaticChecksEnabled },
                 set: { updates.automaticChecksEnabled = $0 }
             ))
-            Text("Once a day Burrow asks GitHub for the latest version number. Nothing about you or your files is sent.")
-                .font(FinderUI.captionFont).foregroundStyle(.secondary)
+        } footer: {
+            SettingsFootnote(String(localized: "Once a day Burrow asks GitHub for the latest version number. Nothing about you or your files is sent."))
         }
     }
 }

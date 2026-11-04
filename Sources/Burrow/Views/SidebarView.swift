@@ -53,7 +53,6 @@ public struct SidebarView: View {
             indexFooter
         }
         .font(FinderUI.bodyFont)
-        .background(FinderUI.sidebarSurface)
         .accessibilityLabel("Sidebar")
         .onDisappear { dropLoad.cancel(); draggedFavoriteID = nil; favoriteDragNonce = nil }
         .alert("Favorite Name", isPresented: Binding(

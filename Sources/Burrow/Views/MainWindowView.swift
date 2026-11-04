@@ -6,6 +6,7 @@ public struct MainWindowView: View {
     @ObservedObject var fileOps = FileOperationsManager.shared
     @ObservedObject var updates = UpdateChecker.shared
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     @ViewState private var terminalHeight = TerminalDrawerLayout.defaultHeight
     @ViewState private var terminalDragStart: CGFloat?
@@ -28,16 +29,78 @@ public struct MainWindowView: View {
 
     public var body: some View {
         let activeTab = appState.activeTab
+        // A native split view gives the sidebar the full-height system
+        // material and its standard toggle, as in Finder.
+        NavigationSplitView(columnVisibility: Binding(
+            get: { appState.showSidebar ? .all : .detailOnly },
+            set: { appState.showSidebar = $0 != .detailOnly }
+        )) {
+            SidebarView(appState: appState, activeTab: activeTab)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
+        } detail: {
+            browserColumn(activeTab: activeTab)
+        }
+        .frame(minWidth: appState.isDualPane ? 1080 : 880, minHeight: 560)
+        .navigationTitle(activeTab.title)
+        .onChange(of: appState.activeTabId) { _, _ in appState.persistTabsState() }
+        .onAppear {
+            let open = openWindow
+            ExternalOpenRouter.openMainWindow = { open(id: "main") }
+        }
+        .sheet(isPresented: $appState.showQuickFSearchModal) {
+            QuickFSearchSpotlightModal(appState: appState, activeTab: activeTab)
+        }
+        .sheet(isPresented: $appState.showNewFileSheet) {
+            NewFileSheetView(appState: appState, activeTab: activeTab)
+        }
+        .sheet(isPresented: $appState.showNewFolderSheet) {
+            NewFolderSheetView(appState: appState, activeTab: activeTab)
+        }
+        .sheet(isPresented: $appState.showCompareSheet) { FolderCompareSheetView(appState: appState) }
+        .onChange(of: appState.showSettingsSheet) { _, show in
+            guard show else { return }
+            appState.showSettingsSheet = false
+            openSettings()
+        }
+        .sheet(isPresented: $appState.showFullDiskAccessSheet) { FullDiskAccessSheetView() }
+        .alert(updateAlertTitle, isPresented: Binding(
+            get: { updates.presented != nil },
+            set: { if !$0 { updates.presented = nil } }
+        ), presenting: updates.presented) { outcome in
+            switch outcome {
+            case .available(let release):
+                Button("Download") { NSWorkspace.shared.open(release.pageURL) }
+                Button("Copy Homebrew Command") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(UpdateChecker.homebrewCommand, forType: .string)
+                }
+                Button("Later", role: .cancel) {}
+            case .upToDate:
+                Button("OK", role: .cancel) {}
+            case .failed:
+                Button("Open Releases Page") { NSWorkspace.shared.open(UpdateChecker.releasesPage) }
+                Button("OK", role: .cancel) {}
+            }
+        } message: { outcome in
+            switch outcome {
+            case .available(let release):
+                Text("Burrow \(release.version) is available. With Homebrew, run “\(UpdateChecker.homebrewCommand)”; otherwise download it from GitHub.")
+            case .upToDate(let version):
+                Text("Version \(version) is the latest.")
+            case .failed:
+                Text("Check your internet connection, or open the releases page.")
+            }
+        }
+        .sheet(item: windowConflict) { ConflictResolutionSheetView(conflict: $0) }
+    }
+
+    private func browserColumn(activeTab: PaneTabState) -> some View {
         VStack(spacing: 0) {
-            tabBar
+            // Like Finder, the tab bar appears once there is a second tab.
+            if appState.tabs.count > 1 { tabBar }
             FSearchToolbarSection(appState: appState, activeTab: activeTab)
 
             HSplitView {
-                if appState.showSidebar {
-                    SidebarView(appState: appState, activeTab: activeTab)
-                        .frame(minWidth: 220, idealWidth: 240, maxWidth: 320)
-                }
-
                 GeometryReader { geometry in
                     VStack(spacing: 0) {
                         if appState.isDualPane {
@@ -70,7 +133,7 @@ public struct MainWindowView: View {
 
                 if appState.showInspector {
                     InspectorPreviewView(appState: appState, activeTab: activeTab)
-                        .frame(minWidth: 250, idealWidth: 280, maxWidth: 380)
+                        .frame(minWidth: 280, idealWidth: 300, maxWidth: 380)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -78,54 +141,7 @@ public struct MainWindowView: View {
             Divider()
             FinderStatusBar(appState: appState, activeTab: activeTab)
         }
-        .frame(minWidth: appState.isDualPane ? 1080 : 880, minHeight: 560)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .onChange(of: appState.activeTabId) { _, _ in appState.persistTabsState() }
-        .onAppear {
-            let open = openWindow
-            ExternalOpenRouter.openMainWindow = { open(id: "main") }
-        }
-        .sheet(isPresented: $appState.showQuickFSearchModal) {
-            QuickFSearchSpotlightModal(appState: appState, activeTab: activeTab)
-        }
-        .sheet(isPresented: $appState.showNewFileSheet) {
-            NewFileSheetView(appState: appState, activeTab: activeTab)
-        }
-        .sheet(isPresented: $appState.showNewFolderSheet) {
-            NewFolderSheetView(appState: appState, activeTab: activeTab)
-        }
-        .sheet(isPresented: $appState.showCompareSheet) { FolderCompareSheetView(appState: appState) }
-        .sheet(isPresented: $appState.showSettingsSheet) { FSearchSettingsSheetView(appState: appState) }
-        .sheet(isPresented: $appState.showFullDiskAccessSheet) { FullDiskAccessSheetView() }
-        .alert(updateAlertTitle, isPresented: Binding(
-            get: { updates.presented != nil },
-            set: { if !$0 { updates.presented = nil } }
-        ), presenting: updates.presented) { outcome in
-            switch outcome {
-            case .available(let release):
-                Button("Download") { NSWorkspace.shared.open(release.pageURL) }
-                Button("Copy Homebrew Command") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(UpdateChecker.homebrewCommand, forType: .string)
-                }
-                Button("Later", role: .cancel) {}
-            case .upToDate:
-                Button("OK", role: .cancel) {}
-            case .failed:
-                Button("Open Releases Page") { NSWorkspace.shared.open(UpdateChecker.releasesPage) }
-                Button("OK", role: .cancel) {}
-            }
-        } message: { outcome in
-            switch outcome {
-            case .available(let release):
-                Text("Burrow \(release.version) is available. With Homebrew, run “\(UpdateChecker.homebrewCommand)”; otherwise download it from GitHub.")
-            case .upToDate(let version):
-                Text("Version \(version) is the latest.")
-            case .failed:
-                Text("Check your internet connection, or open the releases page.")
-            }
-        }
-        .sheet(item: windowConflict) { ConflictResolutionSheetView(conflict: $0) }
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private func terminalDivider(availableHeight: CGFloat) -> some View {
@@ -192,23 +208,6 @@ public struct MainWindowView: View {
             .accessibilityLabel("New Tab")
             .help("New Tab (⌘T)")
 
-            if appState.isDualPane {
-                Menu {
-                    Button("Copy Selection to Other Pane", systemImage: "doc.on.doc") {
-                        let destination = appState.activePaneSide == .left ? appState.rightPane : appState.leftTab
-                        fileOps.performTransfer(sourceURLs: appState.activeTab.selectedItems.map(\.url), into: destination.currentURL, isMove: false)
-                    }
-                    .disabled(appState.activeTab.selectedItems.isEmpty || fileOps.isBusy)
-                    Button("Compare Folders…", systemImage: "arrow.left.arrow.right") { appState.showCompareSheet = true }
-                    Divider()
-                    Button("Close Other Pane") { appState.toggleDualPane() }
-                } label: {
-                    Text(appState.activePaneSide == .left ? String(localized: "Left Pane") : String(localized: "Right Pane"))
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .fixedSize()
-                .padding(.horizontal, 10)
-            }
         }
         .frame(height: FinderUI.chromeHeight)
         .background(.bar)
@@ -339,9 +338,6 @@ private struct FinderStatusBar: View {
             if appState.isIndexing {
                 ProgressView().controlSize(.small).accessibilityLabel("Indexing files")
                 Text("Indexing…")
-            } else if !activeTab.isSearching && !activeTab.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(FormatHelpers.formatLatency(activeTab.lastSearchLatencyMs)).monospacedDigit()
-                    .help("Search time · \(appState.indexedFileCount.formatted()) files in index")
             } else if let availableBytes {
                 Text("\(FormatHelpers.formatBytes(availableBytes)) free").monospacedDigit()
             }

@@ -70,11 +70,6 @@ public struct PathBreadcrumbBar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 pathEditor
-                pathActionButton(icon: "doc.on.doc", label: String(localized: "Copy Current Folder Path"), help: pane.currentURL.path) {
-                    activatePane()
-                    FileOperationsManager.shared.copyPathString(pane.currentURL.path)
-                }
-                .accessibilityIdentifier("folder.address.copy")
                 folderActionsMenu
             }
 
@@ -87,10 +82,10 @@ public struct PathBreadcrumbBar: View {
                     .padding(.horizontal, 8)
             }
         }
-        .font(FinderUI.bodyFont)
-        .padding(.horizontal, FinderUI.chromeInset)
-        .padding(.vertical, 6)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .font(FinderUI.detailFont)
+        .padding(.horizontal, FinderUI.rowSpacing)
+        .padding(.vertical, 3)
+        .background(Color(nsColor: .controlBackgroundColor))
         .overlay(alignment: .bottom) {
             Divider()
         }
@@ -154,13 +149,17 @@ public struct PathBreadcrumbBar: View {
                 breadcrumbs
             }
         }
-        .padding(.leading, 10)
+        .padding(.leading, pane.isEditingPathBar ? 10 : 2)
         .padding(.trailing, pane.isEditingPathBar ? 10 : 0)
-        .frame(minHeight: 32)
-        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
+        .frame(minHeight: 28)
+        // The breadcrumbs sit flat in the header; only the editable path is a field.
+        .background(pane.isEditingPathBar ? Color(nsColor: .textBackgroundColor) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: FinderUI.cornerRadius))
         .overlay {
-            RoundedRectangle(cornerRadius: FinderUI.cornerRadius)
-                .strokeBorder(pathValidationMessage != nil ? Color.red : (isPathFieldFocused ? Color.accentColor : Color.secondary.opacity(0.25)), lineWidth: 1)
+            if pane.isEditingPathBar {
+                RoundedRectangle(cornerRadius: FinderUI.cornerRadius)
+                    .strokeBorder(pathValidationMessage != nil ? Color.red : (isPathFieldFocused ? Color.accentColor : Color.secondary.opacity(0.25)), lineWidth: 1)
+            }
         }
     }
 
@@ -287,8 +286,9 @@ public struct PathBreadcrumbBar: View {
                 Label("New Folder…", systemImage: "folder.badge.plus")
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .frame(width: FinderUI.iconButtonSize, height: FinderUI.iconButtonSize)
+            Image(systemName: "ellipsis")
+                .foregroundStyle(.secondary)
+                .frame(width: FinderUI.iconButtonSize, height: 24)
                 .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
