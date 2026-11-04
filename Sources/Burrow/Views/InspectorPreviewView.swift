@@ -26,7 +26,7 @@ public struct InspectorPreviewView: View {
             return Text(verbatim: posixPermissionsString).foregroundColor(.primary)
         }
         return Text(verbatim: String(posixPermissionsString[..<split.lowerBound])).foregroundColor(.primary)
-            + Text(verbatim: String(posixPermissionsString[split.lowerBound...])).foregroundColor(.secondary)
+            + Text(verbatim: String(posixPermissionsString[split.lowerBound...])).foregroundColor(FinderUI.metadataColor)
     }
 
     static func locationTrail(_ path: String) -> String {
@@ -262,23 +262,7 @@ public struct InspectorPreviewView: View {
                                     .controlSize(.small)
                                     .help("Remove all tags from this item")
                                 }
-                            }
-                            HStack(spacing: 6) {
-                                if item.tags.isEmpty {
-                                    Text("No tags")
-                                        .font(FinderUI.detailFont)
-                                        .foregroundStyle(.secondary)
-                                }
-                                ForEach(item.tags) { tag in
-                                    HStack(spacing: 4) {
-                                        Circle().fill(tag.swiftUIColor).frame(width: 8, height: 8)
-                                        Text(tag.displayName).font(FinderUI.detailFont)
-                                    }
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .background(Color.primary.opacity(0.06), in: Capsule())
-                                }
-                                Spacer(minLength: 0)
+                                // On the header line, like the sidebar's Favorites "+".
                                 Menu {
                                     ForEach(FinderTagColor.allCases) { tagColor in
                                         Toggle(tagColor.displayName, isOn: Binding(
@@ -297,6 +281,22 @@ public struct InspectorPreviewView: View {
                                 .fixedSize()
                                 .help("Add or remove tags")
                                 .accessibilityLabel("Edit tags")
+                            }
+                            HStack(spacing: 6) {
+                                if item.tags.isEmpty {
+                                    Text("No tags")
+                                        .font(FinderUI.detailFont)
+                                        .foregroundStyle(.secondary)
+                                }
+                                ForEach(item.tags) { tag in
+                                    HStack(spacing: 4) {
+                                        Circle().fill(tag.swiftUIColor).frame(width: 8, height: 8)
+                                        Text(tag.displayName).font(FinderUI.detailFont)
+                                    }
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Color.primary.opacity(0.06), in: Capsule())
+                                }
                             }
                         }
 

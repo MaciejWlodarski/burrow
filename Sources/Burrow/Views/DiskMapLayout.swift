@@ -97,8 +97,12 @@ public enum DiskMapLayoutEngine {
             while index < kids.count {
                 let id = kids[index]
                 let area = Double(tree.allocatedSize(id)) * pixelsPerByte
+                // A folder too small to name would be an anonymous grey box next to the
+                // grey "smaller items" tile; it joins that tile instead.
+                let isNamedFolder = tree.isDirectory(id) && tree.childCount(id) > 0
+                let threshold = isNamedFolder ? max(mergeArea, 72 * 44 * scale * scale) : mergeArea
                 // Sorted largest-first: everything from here on is too small.
-                if area < minimumArea || (index > 0 && area < mergeArea) {
+                if area < minimumArea || (index > 0 && area < threshold) {
                     if area > 0 { remainderStart = id }
                     break
                 }
@@ -266,7 +270,7 @@ public enum DiskMapRenderer {
         let innerGap = Int32(max(1, (scale * 1.5).rounded()))
         // Top-level blocks stand further apart, so a folder never seems to run into
         // a neighbouring file of the same colour.
-        let outerGap = Int32(max(3, (scale * 6).rounded()))
+        let outerGap = Int32(max(3, (scale * 4).rounded()))
         for (index, tile) in layout.tiles.enumerated() {
             if index & 0xFFF == 0, isCancelled() { return nil }
             let gap = tile.depth == 0 ? outerGap : innerGap
@@ -287,9 +291,29 @@ public enum DiskMapRenderer {
                 }
                 continue
             }
-            if tile.isCollapsed || tile.isRemainder {
-                // Folder summaries and "smaller items" share one neutral style: the
-                // header-strip fill with a hairline inside, so a small folder reads as a folder.
+            if tile.isRemainder {
+                // "Smaller items" is not a folder: a quiet fill inside a dashed outline.
+                fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderBody)
+                let line = Int32(max(1, scale.rounded())), dash = Int32(max(2, (3 * scale).rounded()))
+                var x = tile.x0
+                while x < x1 {
+                    let end = min(x1, x + dash)
+                    fill(pixels, stride: stride, x, tile.y0, end, tile.y0 + line, palette.folderStroke)
+                    fill(pixels, stride: stride, x, y1 - line, end, y1, palette.folderStroke)
+                    x += dash * 2
+                }
+                var y = tile.y0
+                while y < y1 {
+                    let end = min(y1, y + dash)
+                    fill(pixels, stride: stride, tile.x0, y, tile.x0 + line, end, palette.folderStroke)
+                    fill(pixels, stride: stride, x1 - line, y, x1, end, palette.folderStroke)
+                    y += dash * 2
+                }
+                continue
+            }
+            if tile.isCollapsed {
+                // A folder summary: the header-strip fill with a hairline inside, so a
+                // small folder reads as a folder.
                 fill(pixels, stride: stride, tile.x0, tile.y0, x1, y1, palette.folderStroke)
                 let line = Int32(max(1, scale.rounded()))
                 if x1 - tile.x0 > line * 2, y1 - tile.y0 > line * 2 {
@@ -349,17 +373,20 @@ public enum DiskMapRenderer {
         let header = (DiskMapLayoutEngine.headerHeightPoints * scale).rounded()
         let lineHeight = 15 * scale
         // Below this a label is noise; hovering still identifies the tile.
-        let minimumLabelWidth = 60 * scale, minimumLabelHeight = 40 * scale, minimumNameWidth = 50 * scale
+        let minimumLabelWidth = 50 * scale, minimumLabelHeight = 40 * scale, minimumNameWidth = 50 * scale
         var drawn = 0
         for tile in layout.tiles where drawn < 800 {
-            let width = Double(tile.x1 - tile.x0) - scale, tileHeight = Double(tile.y1 - tile.y0) - scale
+            // The drawn tile stops short of its gutter (see the fill above); labels must too,
+            // or a header's size sits against the edge.
+            let gutter = (tile.depth == 0 ? 4 : 1.5) * scale
+            let width = Double(tile.x1 - tile.x0) - gutter, tileHeight = Double(tile.y1 - tile.y0) - gutter
             // Roomier insets where the tile allows them; small tiles keep every point for text.
             let inset = (width >= 100 * scale && tileHeight >= 56 * scale ? 8 : 6) * scale
             let isGroup = tile.isFolder && tree.childCount(tile.node) > 0 && !tile.isRemainder && !tile.isCollapsed
             if isGroup && !tile.hasHeader { continue }
             // Tiles too small for name and size still get a one-line name when one fits.
             let isCompact = !isGroup && (width < minimumLabelWidth || tileHeight < minimumLabelHeight
-                || width - 12 * scale < minimumNameWidth)
+                || width - 12 * scale < 38 * scale)
             if isCompact && (width < 36 * scale || tileHeight < 22 * scale) { continue }
             let textColor: NSColor
             if isGroup || tile.isCollapsed || tile.isRemainder {

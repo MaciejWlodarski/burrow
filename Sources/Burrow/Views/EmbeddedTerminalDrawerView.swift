@@ -316,7 +316,8 @@ private struct TerminalTabContent: View {
             ScrollViewReader { proxy in
                 ScrollView {
                   // The prompt continues the transcript right after the last output, like a terminal.
-                  VStack(alignment: .leading, spacing: 8) {
+                  // The prompt keeps the transcript's own line pitch.
+                  VStack(alignment: .leading, spacing: 2) {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         if outputLines.isEmpty {
                             Text(isRunning ? String(localized: "Running command…") : String(localized: "No output. Enter a command below."))
