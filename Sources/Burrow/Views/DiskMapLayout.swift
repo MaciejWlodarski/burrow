@@ -384,9 +384,18 @@ public enum DiskMapRenderer {
                 .font: sizeFont, .foregroundColor: textColor.withAlphaComponent(isGroup ? 0.7 : 0.85)])
             let name = NSAttributedString(string: shownName, attributes: [
                 .font: nameFont, .foregroundColor: textColor, .paragraphStyle: truncating])
-            // Collapsed folders lead with a small inline folder glyph, so they never read as a
-            // header strip. Only where it leaves room for a readable name.
-            let glyph = tile.isCollapsed && width - inset * 2 - 14 * scale >= 40 * scale ? 14 * scale : 0
+            // A folder summary leads with a small inline folder glyph, so it never reads as a
+            // header strip, wherever it still leaves a readable name width (the name wins).
+            let labelInset = isCompact ? 6 * scale : inset
+            let glyph = tile.isCollapsed && width - labelInset * 2 - 15 * scale >= 46 * scale ? 15 * scale : 0
+            func drawFolderGlyph(x: Double, top: Double) {
+                guard let symbol = NSImage(systemSymbolName: "folder.fill", accessibilityDescription: nil)?
+                    .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: CGFloat(10 * scale), weight: .medium)
+                        .applying(NSImage.SymbolConfiguration(paletteColors: [textColor.withAlphaComponent(0.6)]))) else { return }
+                let side = symbol.size
+                symbol.draw(in: CGRect(x: x, y: top + (lineHeight - side.height) / 2, width: side.width, height: side.height),
+                            from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            }
             let available = width - inset * 2 - glyph
             let sizeWidth = size.size().width
             // A name cut to a few letters ("Brand…") says nothing; leave it to hover.
@@ -404,14 +413,18 @@ public enum DiskMapRenderer {
                     name.draw(in: CGRect(x: x, y: top, width: available, height: lineHeight))
                 }
             } else if isCompact {
-                let available = width - 12 * scale
+                let available = width - 12 * scale - glyph
                 let compactName = NSAttributedString(string: shownName, attributes: [
                     .font: compactFont, .foregroundColor: textColor, .paragraphStyle: middleTruncating])
                 // Identity, never a bare size: the name, shortened in the middle when needed;
                 // too narrow even for that, nothing (the hover callout names it).
                 let origin = CGPoint(x: Double(tile.x0) + 6 * scale, y: Double(tile.y0) + 4 * scale)
-                guard compactName.size().width <= available || available >= 30 * scale else { continue }
-                compactName.draw(in: CGRect(x: origin.x, y: origin.y, width: available, height: lineHeight))
+                if glyph > 0 { drawFolderGlyph(x: origin.x, top: origin.y) }
+                if compactName.size().width <= available || available >= 46 * scale {
+                    compactName.draw(in: CGRect(x: origin.x + glyph, y: origin.y, width: available, height: lineHeight))
+                } else if glyph == 0 {
+                    continue
+                }
             } else {
                 // The name always leads; the size follows when it fits whole.
                 // One rule for every leaf: the label starts at the tile's own top inset.
@@ -428,16 +441,11 @@ public enum DiskMapRenderer {
                     && wrapped.boundingRect(with: CGSize(width: available, height: .greatestFiniteMagnitude),
                                             options: [.usesLineFragmentOrigin]).height <= lineHeight * 2 + scale
                 // Identity first, as in compact tiles: a middle-truncated name rather than a blank tile.
-                guard nameFits || twoLines || available >= 30 * scale else { continue }
+                let showsName = nameFits || twoLines || available >= 46 * scale
+                guard showsName || glyph > 0 else { continue }
+                if glyph > 0 { drawFolderGlyph(x: x - glyph, top: top) }
+                guard showsName else { drawn += 1; continue }
                 let nameLines: Double = twoLines ? 2 : 1
-                if glyph > 0,
-                   let symbol = NSImage(systemSymbolName: "folder.fill", accessibilityDescription: nil)?
-                    .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: CGFloat(10 * scale), weight: .medium)
-                        .applying(NSImage.SymbolConfiguration(paletteColors: [textColor.withAlphaComponent(0.6)]))) {
-                    let side = symbol.size
-                    symbol.draw(in: CGRect(x: x - glyph, y: top + (lineHeight - side.height) / 2, width: side.width, height: side.height),
-                                from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-                }
                 if twoLines {
                     wrapped.draw(with: CGRect(x: x, y: top, width: available, height: lineHeight * 2 + scale),
                                  options: [.usesLineFragmentOrigin])

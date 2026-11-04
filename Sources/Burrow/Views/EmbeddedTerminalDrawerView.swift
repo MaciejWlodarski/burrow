@@ -340,7 +340,6 @@ private struct TerminalTabContent: View {
                   .padding(.horizontal, FinderUI.sectionSpacing)
                   .padding(.vertical, FinderUI.rowSpacing + 2)
                 }
-                .defaultScrollAnchor(.bottom)
                 .onChange(of: outputLines.last?.id) { _, _ in
                     proxy.scrollTo(Self.inputRowID, anchor: .bottom)
                 }
