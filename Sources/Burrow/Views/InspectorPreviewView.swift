@@ -73,6 +73,7 @@ public struct InspectorPreviewView: View {
                 ScrollView {
                     selectionSummary
                 }
+                .hidingTopScrollEdgeEffect()
             } else if let item = activeTab.primarySelectedItem {
                 ScrollView {
                     VStack(alignment: .leading, spacing: FinderUI.sectionSpacing) {
@@ -315,6 +316,7 @@ public struct InspectorPreviewView: View {
                     }
                     .padding(FinderUI.panelInset)
                 }
+                .hidingTopScrollEdgeEffect()
                 .onAppear {
                     loadPreviewAndMetadata(for: item)
                 }
@@ -381,9 +383,12 @@ public struct InspectorPreviewView: View {
                     .padding(FinderUI.panelInset)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .hidingTopScrollEdgeEffect()
             }
         }
-        .background(FinderUI.sidebarSurface)
+        // Starts below the toolbar, and its scroll views draw no top edge effect: the
+        // toolbar shows one colour across the files and the inspector, with no seam.
+        .background(FinderUI.sidebarSurface, ignoresSafeAreaEdges: [])
         .onAppear { updateFolderSizeDemand() }
         .onChange(of: folderSizeDemandPaths) { _, _ in updateFolderSizeDemand() }
         .onChange(of: activeTab.id) { _, _ in updateFolderSizeDemand() }
@@ -897,5 +902,22 @@ struct InspectorChipButtonStyle: ButtonStyle {
             .background(Color.primary.opacity(configuration.isPressed ? 0.14 : 0.06),
                         in: RoundedRectangle(cornerRadius: 7))
             .contentShape(RoundedRectangle(cornerRadius: 7))
+    }
+}
+
+private extension View {
+    /// macOS 26 tints a scroll view that sits right under the toolbar; the file
+    /// lists never touch it (the path bar is in between), so the inspector doesn't
+    /// either.
+    @ViewBuilder func hidingTopScrollEdgeEffect() -> some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }

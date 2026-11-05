@@ -135,6 +135,8 @@ public struct MainWindowView: View {
             }
         }
         .coordinateSpace(name: "inspectorSplit")
+        // One colour under the toolbar, across the files and the inspector.
+        .background(Color(nsColor: .controlBackgroundColor))
         .animation(.easeInOut(duration: 0.2), value: appState.showInspector)
     }
 
