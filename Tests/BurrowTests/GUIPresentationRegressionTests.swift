@@ -11,6 +11,7 @@ struct GUIPresentationRegressionTests {
             try Data(name.utf8).write(to: nested.appendingPathComponent(name))
         }
         try testSelectionBytesCountOnce(root)
+        try testSplitAndColumnLayout()
         let pane = PaneTabState(initialURL: root)
         pane.viewMode = .wiztree
         let generation = UUID()
@@ -106,6 +107,22 @@ struct GUIPresentationRegressionTests {
         print("PASS production quick-search selection boundaries for the visible result list")
     }
 
+
+    /// Two panes keep their minimum width while there is room and split evenly
+    /// when there is not; list columns appear at fixed pane widths.
+    private func testSplitAndColumnLayout() throws {
+        try expect(PaneSplitLayout.leftWidth(available: 1000, fraction: 0.5, minPaneWidth: 260) == 500)
+        try expect(PaneSplitLayout.leftWidth(available: 1000, fraction: 0.1, minPaneWidth: 260) == 260)
+        try expect(PaneSplitLayout.leftWidth(available: 1000, fraction: 0.95, minPaneWidth: 260) == 740)
+        try expect(PaneSplitLayout.leftWidth(available: 400, fraction: 0.2, minPaneWidth: 260) == 200)
+        try expect(PaneSplitLayout.clamped(0.3, available: 0, minPaneWidth: 260) == 0.5)
+        let widths: ClosedRange<CGFloat> = 300...400
+        try expect(widths.clamp(250) == 300 && widths.clamp(450) == 400)
+        let narrow = FileListColumns(width: 447), half = FileListColumns(width: 600), wide = FileListColumns(width: 900)
+        try expect(!narrow.showDate && narrow.kindWidth == 0)
+        try expect(half.showDate && half.kindWidth == 144)
+        try expect(wide.showDate && wide.kindWidth == 150)
+    }
 
     /// Search results can list a folder with files inside it and several hard
     /// links to one file; the selection total counts each byte once.

@@ -13,6 +13,10 @@ public struct MainWindowView: View {
 
     @ViewState private var terminalHeight = TerminalDrawerLayout.defaultHeight
     @ViewState private var terminalDragStart: CGFloat?
+    /// The left pane's share of a two-pane window.
+    @ViewState private var paneSplitFraction: CGFloat = 0.5
+    @ViewState private var inspectorWidth = MainWindowView.defaultInspectorWidth
+    @ViewState private var inspectorDragStart: CGFloat?
     @GestureState private var isResizingTerminal = false
 
     #if BURROW_TESTING
@@ -101,6 +105,43 @@ public struct MainWindowView: View {
     }
 
     private func browserColumn(activeTab: PaneTabState) -> some View {
+        // The inspector is a plain side panel, not .inspector: that AppKit split column
+        // made live window resizing crawl and could loop AppKit's constraint passes
+        // until it raised. The window toolbar still runs across it unbroken.
+        HStack(spacing: 0) {
+            browserContent(activeTab: activeTab)
+            if appState.showInspector {
+                VerticalSplitDivider(
+                    coordinateSpace: "inspectorSplit",
+                    onDrag: { value in
+                        let start = inspectorDragStart ?? inspectorWidth
+                        inspectorDragStart = start
+                        inspectorWidth = Self.inspectorWidthRange.clamp(start - value.translation.width)
+                    },
+                    onEnded: { inspectorDragStart = nil },
+                    onReset: { inspectorWidth = Self.defaultInspectorWidth }
+                )
+                .zIndex(1)
+                .accessibilityElement()
+                .accessibilityLabel("Inspector width")
+                .accessibilityValue("\(Int(inspectorWidth)) points")
+                .accessibilityAdjustableAction { direction in
+                    inspectorWidth = Self.inspectorWidthRange.clamp(inspectorWidth + (direction == .increment ? -10 : 10))
+                }
+                .help("Drag to change the inspector width. Double-click for the default width.")
+                InspectorPreviewView(appState: appState, activeTab: activeTab)
+                    .frame(width: inspectorWidth)
+                    .transition(.move(edge: .trailing))
+            }
+        }
+        .coordinateSpace(name: "inspectorSplit")
+        .animation(.easeInOut(duration: 0.2), value: appState.showInspector)
+    }
+
+    static let defaultInspectorWidth: CGFloat = 320
+    static let inspectorWidthRange: ClosedRange<CGFloat> = 300...400
+
+    private func browserContent(activeTab: PaneTabState) -> some View {
         VStack(spacing: 0) {
             // Like Finder, the tab bar appears once there is a second tab. In two
             // panes each pane has its own tabs, so each shows its own bar.
@@ -112,7 +153,7 @@ public struct MainWindowView: View {
                     VStack(spacing: 0) {
                         if appState.isDualPane {
                             // Each pane keeps its own footer, so both counts are visible.
-                            HSplitView {
+                            PaneSplitView(fraction: $paneSplitFraction, minPaneWidth: 260) {
                                 VStack(spacing: 0) {
                                     if showsPaneTabBars { tabBar(side: .left) }
                                     FilePaneView(appState: appState, pane: appState.leftTab, paneSide: .left,
@@ -122,7 +163,7 @@ public struct MainWindowView: View {
                                                     showsFreeSpace: FinderStatusBar.volume(for: appState.leftTab.currentURL.path, in: appState.mountedVolumes)?.id
                                                         != FinderStatusBar.volume(for: appState.rightPane.currentURL.path, in: appState.mountedVolumes)?.id)
                                 }
-                                .frame(minWidth: 260)
+                            } right: {
                                 VStack(spacing: 0) {
                                     if showsPaneTabBars { tabBar(side: .right) }
                                     FilePaneView(appState: appState, pane: appState.rightPane, paneSide: .right,
@@ -130,7 +171,6 @@ public struct MainWindowView: View {
                                     Divider()
                                     FinderStatusBar(appState: appState, activeTab: appState.rightPane, showsActivity: false)
                                 }
-                                .frame(minWidth: 260)
                             }
                         } else {
                             FilePaneView(appState: appState, pane: appState.leftTab, paneSide: .left, isFocusedPane: true)
@@ -159,16 +199,6 @@ public struct MainWindowView: View {
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
-        // The native inspector column: the toolbar runs across it unbroken.
-        .inspector(isPresented: $appState.showInspector) {
-            InspectorPreviewView(appState: appState, activeTab: activeTab)
-                // A hairline from below the toolbar down, like the sidebar's edge in
-                // Finder; the toolbar itself stays one continuous bar.
-                .overlay(alignment: .leading) {
-                    Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1).allowsHitTesting(false)
-                }
-                .inspectorColumnWidth(min: 300, ideal: 320, max: 400)
-        }
     }
 
     private func terminalDivider(availableHeight: CGFloat) -> some View {

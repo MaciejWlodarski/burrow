@@ -8,18 +8,25 @@ struct FileDragFramesKey: PreferenceKey {
     }
 }
 
+/// Item frames for drag and marquee hit tests, read only when the pointer acts.
+/// A plain reference rather than view state: the frames change with every scroll
+/// and window resize, and as @State each change re-rendered every visible row.
+final class ItemFrameStore {
+    var frames: [String: CGRect] = [:]
+}
+
 /// SwiftUI's onDrag exports a single provider. An AppKit dragging session exports
 /// one file URL per selected item, so Finder and our own panes receive the batch.
 struct NativeFileDragSource: NSViewRepresentable {
     @ObservedObject var pane: PaneTabState
-    let frames: [String: CGRect]
+    let frames: ItemFrameStore
     let isActive: Bool
     let activate: () -> Void
 
     func makeNSView(context: Context) -> FileDragSourceView { FileDragSourceView() }
 
     func updateNSView(_ view: FileDragSourceView, context: Context) {
-        view.frames = frames
+        view.frameStore = frames
         view.focusOnAttach = isActive
         if let last = view.lastFocusRequest, last != pane.focusFilePaneTrigger {
             view.window?.makeFirstResponder(view)
@@ -35,7 +42,7 @@ struct NativeFileDragSource: NSViewRepresentable {
 }
 
 final class FileDragSourceView: NSView, NSDraggingSource {
-    var frames: [String: CGRect] = [:]
+    var frameStore: ItemFrameStore?
     var itemsForDrag: ((String) -> [FileItem])?
     var focusOnAttach = false
     var lastFocusRequest: UInt64?
@@ -61,8 +68,9 @@ final class FileDragSourceView: NSView, NSDraggingSource {
             let point = self.convert(event.locationInWindow, from: nil)
             switch event.type {
             case .leftMouseDown:
-                self.downPath = self.bounds.contains(point)
-                    ? self.frames.first(where: { $0.value.contains(point) })?.key : nil
+                // The edge strips belong to the pane divider's grab area; rows start inside them.
+                self.downPath = self.bounds.insetBy(dx: 5, dy: 0).contains(point)
+                    ? self.frameStore?.frames.first(where: { $0.value.contains(point) })?.key : nil
                 self.downPoint = point
                 if self.downPath != nil { self.window?.makeFirstResponder(self) }
             case .leftMouseUp:

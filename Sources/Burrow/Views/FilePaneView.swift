@@ -9,6 +9,29 @@ private struct IconFramePreferenceKey: PreferenceKey {
     }
 }
 
+/// The list view's optional columns for a pane width.
+struct FileListColumns: Equatable {
+    let showDate: Bool
+    let kindWidth: CGFloat
+
+    init(width: CGFloat) {
+        showDate = width >= 480
+        // Kind stays in a half-width pane at a narrower width instead of
+        // leaving an empty band after the date.
+        // 144 pt holds "Numbers Spreadsheet"; Name gives way first.
+        kindWidth = width >= 760 ? 150 : (width >= 560 ? 144 : 0)
+    }
+}
+
+/// Optional, because views that set no value report the default: a plain default
+/// would override the measured width.
+private struct FileListColumnsKey: PreferenceKey {
+    static var defaultValue: FileListColumns? = nil
+    static func reduce(value: inout FileListColumns?, nextValue: () -> FileListColumns?) {
+        if let next = nextValue() { value = next }
+    }
+}
+
 /// Pointer, menu and accessibility actions must activate their owning pane before
 /// changing selection or navigation, so global commands observe the same target.
 @MainActor
@@ -44,14 +67,15 @@ public struct FilePaneView: View {
     public let paneSide: PaneSide
     public let isFocusedPane: Bool
 
-    @ViewState private var dragFrames: [String: CGRect] = [:]
+    @ViewState private var dragFrames = ItemFrameStore()
+    @ViewState private var listColumns = FileListColumns(width: 900)
     @ViewState private var dropTargetFolderPath: String? = nil
     @ViewState private var isPaneDropTargeted: Bool = false
 
     // Rubber-band / Marquee selection state in Icon view
     @ViewState private var marqueeStart: CGPoint? = nil
     @ViewState private var marqueeCurrent: CGPoint? = nil
-    @ViewState private var iconFrames: [String: CGRect] = [:]
+    @ViewState private var iconFrames = ItemFrameStore()
 
     public init(
         appState: AppState,
@@ -210,7 +234,7 @@ public struct FilePaneView: View {
         .onChange(of: pane.currentURL.path) { _, _ in dropLoad.cancel() }
         .coordinateSpace(name: "FilePaneSpace")
         .background(NativeFileDragSource(pane: pane, frames: dragFrames, isActive: isFocusedPane, activate: activatePane))
-        .onPreferenceChange(FileDragFramesKey.self) { dragFrames = $0 }
+        .onPreferenceChange(FileDragFramesKey.self) { dragFrames.frames = $0 }
         .onChange(of: folderSizes.results) { _, _ in
             if pane.sortField == .size { pane.applySortChange() }
         }
@@ -327,6 +351,17 @@ public struct FilePaneView: View {
     /// or the flat attributed wash on older systems.
     @ViewBuilder
     private func highlightedNameText(_ name: String, isSelected: Bool) -> some View {
+        // Plain text outside search: a custom renderer redraws every name on
+        // each frame of a window resize.
+        if !hasSearchQuery {
+            Text(verbatim: name)
+        } else {
+            searchMatchText(name, isSelected: isSelected)
+        }
+    }
+
+    @ViewBuilder
+    private func searchMatchText(_ name: String, isSelected: Bool) -> some View {
         #if compiler(>=6.0)
         if #available(macOS 15.0, *) {
             matchText(name, isSelected: isSelected)
@@ -448,16 +483,19 @@ public struct FilePaneView: View {
     // MARK: - 1. Native List View with Expandable Outline Tree (`▸`) & Drag/Drop
 
     private var listBrowserView: some View {
-        GeometryReader { geometry in
-            let showDate = geometry.size.width >= 480
-            // Kind stays in a half-width pane at a narrower width instead of
-            // leaving an empty band after the date.
-            // 144 pt holds "Numbers Spreadsheet"; Name gives way first.
-            let kindWidth: CGFloat = geometry.size.width >= 760 ? 150 : (geometry.size.width >= 560 ? 144 : 0)
-            let showKind = kindWidth > 0
-            // No disclosure gutter in a folder without subfolders.
-            let showsDisclosure = pane.displayedItems.contains { $0.isDirectory && $0.fileExtension.lowercased() != "app" }
-            VStack(spacing: 0) {
+        // The rows read only the column set, which changes at a few widths. Reading
+        // the width itself re-rendered every visible row on each frame of a resize.
+        let showDate = listColumns.showDate
+        let kindWidth = listColumns.kindWidth
+        let showKind = kindWidth > 0
+        // No disclosure gutter in a folder without subfolders.
+        let showsDisclosure = pane.displayedItems.contains { $0.isDirectory && $0.fileExtension.lowercased() != "app" }
+        // A clear base sizes the list like the GeometryReader this replaced: its own
+        // size never depends on the columns, which would feed back into the split
+        // view and window layout.
+        return Color.clear
+            .overlay(alignment: .topLeading) {
+                VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     sortableHeaderButton(title: String(localized: "Name"), field: .name)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -480,23 +518,30 @@ public struct FilePaneView: View {
                 .background(Color(nsColor: .controlBackgroundColor))
                 Divider()
 
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 1) {
-                            ForEach(Array(pane.displayedItems.enumerated()), id: \.element.id) { index, item in
-                                fileListRow(item: item, index: index, showDate: showDate, kindWidth: kindWidth,
-                                            showsDisclosure: showsDisclosure)
-                                    .id(item.path)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 1) {
+                                ForEach(Array(pane.displayedItems.enumerated()), id: \.element.id) { index, item in
+                                    fileListRow(item: item, index: index, showDate: showDate, kindWidth: kindWidth,
+                                                showsDisclosure: showsDisclosure)
+                                        .id(item.path)
+                                }
                             }
+                            .padding(5)
                         }
-                        .padding(5)
-                    }
-                    .onChange(of: pane.selectionCursorPath) { _, path in
-                        if let path { proxy.scrollTo(path) }
+                        .onChange(of: pane.selectionCursorPath) { _, path in
+                            if let path { proxy.scrollTo(path) }
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-        }
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: FileListColumnsKey.self, value: FileListColumns(width: geometry.size.width))
+                }
+            }
+            .onPreferenceChange(FileListColumnsKey.self) { if let columns = $0 { listColumns = columns } }
     }
 
     private func sortableHeaderButton(title: String, field: SortField) -> some View {
@@ -688,8 +733,11 @@ public struct FilePaneView: View {
         .contentShape(Rectangle())
         .background {
             GeometryReader { geometry in
+                // Rows run to the pane's edge, so only the vertical band matters. Leaving
+                // the width out keeps the frames unchanged while the window resizes.
+                let frame = geometry.frame(in: .named("FilePaneSpace"))
                 Color.clear.preference(key: FileDragFramesKey.self,
-                    value: [item.path: geometry.frame(in: .named("FilePaneSpace"))])
+                    value: [item.path: CGRect(x: frame.minX, y: frame.minY, width: .greatestFiniteMagnitude, height: frame.height)])
             }
         }
         .onDrop(of: [.fileURL], isTargeted: Binding(
@@ -856,7 +904,7 @@ public struct FilePaneView: View {
             }
             .coordinateSpace(name: "IconGridSpace")
             .onPreferenceChange(IconFramePreferenceKey.self) { frames in
-                iconFrames = frames
+                iconFrames.frames = frames
             }
             .gesture(
                 DragGesture(minimumDistance: 6, coordinateSpace: .named("IconGridSpace"))
@@ -869,7 +917,7 @@ public struct FilePaneView: View {
                         marqueeCurrent = value.location
                         if let box = marqueeRect {
                             var selected = Set<String>()
-                            for (path, frame) in iconFrames where box.intersects(frame) {
+                            for (path, frame) in iconFrames.frames where box.intersects(frame) {
                                 selected.insert(path)
                             }
                             pane.selectedPaths = selected

@@ -977,3 +977,7 @@
 "Restore the default view for %@" = "Przywróć domyślny widok dla %@";
 "Restore Default View in All Folders" = "Przywróć domyślny widok we wszystkich folderach";
 "Folders with their own view" = "Foldery z własnym widokiem";
+"Pane divider" = "Separator paneli";
+"Drag to resize the panes. Double-click to make them equal." = "Przeciągnij, aby zmienić szerokość paneli. Kliknij dwukrotnie, aby je wyrównać.";
+"Inspector width" = "Szerokość inspektora";
+"Drag to change the inspector width. Double-click for the default width." = "Przeciągnij, aby zmienić szerokość inspektora. Kliknij dwukrotnie, aby przywrócić domyślną.";
