@@ -135,8 +135,16 @@ public struct MainWindowView: View {
             }
         }
         .coordinateSpace(name: "inspectorSplit")
-        // One colour under the toolbar, across the files and the inspector.
         .background(Color(nsColor: .controlBackgroundColor))
+        // The toolbar's band: one material and a hairline under it, across the files
+        // and the inspector alike.
+        .background(alignment: .top) {
+            Rectangle()
+                .fill(.bar)
+                .frame(height: 0)
+                .ignoresSafeArea(edges: .top)
+        }
+        .overlay(alignment: .top) { Divider() }
         .animation(.easeInOut(duration: 0.2), value: appState.showInspector)
     }
 

@@ -69,6 +69,10 @@ public struct InspectorPreviewView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
+            // Keeps the scroll views off the toolbar's edge. A scroll view right under
+            // the toolbar made macOS 26 cross-fade every toolbar item whenever the
+            // search field folded into its button or opened out again.
+            Color.clear.frame(height: 1)
             if activeTab.selectedItems.count > 1 {
                 ScrollView {
                     selectionSummary
