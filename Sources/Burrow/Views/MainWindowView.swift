@@ -335,8 +335,8 @@ private struct FinderStatusBar: View {
         let items = activeTab.selectedItems
         let summary = FinderSelectionSummary(pane: activeTab)
         guard !items.isEmpty, !summary.isSearching else { return summary.countDescription }
-        let knownBytes = items.reduce(Int64(0)) { $0 + ($1.isDirectory ? (folderSizes.result(for: $1.path)?.bytes ?? 0) : $1.size) }
-        let unknownFolders = items.contains { $0.isDirectory && folderSizes.size(for: $0.path) == nil }
+        let knownBytes = FinderSelectionSummary.knownBytes(of: items) { folderSizes.result(for: $0)?.bytes }
+        let unknownFolders = FinderSelectionSummary.countedItems(items).contains { $0.isDirectory && folderSizes.size(for: $0.path) == nil }
         let count = summary.countDescription
         let size = FormatHelpers.formatBytes(knownBytes)
         return unknownFolders ? String(localized: "\(count) · at least \(size)") : String(localized: "\(count) · \(size)")

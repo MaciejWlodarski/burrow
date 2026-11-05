@@ -214,6 +214,9 @@ public struct FileItem: Identifiable, Hashable, Sendable {
     public var searchScore: Int
     /// Content stored only in the cloud; opening it downloads it.
     public let isCloudOnly: Bool
+    /// File identity when it has several hard links (0 otherwise), so totals count it once.
+    public var hardLinkID: UInt64 = 0
+    public var hardLinkDevice: Int32 = 0
 
     public init(
         url: URL,

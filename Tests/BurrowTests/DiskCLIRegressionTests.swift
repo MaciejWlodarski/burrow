@@ -25,6 +25,11 @@ struct DiskCLIRegressionTests {
         return object
     }
 
+    /// `expect` for conditions that themselves throw, which an autoclosure cannot.
+    private func holds(_ condition: Bool, line: UInt = #line) throws {
+        try expect(condition, line: line)
+    }
+
     private func write(_ size: Int, to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(repeating: 7, count: size).write(to: url)
@@ -131,6 +136,117 @@ struct DiskCLIRegressionTests {
         output = Output()
         try expect(cli(home: homePath, output: output).run(["scan", homePath + "/media/movie.mov"]) == 1)
         try expect(DiskCLI.parseSize("1.5G") == 1_500_000_000 && DiskCLI.parseSize("20kb") == 20_000 && DiskCLI.parseSize("x") == nil)
-        print("PASS burrow CLI scan/top/junk/size/trash output, filters, protection and exit codes")
+
+        // Archives round-trip; damaged ones are rejected instead of trusted.
+        let scanned = DiskScanner.scan(root: homePath, control: DiskScanControl())!
+        let archive = scanned.archived()
+        let restored = DiskTree.unarchived(archive)
+        try expect(restored?.nodeCount == scanned.nodeCount && restored?.rootPath == homePath)
+        try expect(restored?.allocatedSize(DiskTree.rootID) == scanned.allocatedSize(DiskTree.rootID))
+        try expect(restored.flatMap { $0.node(forPath: homePath + "/media/deep/a/b/notes.txt") } != nil)
+        try expect(abs((restored?.scannedAt.timeIntervalSince(scanned.scannedAt)) ?? 9) < 0.001)
+        try expect(DiskTree.unarchived(archive.prefix(archive.count - 1)) == nil && DiskTree.unarchived(Data("BRWT".utf8)) == nil)
+        guard let media = scanned.node(forPath: homePath + "/media").flatMap({ scanned.subtree(at: $0) }) else {
+            throw RegressionFailure(description: "no subtree for media")
+        }
+        try expect(media.rootPath == homePath + "/media" && media.node(forPath: homePath + "/media/deep/a/b/notes.txt") != nil)
+        try expect(media.allocatedSize(DiskTree.rootID) == scanned.allocatedSize(scanned.node(forPath: homePath + "/media")!))
+
+        // --cache: a saved scan answers later commands for its folder and
+        // folders inside it until --fresh, --max-age or a trash changes it.
+        let cacheDirectory = root.appendingPathComponent("cache")
+        func cached(_ output: Output, trashed: @escaping (URL) throws -> URL? = { _ in nil }) -> DiskCLI {
+            var cli = cli(home: homePath, output: output, trashed: trashed)
+            cli.cacheDirectory = cacheDirectory
+            return cli
+        }
+        output = Output()
+        try expect(cached(output).run(["scan", "~", "--cache", "--json"]) == 0)
+        try holds(try json(output.stdout)["cached"] as? Bool == false)
+        try write(4_000_000, to: home.appendingPathComponent("media/new.bin"))
+        output = Output()
+        try expect(cached(output).run(["top", "~/media", "--cache", "--json"]) == 0)
+        document = try json(output.stdout)
+        try expect(document["cached"] as? Bool == true && document["root"] as? String == homePath + "/media")
+        try expect((document["largestFiles"] as? [[String: Any]])?.first?["path"] as? String == homePath + "/media/deep/a/b/notes.txt")
+        output = Output()
+        try expect(cached(output).run(["scan", "~", "--cache"]) == 0)
+        try expect(output.stdout.contains("entries, cached ") && output.stdout.contains("(--fresh rescans)"))
+        output = Output()
+        try expect(cached(output).run(["top", "~/media", "--cache", "--fresh", "--json"]) == 0)
+        document = try json(output.stdout)
+        try expect(document["cached"] as? Bool == false)
+        try expect((document["largestFiles"] as? [[String: Any]])?.first?["path"] as? String == homePath + "/media/new.bin")
+        output = Output()
+        try expect(cached(output).run(["junk", "~", "--max-age", "0", "--json"]) == 0)
+        try holds(try json(output.stdout)["cached"] as? Bool == false)
+        // Without --cache nothing is read or written.
+        output = Output()
+        try expect(cached(output).run(["top", "~/media", "--json"]) == 0)
+        try holds(try json(output.stdout)["cached"] as? Bool == false)
+
+        output = Output()
+        let cachedMover = cached(output) { url in
+            let destination = bin.appendingPathComponent(url.lastPathComponent)
+            try FileManager.default.moveItem(at: url, to: destination)
+            return destination
+        }
+        try expect(cachedMover.run(["trash", "--cache", homePath + "/photos/target"]) == 0)
+        output = Output()
+        try expect(cached(output).run(["size", "~/photos", "--cache", "--json"]) == 0)
+        let photos = (try json(output.stdout)["items"] as? [[String: Any]])?.first
+        try expect((photos?["size"] as? Int64 ?? .max) < 1_000_000)
+        output = Output()
+        try expect(cached(output).run(["scan", "~", "--cache", "--json", "--depth", "3", "--top", "50"]) == 0)
+        document = try json(output.stdout)
+        try expect(document["cached"] as? Bool == true && !output.stdout.contains("/photos/target"))
+
+        output = Output()
+        try expect(cached(output).run(["cache", "--json"]) == 0)
+        let saved = try json(output.stdout)["scans"] as? [[String: Any]] ?? []
+        try expect(saved.contains { $0["root"] as? String == homePath })
+        // A file it cannot read is never listed, loaded or treated as its own.
+        try Data("BRWTgarbage".utf8).write(to: cacheDirectory.appendingPathComponent("damaged.tree"))
+        output = Output()
+        try expect(cached(output).run(["cache", "clear"]) == 0)
+        try expect(output.stdout.hasPrefix("Removed "))
+        try holds(try FileManager.default.contentsOfDirectory(atPath: cacheDirectory.path).filter { $0.hasSuffix(".tree") } == ["damaged.tree"])
+        try expect(cached(Output()).run(["cache", "bogus"]) == 2)
+
+        // mcp: JSON-RPC over stdio with the scan kept for the session.
+        let server = MCPServer(cli: cli(home: homePath, output: Output()), cache: ScanCache(directory: nil, maxAge: 600))
+        func reply(_ line: String) throws -> [String: Any] { try json(server.handle(line) ?? "") }
+        func call(_ id: Int, _ tool: String, _ arguments: String) throws -> [String: Any] {
+            try reply(#"{"jsonrpc":"2.0","id":\#(id),"method":"tools/call","params":{"name":"\#(tool)","arguments":\#(arguments)}}"#)["result"] as? [String: Any] ?? [:]
+        }
+        let initialized = try reply(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}"#)
+        let info = initialized["result"] as? [String: Any] ?? [:]
+        try expect(initialized["id"] as? Int == 1 && info["protocolVersion"] as? String == "2025-06-18")
+        try expect((info["serverInfo"] as? [String: Any])?["name"] as? String == "burrow" && info["capabilities"] != nil)
+        try expect(server.handle(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#) == nil)
+        try holds((try reply(#"{"jsonrpc":"2.0","id":"p","method":"ping"}"#))["id"] as? String == "p")
+        let listed = (try reply(#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)["result"] as? [String: Any])?["tools"] as? [[String: Any]] ?? []
+        try expect(listed.compactMap { $0["name"] as? String } == ["scan", "top", "junk", "size", "trash"])
+        try expect(listed.allSatisfy { ($0["inputSchema"] as? [String: Any])?["type"] as? String == "object" })
+        var called = try call(3, "scan", #"{"path":"\#(homePath)","files":1,"junk":true}"#)
+        try expect(called["isError"] as? Bool == false && (called["structuredContent"] as? [String: Any])?["cached"] as? Bool == false)
+        try expect(((called["content"] as? [[String: Any]])?.first?["text"] as? String)?.contains("largestFiles") == true)
+        called = try call(4, "top", #"{"path":"\#(homePath)/media","limit":1,"extensions":["bin"]}"#)
+        var structured = called["structuredContent"] as? [String: Any] ?? [:]
+        try expect(structured["cached"] as? Bool == true)
+        try expect((structured["largestFiles"] as? [[String: Any]])?.first?["path"] as? String == homePath + "/media/new.bin")
+        called = try call(5, "trash", #"{"paths":["\#(homePath)/media/new.bin"]}"#)
+        structured = called["structuredContent"] as? [String: Any] ?? [:]
+        try expect(structured["dryRun"] as? Bool == true && FileManager.default.fileExists(atPath: homePath + "/media/new.bin"))
+        called = try call(6, "top", #"{"path":"\#(homePath)/media/new.bin"}"#)
+        try expect(called["isError"] as? Bool == true && ((called["content"] as? [[String: Any]])?.first?["text"] as? String)?.contains("is a file") == true)
+        try holds((try reply(#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"rm"}}"#)["error"] as? [String: Any])?["code"] as? Int == -32602)
+        try holds((try reply(#"{"jsonrpc":"2.0","id":8,"method":"resources/list"}"#)["error"] as? [String: Any])?["code"] as? Int == -32601)
+        try holds((try reply("not json")["error"] as? [String: Any])?["code"] as? Int == -32700)
+        var served: [String] = []
+        var lines = [#"{"jsonrpc":"2.0","id":9,"method":"ping"}"#, "", #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#]
+        server.serve(input: { lines.isEmpty ? nil : lines.removeFirst() }, output: { served.append($0) })
+        try expect(served.count == 1 && served[0].contains("\"id\":9"))
+        print("PASS burrow CLI scan/top/junk/size/trash output, filters, protection, exit codes, scan cache and MCP server")
     }
 }

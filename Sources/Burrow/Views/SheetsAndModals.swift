@@ -1140,6 +1140,7 @@ struct BrowsingSettingsPane: View {
 
     var body: some View {
         Form {
+            FolderViewSettingsSection()
             FolderSortSettingsSection()
             Section {
                 Picker("When a file already exists", selection: $conflictPolicy) {
@@ -1464,6 +1465,59 @@ struct FolderSortSettingsSection: View {
                 }
             } header: {
                 Text("Folders with custom sorting")
+            }
+        }
+    }
+}
+
+/// Default view for every folder, plus the folders that keep their own.
+struct FolderViewSettingsSection: View {
+    @ObservedObject private var preferences = FolderViewPreferences.shared
+
+    var body: some View {
+        Section {
+            Picker("Open folders as", selection: Binding(
+                get: { preferences.defaultMode },
+                set: { preferences.setDefaultMode($0) }
+            )) {
+                ForEach(FolderViewPreferences.rememberedModes) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+        } header: {
+            Text("View")
+        } footer: {
+            SettingsFootnote(String(localized: "Choosing another view in a folder is remembered for that folder. Columns and the disk map keep their view while you browse inside them."))
+        }
+
+        if !preferences.folderModes.isEmpty {
+            Section {
+                ForEach(preferences.folderModes.keys.sorted(), id: \.self) { path in
+                    HStack {
+                        Text(path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(path)
+                        Spacer()
+                        Text(preferences.folderModes[path]?.displayName ?? "")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Button {
+                            preferences.resetMode(for: URL(fileURLWithPath: path))
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Restore the default view for this folder")
+                        .accessibilityLabel("Restore the default view for \(path)")
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button("Restore Default View in All Folders") { preferences.resetAllFolders() }
+                }
+            } header: {
+                Text("Folders with their own view")
             }
         }
     }

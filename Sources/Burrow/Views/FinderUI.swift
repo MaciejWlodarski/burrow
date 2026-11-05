@@ -67,6 +67,37 @@ struct FinderSelectionSummary: Equatable {
         if hasQuery || isAnalysis { return "" }
         return totalCount == 1 ? String(localized: "1 item") : String(localized: "\(totalCount.formatted()) items")
     }
+
+    /// Items whose size is not already in another selected item: search
+    /// results and expanded folders can list a folder and files inside it.
+    static func countedItems(_ items: [FileItem]) -> [FileItem] {
+        let folders = Set(items.lazy.filter(\.isDirectory).map(\.path))
+        guard !folders.isEmpty else { return items }
+        return items.filter { item in
+            var path = item.parentPath
+            while path.count > 1 {
+                if folders.contains(path) { return false }
+                path = (path as NSString).deletingLastPathComponent
+            }
+            return !(folders.contains("/") && item.path != "/")
+        }
+    }
+
+    /// Bytes of a selection counted once, as folder sizes and the disk map do:
+    /// items inside a selected folder are part of its size, and hard links to
+    /// one file count once. Folders without a known size add nothing.
+    static func knownBytes(of items: [FileItem], folderSize: (String) -> Int64?) -> Int64 {
+        var links = Set<String>()
+        var total: Int64 = 0
+        for item in countedItems(items) {
+            if item.isDirectory {
+                total += folderSize(item.path) ?? 0
+            } else if item.hardLinkID == 0 || links.insert("\(item.hardLinkDevice):\(item.hardLinkID)").inserted {
+                total += max(0, item.size)
+            }
+        }
+        return total
+    }
 }
 
 // TextRenderer and TextAttribute exist only in the macOS 15 SDK (Swift 6 toolchains).

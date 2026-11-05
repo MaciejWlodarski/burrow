@@ -72,7 +72,7 @@ public struct IndexedFileEntry: Sendable {
         let url = URL(fileURLWithPath: p, isDirectory: isDirectory)
         let modDate = modificationDate
         let tags = loadTags ? FinderTagColor.readTags(for: url) : []
-        return FileItem(
+        var item = FileItem(
             url: url,
             name: name,
             path: p,
@@ -91,6 +91,9 @@ public struct IndexedFileEntry: Sendable {
             searchScore: score,
             isCloudOnly: isDataless
         )
+        item.hardLinkID = hardLinkID
+        item.hardLinkDevice = hardLinkDevice
+        return item
     }
 }
 
@@ -252,6 +255,18 @@ public enum BulkCrawler {
             }
         }
         return DirectoryReadResult(entries: results, isComplete: false, errorCode: nil)
+    }
+
+    /// Other disks mounted inside `roots`, which a crawl of them should not
+    /// enter, like folder sizes and the disk map. A disk that is itself one of
+    /// the roots, or holds one, is still crawled.
+    public static func otherDisks(inside roots: [String]) -> Set<String> {
+        let normalized = roots.map { URL(fileURLWithPath: $0).standardizedFileURL.path }
+        var excluded = Set<String>()
+        for root in normalized { excluded.formUnion(DiskScanBoundary.make(root: root).excluded) }
+        return excluded.filter { mount in
+            !normalized.contains { $0 == mount || $0.hasPrefix(mount + "/") }
+        }
     }
 
     /// Breadth-first crawl with a strict retained-entry budget and explicit coverage.

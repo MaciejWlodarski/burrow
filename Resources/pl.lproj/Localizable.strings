@@ -971,3 +971,9 @@
 "Calculate SHA-256 and MD5" = "Oblicz SHA-256 i MD5";
 "1 tab" = "1 karta";
 "%@ tabs" = "Karty: %@";
+"Open folders as" = "Otwieraj foldery jako";
+"Choosing another view in a folder is remembered for that folder. Columns and the disk map keep their view while you browse inside them." = "Wybór innego widoku w folderze jest zapamiętywany dla tego folderu. Kolumny i mapa dysku zostają przy przechodzeniu między folderami wewnątrz nich.";
+"Restore the default view for this folder" = "Przywróć domyślny widok dla tego folderu";
+"Restore the default view for %@" = "Przywróć domyślny widok dla %@";
+"Restore Default View in All Folders" = "Przywróć domyślny widok we wszystkich folderach";
+"Folders with their own view" = "Foldery z własnym widokiem";

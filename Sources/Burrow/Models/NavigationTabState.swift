@@ -110,6 +110,23 @@ public final class PaneTabState: ObservableObject, Identifiable {
         applySortChange()
     }
 
+    /// A view picked by the user is remembered for this folder; the disk map
+    /// is not. Results of a whole-index search do not change the folder.
+    public func chooseViewMode(_ mode: FinderViewMode) {
+        viewMode = mode
+        let isGlobalSearch = !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && searchScope == .wholeIndex
+        if !isGlobalSearch { FolderViewPreferences.shared.setMode(mode, for: currentURL) }
+    }
+
+    /// Opening a folder from a list or icons view shows it in its own view or
+    /// the default. Columns and the disk map span folders, so browsing inside
+    /// them keeps them.
+    private func applyFolderViewMode() {
+        guard viewMode == .list || viewMode == .icons else { return }
+        let mode = FolderViewPreferences.shared.mode(for: currentURL)
+        if viewMode != mode { viewMode = mode }
+    }
+
     /// A sort chosen by the user applies to this folder only. Sorting results
     /// of a whole-index search does not change the folder behind them.
     public func setSort(_ sort: FolderSort) {
@@ -358,6 +375,8 @@ public final class PaneTabState: ObservableObject, Identifiable {
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.refreshFolderSort() } }
         }
         if loadImmediately {
+            // Restored panes keep their saved view; new ones open in the folder's.
+            viewMode = FolderViewPreferences.shared.mode(for: currentURL)
             // A new pane is a snapshot consumer, not an explicit filesystem refresh.
             reloadDirectory(invalidateCaches: false)
         } else { sessionAvailability = .paused }
@@ -546,6 +565,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
         selectedPaths.removeAll()
         expandedFolderPaths.removeAll()
         renamingItemPath = nil
+        applyFolderViewMode()
 
         if clearSearch || (!searchQuery.isEmpty && searchScope == .wholeIndex) {
             searchQuery = ""

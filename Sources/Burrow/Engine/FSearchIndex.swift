@@ -339,7 +339,8 @@ public final class FSearchIndex: @unchecked Sendable {
             self.crawlRootsHookForTesting?(crawlRoots)
             #endif
             let result = BulkCrawler.crawlTreeResult(roots: crawlRoots, skipHeavyDevDirs: skipHeavy,
-                customSkippedDirs: skippedSet, skippedPaths: privateSkips, maxEntries: 500_000, progress: { count in
+                customSkippedDirs: skippedSet, skippedPaths: privateSkips,
+                excludedPaths: BulkCrawler.otherDisks(inside: crawlRoots), maxEntries: 500_000, progress: { count in
                     #if BURROW_TESTING
                     self.crawlProgressHookForTesting?(count)
                     #endif
@@ -666,7 +667,10 @@ public final class FSearchIndex: @unchecked Sendable {
         }
         if !missing {
             let crawl = BulkCrawler.crawlTreeResult(roots: [normalized], skipHeavyDevDirs: skipHeavyDevDirs,
-                customSkippedDirs: skippedDirectoryNames, maxEntries: max(0, 500_000 - replacement.count))
+                customSkippedDirs: skippedDirectoryNames,
+                // A disk that is an index root of its own stays indexed.
+                excludedPaths: BulkCrawler.otherDisks(inside: configuredRoots + [normalized]),
+                maxEntries: max(0, 500_000 - replacement.count))
             replacement.append(contentsOf: crawl.entries)
             partial = partial || !crawl.isComplete
         }
@@ -739,8 +743,10 @@ public final class FSearchIndex: @unchecked Sendable {
         case .recursiveFolder:
             // A shallow index entry proves existence, not recursive coverage. A
             // fresh bounded scan also works for roots outside configured indexing.
+            // Like folder sizes: other disks mounted inside are not this folder.
             let crawl = BulkCrawler.crawlTreeResult(roots: [normalizedScopeDir],
                 skipHeavyDevDirs: skipHeavyDevDirs, customSkippedDirs: skippedDirectoryNames,
+                excludedPaths: BulkCrawler.otherDisks(inside: [normalizedScopeDir]),
                 maxEntries: 500_000, includeHidden: includeHidden, isCancelled: isCancelled)
             candidateEntries = crawl.entries
             partial = !crawl.isComplete

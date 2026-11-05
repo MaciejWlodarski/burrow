@@ -213,17 +213,17 @@ struct BurrowApp: App {
                     .keyboardShortcut("s", modifiers: [.command, .control])
                 Divider()
                 Button("as List") {
-                    appState.activeTab.viewMode = .list
+                    appState.activeTab.chooseViewMode(.list)
                 }
                 .keyboardShortcut("1", modifiers: [.command])
 
                 Button("as Icons") {
-                    appState.activeTab.viewMode = .icons
+                    appState.activeTab.chooseViewMode(.icons)
                 }
                 .keyboardShortcut("2", modifiers: [.command])
 
                 Button("as Columns") {
-                    appState.activeTab.viewMode = .columns
+                    appState.activeTab.chooseViewMode(.columns)
                 }
                 .keyboardShortcut("3", modifiers: [.command])
 

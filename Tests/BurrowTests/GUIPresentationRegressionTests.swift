@@ -10,6 +10,7 @@ struct GUIPresentationRegressionTests {
         for name in ["one", "two", "three"] {
             try Data(name.utf8).write(to: nested.appendingPathComponent(name))
         }
+        try testSelectionBytesCountOnce(root)
         let pane = PaneTabState(initialURL: root)
         pane.viewMode = .wiztree
         let generation = UUID()
@@ -105,4 +106,29 @@ struct GUIPresentationRegressionTests {
         print("PASS production quick-search selection boundaries for the visible result list")
     }
 
+
+    /// Search results can list a folder with files inside it and several hard
+    /// links to one file; the selection total counts each byte once.
+    @MainActor private func testSelectionBytesCountOnce(_ root: URL) throws {
+        let folder = root.appendingPathComponent("linked")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let original = folder.appendingPathComponent("a.bin"), link = folder.appendingPathComponent("b.bin")
+        try Data(repeating: 1, count: 4_000).write(to: original)
+        try FileManager.default.linkItem(at: original, to: link)
+        try Data(repeating: 2, count: 1_000).write(to: folder.appendingPathComponent("c.bin"))
+        let items = BulkCrawler.readDirectoryResult(at: folder.path, includeHidden: false).entries
+            .map { $0.toFileItem(loadTags: false) }
+        try expect(items.count == 3 && items.filter { $0.hardLinkID != 0 }.count == 2)
+        try expect(FinderSelectionSummary.knownBytes(of: items) { _ in nil } == 5_000)
+        let parent = BulkCrawler.readDirectoryResult(at: root.path, includeHidden: false).entries
+            .map { $0.toFileItem(loadTags: false) }.filter { $0.path == folder.path }
+        try expect(parent.count == 1)
+        try expect(FinderSelectionSummary.countedItems(parent + items).map(\.path) == [folder.path])
+        try expect(FinderSelectionSummary.knownBytes(of: parent + items) { $0 == folder.path ? 5_000 : nil } == 5_000)
+
+        // Crawls stay on one disk: /dev is its own file system inside /.
+        try expect(BulkCrawler.otherDisks(inside: ["/"]).contains("/dev"))
+        try expect(!BulkCrawler.otherDisks(inside: ["/", "/dev"]).contains("/dev"))
+        try expect(!BulkCrawler.otherDisks(inside: ["/dev/fd"]).contains("/dev"))
+    }
 }

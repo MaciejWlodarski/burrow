@@ -26,6 +26,7 @@ The system Trash favorite opens **Finder's Trash**, even after its label is rena
 - Combine names with extension, size, modification-time, path, file-type, tag-color, content, and Git-status filters.
 - Use fuzzy matching, quoted phrases, exclusions, and regular expressions.
 - The built-in engine uses bulk filesystem enumeration, an in-memory index, an optional persistent metadata cache, and FSEvents updates. No separate search service is required for the built-in engine.
+- Searching subfolders and building the index stay on one disk, like folder sizes: other disks mounted inside a folder are left out unless they are an index folder of their own. The status bar totals a selection of results once: files inside a selected folder are part of its size, and hard links to one file count once.
 
 ### Work with files
 
@@ -54,7 +55,9 @@ The command drawer supports up to eight tabs. Drag its separator to resize it, o
 
 Each command runs in a fresh, noninteractive `zsh`. A simple standalone `cd`, including a quoted path or `~/…`, changes that command tab's directory after successful completion, without navigating the file pane. Compound commands run unchanged in the shell; their directory changes do not carry into the next command. Completion of commands other than recognized standalone `cd` requests a bounded refresh for the command's original directory. Console output is bounded: long entries may be shortened and older entries removed, with visible notices. Display truncation does not shorten the executed command. Tab state is not restored after app restart.
 
-## Folder sorting
+## Folder views and sorting
+
+Views work like Finder's per-folder views. Settings → Browsing holds the default view (List, Icons or Columns). Choosing another view in the toolbar or with ⌘1–⌘3 applies to the current folder only and is remembered across launches; opening another folder from a list or icon view shows it in its own view or the default. Columns and the disk map keep their view while you browse inside them, and the disk map is never remembered for a folder. Settings lists every folder with its own view. Restored tabs keep the view they were saved with.
 
 Sorting works like Explorer's per-folder views. Settings holds one default (field, direction, folders on top). Changing the sort in a column header or the Sort menu applies to the current folder only and is remembered across launches; other folders keep the default. The Sort menu can reset the folder or make its sort the new default, and Settings lists every folder with its own sort. Sorting the results of a whole-index search does not change the folder behind them. Subfolders do not inherit a parent's sort.
 

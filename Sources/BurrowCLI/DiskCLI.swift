@@ -17,6 +17,10 @@ struct DiskCLI {
     var homePath = NSHomeDirectory()
     var currentDirectory = FileManager.default.currentDirectoryPath
     var showsProgress = isatty(STDERR_FILENO) != 0
+    /// Scans to reuse; set by `--cache` or by the MCP server for its session.
+    var cache: ScanCache?
+    var cacheDirectory = ScanCache.defaultDirectory
+    static let defaultCacheAge: TimeInterval = 600
 
     enum Failure: Error {
         case usage(String)
@@ -38,6 +42,9 @@ struct DiskCLI {
         var minSize: Int64?
         var olderThanDays: Double?
         var extensions: Set<String> = []
+        var cache = false
+        var fresh = false
+        var maxAge: TimeInterval?
     }
 
     static let usage = """
@@ -65,20 +72,32 @@ struct DiskCLI {
       trash PATH...     Move items to the Trash (recoverable). Refuses the disk root,
                         system folders, your home and its standard folders.
                           --dry-run      only report what would be moved
+      cache [clear]     List the scans --cache saved, or delete them
+      mcp               Serve these commands as MCP tools over stdio for AI agents
+                        (scan, top, junk, size, trash). Scans stay in memory for
+                        the session; trash only reports unless dry_run is false.
       help              This text
 
     GLOBAL OPTIONS
       --json            One JSON document on stdout (sizes in bytes)
       --quiet           No progress line on stderr
+      --cache           Reuse a scan of PATH, or of a folder above it, saved by an
+                        earlier --cache run in the last 10 minutes; save new scans
+                        to ~/Library/Caches/Burrow/cli
+      --max-age SECS    Like --cache with another age limit
+      --fresh           Rescan even when a cached scan would do
 
     NOTES
       Sizes are on-disk (allocated) bytes. Hard links and unmodified APFS clones
       (e.g. Finder copies) count once, other disks and
-      iCloud-only files are skipped. Every command scans fresh: a whole disk takes
-      about 15 s, a single folder much less, so prefer one `scan` with --files,
-      --types and --junk over several commands. Without Full Disk Access for the
-      app that runs burrow, some folders are unreadable; their space is reported
-      as "unscanned". Trashed items free space only after the Trash is emptied.
+      iCloud-only files are skipped. Without --cache every command scans fresh:
+      a whole disk takes about 15 s, a single folder much less, so prefer one
+      `scan` with --files, --types and --junk over several commands, or scan once
+      with --cache and ask the rest from the cache. Trashing through burrow
+      updates cached scans; changes made elsewhere show after --fresh. Without
+      Full Disk Access for the app that runs burrow, some folders are unreadable;
+      their space is reported as "unscanned". Trashed items free space only
+      after the Trash is emptied.
 
     EXIT STATUS
       0 success, 1 a scan or trash operation failed, 2 invalid usage
@@ -95,14 +114,11 @@ struct DiskCLI {
                 write(Self.usage + "\n")
                 return 0
             }
-            switch command {
-            case "scan": return try scanCommand(options)
-            case "top": return try topCommand(options)
-            case "junk": return try junkCommand(options)
-            case "size": return try sizeCommand(options)
-            case "trash": return try trashCommand(options)
-            default: throw Failure.usage("unknown command '\(command)'")
+            var cli = self
+            if options.cache && cli.cache == nil {
+                cli.cache = ScanCache(directory: cacheDirectory, maxAge: options.maxAge ?? Self.defaultCacheAge)
             }
+            return try cli.dispatch(command, options)
         } catch Failure.usage(let message) {
             warn("burrow: \(message)\nRun `burrow help` for usage.\n")
             return 2
@@ -113,6 +129,19 @@ struct DiskCLI {
             warn("burrow: \(error.localizedDescription)\n")
             return 1
         }
+    }
+
+    private func dispatch(_ command: String, _ options: Options) throws -> Int32 {
+            switch command {
+            case "scan": return try scanCommand(options)
+            case "top": return try topCommand(options)
+            case "junk": return try junkCommand(options)
+            case "size": return try sizeCommand(options)
+            case "trash": return try trashCommand(options)
+            case "cache": return try cacheCommand(options)
+            case "mcp": return try mcpCommand(options)
+            default: throw Failure.usage("unknown command '\(command)'")
+            }
     }
 
     // MARK: Arguments
@@ -138,6 +167,13 @@ struct DiskCLI {
             case "--types": options.types = true
             case "--junk": options.junk = true
             case "--dry-run", "-n": options.dryRun = true
+            case "--cache": options.cache = true
+            case "--fresh": options.fresh = true
+            case "--max-age":
+                let raw = try value(argument)
+                guard let seconds = Double(raw), seconds >= 0 else { throw Failure.usage("--max-age needs seconds, got '\(raw)'") }
+                options.maxAge = seconds
+                options.cache = true
             case "--help", "-h": options.help = true
             case "--depth": options.depth = try count(argument)
             case "--top": options.top = try count(argument)
@@ -196,7 +232,15 @@ struct DiskCLI {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else { throw Failure.failed("\(path): no such file or folder") }
         guard isDirectory.boolValue else { throw Failure.failed("\(path) is a file; use `burrow size` for files") }
-        return scan(path, quiet: options.quiet)
+        return tree(at: path, options: options)
+    }
+
+    /// A reusable cached scan when caching is on and `--fresh` is not, else a new one.
+    private func tree(at path: String, options: Options) -> DiskTree {
+        if let cache, !options.fresh, let tree = cache.tree(for: path, maxAge: options.maxAge) { return tree }
+        let tree = scan(path, quiet: options.quiet)
+        cache?.store(tree)
+        return tree
     }
 
     private func scan(_ path: String, quiet: Bool) -> DiskTree {
@@ -273,7 +317,8 @@ struct DiskCLI {
             "skippedMounts": tree.skippedMountCount,
             "unscannedSize": tree.unaccountedBytes,
             "cloneSharedSize": tree.cloneSharedBytes,
-            "sizeUnit": "bytes on disk"
+            "sizeUnit": "bytes on disk",
+            "cached": cache?.isReused(tree) == true
         ]
         if let free = tree.volumeFreeBytes { document["volumeFreeSize"] = free }
         if tree.reachedEntryLimit { document["reachedEntryLimit"] = true }
@@ -282,7 +327,10 @@ struct DiskCLI {
 
     private func headerLines(_ tree: DiskTree) -> [String] {
         let seconds = String(format: "%.1f", tree.elapsedMilliseconds / 1000)
-        var lines = ["Scanned \(tree.rootPath): \(Self.grouped(tree.nodeCount)) entries in \(seconds) s"]
+        let scanned = cache?.isReused(tree) == true
+            ? "Scanned \(tree.rootPath): \(Self.grouped(tree.nodeCount)) entries, cached \(Self.age(Date().timeIntervalSince(tree.scannedAt))) ago (--fresh rescans)"
+            : "Scanned \(tree.rootPath): \(Self.grouped(tree.nodeCount)) entries in \(seconds) s"
+        var lines = [scanned]
         var disk = "Total \(Self.human(tree.allocatedSize(DiskTree.rootID)))"
         if let free = tree.volumeFreeBytes { disk += ", free \(Self.human(free))" }
         if tree.unaccountedBytes > 0 { disk += ", unscanned (system/protected) \(Self.human(tree.unaccountedBytes))" }
@@ -561,11 +609,11 @@ struct DiskCLI {
         let isDirectory: Bool
     }
 
-    private func measure(_ path: String, quiet: Bool) -> Measured? {
+    private func measure(_ path: String, options: Options) -> Measured? {
         var info = stat()
         guard lstat(path, &info) == 0 else { return nil }
         if info.st_mode & S_IFMT == S_IFDIR {
-            let tree = scan(path, quiet: quiet)
+            let tree = self.tree(at: path, options: options)
             return Measured(path: path, size: tree.allocatedSize(DiskTree.rootID), logicalSize: tree.logicalSize(DiskTree.rootID),
                 files: tree.fileCount(DiskTree.rootID), isDirectory: true)
         }
@@ -579,7 +627,7 @@ struct DiskCLI {
         var status: Int32 = 0
         for raw in options.positional {
             let path = resolve(raw)
-            guard let measured = measure(path, quiet: options.quiet) else {
+            guard let measured = measure(path, options: options) else {
                 status = 1
                 results.append(["path": path, "error": "no such file or folder"])
                 lines.append("        ?  \(path): no such file or folder")
@@ -633,7 +681,7 @@ struct DiskCLI {
                 lines.append("refused     \(path): protected, \(reason)")
                 continue
             }
-            guard let measured = measure(path, quiet: options.quiet) else {
+            guard let measured = measure(path, options: options) else {
                 status = 1
                 result["status"] = "failed"
                 result["reason"] = "no such file or folder"
@@ -650,6 +698,7 @@ struct DiskCLI {
             do {
                 let destination = try trash(URL(fileURLWithPath: path))
                 result["status"] = "trashed"
+                cache?.removeItem(at: path)
                 if let destination { result["trashedTo"] = destination.path }
                 total += measured.size
                 lines.append("trashed     " + Self.pad(Self.human(measured.size), 9) + "  " + path)
@@ -670,11 +719,45 @@ struct DiskCLI {
         return status
     }
 
+    // MARK: cache
+
+    private func cacheCommand(_ options: Options) throws -> Int32 {
+        let store = cache ?? ScanCache(directory: cacheDirectory, maxAge: options.maxAge ?? Self.defaultCacheAge)
+        switch options.positional.first {
+        case nil, "list":
+            let entries = store.entries()
+            if options.json {
+                try emit(["directory": cacheDirectory.path, "scans": entries.map { entry -> [String: Any] in
+                    ["root": entry.info.rootPath, "scannedAt": ISO8601DateFormatter().string(from: entry.info.scannedAt),
+                     "ageSeconds": Int(Date().timeIntervalSince(entry.info.scannedAt)), "fileSize": entry.bytes]
+                }])
+            } else if entries.isEmpty {
+                write("No cached scans in \(cacheDirectory.path).\n")
+            } else {
+                write((["Cached scans in \(cacheDirectory.path):"] + entries.map { entry in
+                    Self.pad(Self.human(entry.bytes), 9) + "  " + Self.pad(Self.age(Date().timeIntervalSince(entry.info.scannedAt)), 7) + " old  " + entry.info.rootPath
+                }).joined(separator: "\n") + "\n")
+            }
+        case "clear":
+            let count = store.clear()
+            if options.json { try emit(["removed": count]) } else { write("Removed \(count) cached \(count == 1 ? "scan" : "scans").\n") }
+        case let other?:
+            throw Failure.usage("unknown cache action '\(other)', use `cache` or `cache clear`")
+        }
+        return 0
+    }
+
     // MARK: Formatting
 
     private func emit(_ document: [String: Any]) throws {
         let data = try JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         write(String(decoding: data, as: UTF8.self) + "\n")
+    }
+
+    static func age(_ seconds: TimeInterval) -> String {
+        if seconds < 90 { return "\(max(0, Int(seconds.rounded()))) s" }
+        if seconds < 90 * 60 { return "\(Int((seconds / 60).rounded())) min" }
+        return String(format: "%.1f h", seconds / 3600)
     }
 
     static func human(_ bytes: Int64) -> String {

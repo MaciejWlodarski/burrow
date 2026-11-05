@@ -5,7 +5,8 @@ struct FolderSortRegressionTests {
     @MainActor func runAll() async throws {
         try testStorePersistsDefaultsAndExceptions()
         try await testPanesUseFolderSortAndFollowChanges()
-        print("PASS per-folder sort: default, folder exceptions, reset, persistence and live updates across tabs")
+        try testFolderViewModes()
+        print("PASS per-folder sort and view: default, folder exceptions, reset, persistence and live updates across tabs")
     }
 
     @MainActor private func testStorePersistsDefaultsAndExceptions() throws {
@@ -96,5 +97,53 @@ struct FolderSortRegressionTests {
         pane.setSort(FolderSort(field: .kind, ascending: true, foldersOnTop: true))
         try expect(!store.hasCustomSort(for: downloads))
         pane.clearSearch()
+    }
+    @MainActor private func testFolderViewModes() throws {
+        let suiteName = "com.burrow.tests.folder-view-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else { throw RegressionFailure(description: "no suite") }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let photos = URL(fileURLWithPath: "/tmp/x/Photos"), other = URL(fileURLWithPath: "/tmp/x/Other")
+        let store = FolderViewPreferences(defaults: defaults)
+        try expect(store.mode(for: other) == .list)
+        store.setMode(.icons, for: URL(fileURLWithPath: "/tmp/x/Photos/"))
+        store.setMode(.wiztree, for: other)
+        try expect(store.mode(for: photos) == .icons && !store.hasCustomMode(for: other))
+        let reloaded = FolderViewPreferences(defaults: defaults)
+        try expect(reloaded.mode(for: photos) == .icons)
+        reloaded.setDefaultMode(.icons)
+        try expect(!reloaded.hasCustomMode(for: photos) && reloaded.mode(for: other) == .icons)
+        reloaded.setMode(.columns, for: photos)
+        reloaded.resetMode(for: photos)
+        try expect(FolderViewPreferences(defaults: defaults).mode(for: photos) == .icons)
+
+        // Panes: list and icons follow each folder's view; columns and the disk
+        // map stay while browsing; a picked view is remembered per folder.
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BURROW_TEST_ROOT"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("folder-view-\(UUID().uuidString)")
+        let pictures = root.appendingPathComponent("Pictures"), work = root.appendingPathComponent("Work")
+        let nested = pictures.appendingPathComponent("Trip")
+        for folder in [nested, work] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
+        let shared = FolderViewPreferences.shared
+        defer {
+            shared.resetAllFolders()
+            shared.setDefaultMode(.list)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let pane = PaneTabState(initialURL: pictures)
+        try expect(pane.viewMode == shared.defaultMode)
+        pane.chooseViewMode(.icons)
+        try expect(shared.mode(for: pictures) == .icons)
+        try expect(pane.navigate(to: work) && pane.viewMode == .list)
+        try expect(pane.navigate(to: pictures) && pane.viewMode == .icons)
+        pane.goBack()
+        try expect(pane.currentURL == work.standardizedFileURL && pane.viewMode == .list)
+        try expect(PaneTabState(initialURL: pictures).viewMode == .icons)
+        pane.chooseViewMode(.columns)
+        try expect(pane.navigate(to: pictures) && pane.viewMode == .columns)
+        pane.chooseViewMode(.wiztree)
+        try expect(pane.navigate(to: nested) && pane.viewMode == .wiztree)
+        try expect(shared.mode(for: pictures) == .icons && !shared.hasCustomMode(for: nested))
+        pane.chooseViewMode(.list)
+        try expect(!shared.hasCustomMode(for: nested))
     }
 }

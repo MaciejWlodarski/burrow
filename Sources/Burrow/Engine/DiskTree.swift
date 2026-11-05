@@ -55,7 +55,8 @@ public final class DiskTree: @unchecked Sendable {
     init(rootPath: String, nodes: ContiguousArray<Node>, children: ContiguousArray<NodeID>,
          nameBytes: ContiguousArray<UInt8>, elapsedMilliseconds: Double, isComplete: Bool,
          reachedEntryLimit: Bool, unreadableDirectoryCount: Int, datalessDirectoryCount: Int,
-         skippedMountCount: Int, volumeFreeBytes: Int64?, unaccountedBytes: Int64, cloneSharedBytes: Int64 = 0) {
+         skippedMountCount: Int, volumeFreeBytes: Int64?, unaccountedBytes: Int64, cloneSharedBytes: Int64 = 0,
+         scannedAt: Date = Date()) {
         self.rootPath = rootPath
         self.nodes = nodes
         self.children = children
@@ -69,7 +70,7 @@ public final class DiskTree: @unchecked Sendable {
         self.volumeFreeBytes = volumeFreeBytes
         self.unaccountedBytes = unaccountedBytes
         self.cloneSharedBytes = cloneSharedBytes
-        scannedAt = Date()
+        self.scannedAt = scannedAt
     }
 
     public var nodeCount: Int { nodes.count }
@@ -234,6 +235,145 @@ public final class DiskTree: @unchecked Sendable {
             return node.flags & Flag.removed != 0 ? Int64.min : node.allocated
         }
         children[range].sort { rank($0) > rank($1) }
+    }
+}
+
+// MARK: Reuse between commands
+
+extension DiskTree {
+    /// The folder at `id` as a tree of its own, sharing this tree's names.
+    /// Removed items are left out; counts the scan kept only for the whole
+    /// tree (cloud-only folders, skipped mounts, clone savings) start at zero.
+    public func subtree(at id: NodeID) -> DiskTree? {
+        if id == Self.rootID { return self }
+        return read {
+            guard Int(id) < nodes.count, nodes[Int(id)].flags & Flag.directory != 0 else { return nil }
+            var newNodes = ContiguousArray<Node>()
+            var newChildren = ContiguousArray<NodeID>()
+            var root = nodes[Int(id)]
+            root.parent = Self.rootID
+            newNodes.append(root)
+            var queue: [(old: NodeID, new: NodeID)] = [(id, Self.rootID)]
+            var unreadable = 0, unaccounted: Int64 = 0
+            var head = 0
+            while head < queue.count {
+                let (old, new) = queue[head]
+                head += 1
+                let first = Int32(newChildren.count)
+                var count: Int32 = 0
+                forEachChild(of: old) { child, node in
+                    guard node.flags & Flag.removed == 0 else { return true }
+                    var copy = node
+                    copy.parent = new
+                    let childID = NodeID(newNodes.count)
+                    newNodes.append(copy)
+                    newChildren.append(childID)
+                    queue.append((child, childID))
+                    count += 1
+                    if node.flags & Flag.unreadable != 0, node.flags & Flag.directory != 0 { unreadable += 1 }
+                    if node.flags & Flag.synthetic != 0 { unaccounted += node.allocated }
+                    return true
+                }
+                newNodes[Int(new)].firstChild = first
+                newNodes[Int(new)].childCount = count
+            }
+            return DiskTree(rootPath: path(id), nodes: newNodes, children: newChildren, nameBytes: nameBytes,
+                            elapsedMilliseconds: elapsedMilliseconds, isComplete: isComplete, reachedEntryLimit: reachedEntryLimit,
+                            unreadableDirectoryCount: unreadable, datalessDirectoryCount: 0, skippedMountCount: 0,
+                            volumeFreeBytes: volumeFreeBytes, unaccountedBytes: unaccounted, scannedAt: scannedAt)
+        }
+    }
+
+    private static let archiveMagic: [UInt8] = Array("BRWT".utf8)
+    private static let archiveVersion: UInt32 = 1
+
+    /// When and where an archive was scanned, read without loading its tables.
+    public struct ArchiveInfo {
+        public let rootPath: String
+        public let scannedAt: Date
+        fileprivate let metadata: [String: Any]
+        fileprivate let tablesOffset: Int
+    }
+
+    /// The tree as one blob: a small JSON header, then the raw tables. Only
+    /// this build reads it back, so a format or layout change just misses.
+    public func archived() -> Data {
+        read {
+            var metadata: [String: Any] = [
+                "rootPath": rootPath, "scannedAt": scannedAt.timeIntervalSince1970,
+                "elapsedMilliseconds": elapsedMilliseconds, "isComplete": isComplete,
+                "reachedEntryLimit": reachedEntryLimit, "unreadableDirectoryCount": unreadableDirectoryCount,
+                "datalessDirectoryCount": datalessDirectoryCount, "skippedMountCount": skippedMountCount,
+                "unaccountedBytes": unaccountedBytes, "cloneSharedBytes": cloneSharedBytes,
+                "nodes": nodes.count, "children": children.count, "nameBytes": nameBytes.count,
+                "nodeStride": MemoryLayout<Node>.stride
+            ]
+            if let volumeFreeBytes { metadata["volumeFreeBytes"] = volumeFreeBytes }
+            let header = (try? JSONSerialization.data(withJSONObject: metadata)) ?? Data()
+            var data = Data(Self.archiveMagic)
+            withUnsafeBytes(of: Self.archiveVersion.littleEndian) { data.append(contentsOf: $0) }
+            withUnsafeBytes(of: UInt32(header.count).littleEndian) { data.append(contentsOf: $0) }
+            data.append(header)
+            nodes.withUnsafeBytes { data.append(contentsOf: $0) }
+            children.withUnsafeBytes { data.append(contentsOf: $0) }
+            nameBytes.withUnsafeBytes { data.append(contentsOf: $0) }
+            return data
+        }
+    }
+
+    public static func archiveInfo(_ data: Data) -> ArchiveInfo? {
+        guard data.count >= 12, Array(data.prefix(4)) == archiveMagic else { return nil }
+        func word(_ offset: Int) -> UInt32 {
+            data.withUnsafeBytes { UInt32(littleEndian: $0.loadUnaligned(fromByteOffset: offset, as: UInt32.self)) }
+        }
+        let length = Int(word(8))
+        guard word(4) == archiveVersion, data.count >= 12 + length,
+              let metadata = try? JSONSerialization.jsonObject(with: data.subdata(in: 12..<(12 + length))) as? [String: Any],
+              let rootPath = metadata["rootPath"] as? String, let scannedAt = metadata["scannedAt"] as? Double,
+              metadata["nodeStride"] as? Int == MemoryLayout<Node>.stride else { return nil }
+        return ArchiveInfo(rootPath: rootPath, scannedAt: Date(timeIntervalSince1970: scannedAt), metadata: metadata, tablesOffset: 12 + length)
+    }
+
+    public static func unarchived(_ data: Data) -> DiskTree? {
+        guard let info = archiveInfo(data) else { return nil }
+        let metadata = info.metadata
+        func int(_ key: String) -> Int? { metadata[key] as? Int }
+        guard let nodeCount = int("nodes"), let childCount = int("children"), let nameCount = int("nameBytes"),
+              nodeCount > 0 else { return nil }
+        let nodeBytes = nodeCount * MemoryLayout<Node>.stride, childBytes = childCount * MemoryLayout<NodeID>.stride
+        guard data.count == info.tablesOffset + nodeBytes + childBytes + nameCount else { return nil }
+        var offset = info.tablesOffset
+        func table<T>(_ count: Int, _ type: T.Type) -> ContiguousArray<T> {
+            let bytes = count * MemoryLayout<T>.stride
+            defer { offset += bytes }
+            return ContiguousArray<T>(unsafeUninitializedCapacity: count) { buffer, initialized in
+                data.withUnsafeBytes { raw in
+                    UnsafeMutableRawBufferPointer(buffer).copyMemory(from: UnsafeRawBufferPointer(rebasing: raw[offset..<(offset + bytes)]))
+                }
+                initialized = count
+            }
+        }
+        let nodes = table(nodeCount, Node.self)
+        let children = table(childCount, NodeID.self)
+        let names = table(nameCount, UInt8.self)
+        // A damaged file must not index out of range later.
+        for node in nodes {
+            guard node.parent >= 0, Int(node.parent) < nodeCount, node.firstChild >= 0, node.childCount >= 0,
+                  Int(node.firstChild) + Int(node.childCount) <= childCount,
+                  Int(node.nameOffset) + Int(node.nameLength) <= nameCount, Int(node.category) < categories.count else { return nil }
+        }
+        guard children.allSatisfy({ $0 >= 0 && Int($0) < nodeCount }) else { return nil }
+        return DiskTree(rootPath: info.rootPath, nodes: nodes, children: children, nameBytes: names,
+                        elapsedMilliseconds: metadata["elapsedMilliseconds"] as? Double ?? 0,
+                        isComplete: metadata["isComplete"] as? Bool ?? false,
+                        reachedEntryLimit: metadata["reachedEntryLimit"] as? Bool ?? false,
+                        unreadableDirectoryCount: int("unreadableDirectoryCount") ?? 0,
+                        datalessDirectoryCount: int("datalessDirectoryCount") ?? 0,
+                        skippedMountCount: int("skippedMountCount") ?? 0,
+                        volumeFreeBytes: (metadata["volumeFreeBytes"] as? NSNumber)?.int64Value,
+                        unaccountedBytes: (metadata["unaccountedBytes"] as? NSNumber)?.int64Value ?? 0,
+                        cloneSharedBytes: (metadata["cloneSharedBytes"] as? NSNumber)?.int64Value ?? 0,
+                        scannedAt: info.scannedAt)
     }
 }
 

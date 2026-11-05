@@ -44,9 +44,9 @@ https://github.com/user-attachments/assets/154919ab-4196-4dbc-abe3-9a577abc60cc
 | **Explorer-style address bar** | Click any folder in the path to jump there, or the › after it to pick a subfolder. Click the empty space or press ⌘L to type a path. |
 | **Indexed search** | Results as you type over an in-memory index, with fsearch-style filters, typo tolerance and content grep. |
 | **Whole-disk map** | A full-depth treemap and size tree of the entire disk in about 20 seconds. APFS clones and hard links count once. |
-| **`burrow` CLI** | The same scanner from the terminal, with JSON output, regenerable-clutter detection and a Trash-only `trash` command. |
+| **`burrow` CLI and MCP server** | The same scanner from the terminal or as MCP tools for AI agents, with JSON output, a reusable scan cache, regenerable-clutter detection and a Trash-only `trash` command. |
 | **Cloud storage** | iCloud Drive, Google Drive, OneDrive, Dropbox and other File Provider apps appear under **Cloud** in the sidebar. A cloud badge marks files stored only online; **Download Now** and **Remove Download** are in the context menu. Searching, folder sizes and previews never download anything by themselves. |
-| **Per-folder sorting** | One default in Settings; sort Downloads by date and only Downloads remembers it. |
+| **Per-folder sorting and views** | One default in Settings; sort Downloads by date or show Pictures as icons, and only that folder remembers it. |
 | **Replaces Finder** | Optionally the default folder viewer: folders opened from the Dock, Spotlight, `open` and “Show in Finder” land in Burrow. |
 | **Everyday file work** | Copy, move, rename, duplicate, tags, archives, Quick Look, checksums, Git status, duplicate finder, undo/redo, a command drawer. |
 
@@ -93,6 +93,7 @@ burrow top ~ --ext mov,dmg,zip --older-than 180       # largest old files of som
 burrow junk                                           # caches, build outputs, node_modules in your home
 burrow size ~/Downloads ~/dev/app/node_modules        # on-disk size of paths
 burrow trash ~/dev/app/target --dry-run               # preview, then run without --dry-run
+burrow scan / --cache --quiet && burrow junk --cache  # scan once, answer the rest from the cache
 ```
 
 ```text
@@ -105,7 +106,18 @@ Regenerable clutter (30.0 GB in 3 items; risk safe = rebuilt on demand, review =
 
 - **Clutter is labeled.** `junk` finds `node_modules`, Rust `target` and SwiftPM `.build` folders (only next to `Cargo.toml` or `Package.swift`), Xcode DerivedData, Python and JavaScript caches, app caches and more. Each item has a risk level (`safe` is rebuilt on demand, `review` needs a look first) and a hint.
 - **Nothing is deleted.** `trash` only moves items to the Trash. It refuses the disk root, system folders, mounted volumes, your home and its standard folders.
+- **Scan once.** With `--cache`, a scan is saved to `~/Library/Caches/Burrow/cli` and later commands for the same folder or any folder inside it reuse it for 10 minutes (`--max-age SECS` changes that, `--fresh` rescans). A whole disk takes about 30 s to scan and well under a second from the cache; its saved scan is a few hundred MB. Moving items to the Trash through `burrow` updates cached scans. `burrow cache` lists them and `burrow cache clear` removes them.
 - **Predictable for agents.** Exit status is 0 on success, 1 when a scan or move fails, and 2 for invalid usage. `burrow help` lists every option.
+
+### MCP server
+
+`burrow mcp` serves the same commands as [Model Context Protocol](https://modelcontextprotocol.io) tools over stdio: `scan`, `top`, `junk`, `size` and `trash`. Scans stay in memory for the session, so an agent can scan the whole disk once and ask follow-up questions inside it instantly; `fresh: true` rescans. `trash` only reports what it would move unless the call passes `dry_run: false`, and the same protected folders are refused.
+
+```sh
+claude mcp add burrow -- burrow mcp      # Claude Code
+```
+
+Other clients take the usual entry: `{"mcpServers": {"burrow": {"command": "burrow", "args": ["mcp"]}}}` (use the full path `/Applications/Burrow.app/Contents/Helpers/burrow` if the client does not see your `PATH`). Add `--cache` to also keep the session's scans on disk for the next one.
 
 ## Install
 
@@ -185,14 +197,19 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 - [ ] **Optional fsearch backend.** When the [fsearch](https://github.com/noahdunnagan/fsearch) daemon is running, query its whole-disk index and content grep over its local socket instead of indexing chosen folders only.
 - [ ] **Live disk map.** Keep a finished scan current with FSEvents instead of rescanning.
 - [ ] **More cloud controls.** Keep chosen folders downloaded, show download progress as a percentage, and share links through the provider.
-- [ ] **Faster CLI for agents.** A cached scan the CLI can reuse between commands, and an MCP server exposing `scan`, `top`, `junk` and `trash`.
+
+**Done recently**
+
+- [x] **Faster CLI for agents.** `--cache` reuses a scan between commands, and `burrow mcp` serves `scan`, `top`, `junk`, `size` and `trash` to agents.
+- [x] Per-folder view mode, like per-folder sorting.
+- [x] Hard links counted once in selection totals of search results, and search crawls kept on one disk.
+- [x] Refreshing an open folder reads it off the main thread, as opening one does.
 
 **Later**
 
 - [ ] Duplicate search built on the disk-map scan, without the current 60,000-entry cap.
-- [ ] Per-folder view mode and columns, like per-folder sorting.
-- [ ] Count hard links once in search size totals and keep search crawls on one disk, as folder sizes and the disk map already do.
-- [ ] Independent state for multiple windows; refresh an already open folder off the main thread, as opening one already is.
+- [ ] Per-folder list columns: choose which columns a folder shows.
+- [ ] Independent state for multiple windows.
 - [ ] A full terminal emulator in the command drawer (it runs `zsh -c` today).
 
 Ideas and bug reports are welcome in [issues](https://github.com/MaciejWlodarski/burrow/issues).

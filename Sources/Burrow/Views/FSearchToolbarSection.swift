@@ -58,7 +58,10 @@ public struct FSearchToolbarSection: View {
                 .help("Forward (⌘])")
             }
             ToolbarItem {
-                Picker("View", selection: $activeTab.viewMode) {
+                Picker("View", selection: Binding(
+                    get: { activeTab.viewMode },
+                    set: { activeTab.chooseViewMode($0) }
+                )) {
                     ForEach(FinderViewMode.allCases) { mode in
                         Label(mode.displayName, systemImage: mode.iconName).tag(mode)
                     }
