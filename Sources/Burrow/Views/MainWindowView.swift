@@ -136,15 +136,10 @@ public struct MainWindowView: View {
         }
         .coordinateSpace(name: "inspectorSplit")
         .background(Color(nsColor: .controlBackgroundColor))
-        // The toolbar's band: one material and a hairline under it, across the files
-        // and the inspector alike.
-        .background(alignment: .top) {
-            Rectangle()
-                .fill(.bar)
-                .frame(height: 0)
-                .ignoresSafeArea(edges: .top)
-        }
-        .overlay(alignment: .top) { Divider() }
+        // The toolbar's band: a hairline under it whose material reaches up under
+        // the toolbar, across the files and the inspector alike. Hung on a view with
+        // height, like the tab bars: a zero-height band could miss the first layout.
+        .overlay(alignment: .top) { Divider().background(.bar) }
         .animation(.easeInOut(duration: 0.2), value: appState.showInspector)
     }
 
