@@ -2,6 +2,9 @@ import AppKit
 
 // render_icon <icon.svg> <output dir>: writes the PNGs of a macOS .iconset, each size
 // rendered from the vector source rather than scaled down from one large bitmap.
+// The set starts at 128 pt on purpose: macOS 26 puts an icon whose own 16 or 32 pt
+// images it cannot match to the app-icon shape on a grey plate in lists and the
+// sidebar, while it scales the larger images down for those sizes without one.
 let arguments = CommandLine.arguments
 guard arguments.count == 3 else {
     FileHandle.standardError.write(Data("usage: render_icon <icon.svg> <iconset dir>\n".utf8))
@@ -32,7 +35,7 @@ func render(pixels: Int, to url: URL) throws {
 }
 
 do {
-    for points in [16, 32, 128, 256, 512] {
+    for points in [128, 256, 512] {
         try render(pixels: points, to: output.appendingPathComponent("icon_\(points)x\(points).png"))
         try render(pixels: points * 2, to: output.appendingPathComponent("icon_\(points)x\(points)@2x.png"))
     }
