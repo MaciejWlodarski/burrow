@@ -488,72 +488,73 @@ public struct SidebarView: View {
 
     private func volumeRow(_ volume: VolumeInfoItem) -> some View {
         let isSelected = isLocationSelected(volume.url)
+        let capacity: (free: Int64, total: Int64, used: Double)? = {
+            guard !volume.isNetwork, let total = volume.totalBytes, let free = volume.freeBytes,
+                  let used = volume.usedFraction else { return nil }
+            return (free, total, used)
+        }()
+        let capacityText = capacity.map {
+            String(localized: "\(FormatHelpers.formatBytes($0.free)) free of \(FormatHelpers.formatBytes($0.total))")
+        }
 
-        return VStack(alignment: .leading, spacing: FinderUI.sidebarRowGap) {
-            HStack(spacing: FinderUI.sidebarRowGap) {
-                Button {
-                    navigate(to: volume.url)
-                } label: {
-                    HStack(spacing: FinderUI.rowSpacing) {
-                        Image(systemName: volume.isNetwork ? "folder" : (volume.isRemovable ? "externaldrive" : "internaldrive"))
-                            .foregroundStyle(isSelected ? selectedTextColor : Color.accentColor)
-                            .frame(width: FinderUI.sidebarIconWidth)
-                            .accessibilityHidden(true)
+        // The disk is one row: its name, capacity bar and free space share a single
+        // highlight, so the space reads as part of the disk rather than a row of its own.
+        return HStack(spacing: FinderUI.sidebarRowGap) {
+            Button {
+                navigate(to: volume.url)
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: FinderUI.rowSpacing) {
+                    Image(systemName: volume.isNetwork ? "folder" : (volume.isRemovable ? "externaldrive" : "internaldrive"))
+                        .foregroundStyle(isSelected ? selectedTextColor : Color.accentColor)
+                        .frame(width: FinderUI.sidebarIconWidth)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(volume.name)
                             .lineLimit(1)
-                        Spacer(minLength: 0)
-                    }
-                    .foregroundStyle(isSelected ? selectedTextColor : Color.primary)
-                    .padding(.leading, FinderUI.sidebarRowInset)
-                    .frame(minHeight: FinderUI.sidebarRowHeight)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(volume.url.path)
-                .accessibilityLabel(volume.name)
-                .accessibilityValue(isSelected ? String(localized: "Current folder: \(volume.url.path)") : volume.url.path)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
-
-                if volume.isRemovable {
-                    sidebarActionButton(icon: "eject", label: "Eject volume \(volume.name)") {
-                        appState.ejectVolume(volume)
-                    }
-                    .disabled(appState.ejectingVolumePaths.contains(volume.url.path))
-                    .foregroundStyle(isSelected ? selectedTextColor : Color.secondary)
-                }
-            }
-            .padding(.trailing, 4)
-            .background(rowBackground(isSelected: isSelected))
-
-            if !volume.isNetwork, let totalBytes = volume.totalBytes, let freeBytes = volume.freeBytes,
-               let usedFraction = volume.usedFraction {
-                // A thin capacity bar with "free of total" under it, aligned to the name.
-                VStack(alignment: .leading, spacing: 3) {
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Color.secondary.opacity(0.2))
-                            Capsule()
-                                .fill(usedFraction > 0.9 ? Color.orange : Color.accentColor.opacity(0.85))
-                                .frame(width: max(3, geometry.size.width * min(1, max(0, usedFraction))))
+                        if let capacity, let capacityText {
+                            GeometryReader { geometry in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(isSelected ? selectedTextColor.opacity(0.3) : Color.secondary.opacity(0.2))
+                                    Capsule()
+                                        .fill(isSelected ? selectedTextColor
+                                              : (capacity.used > 0.9 ? Color.orange : Color.accentColor.opacity(0.85)))
+                                        .frame(width: max(3, geometry.size.width * min(1, max(0, capacity.used))))
+                                }
+                            }
+                            .frame(height: 4)
+                            Text(capacityText)
+                                .font(FinderUI.captionFont)
+                                .monospacedDigit()
+                                .foregroundStyle(isSelected ? selectedTextColor.opacity(0.85) : Color.secondary)
+                                .lineLimit(1)
                         }
                     }
-                    .frame(height: 4)
-                    .accessibilityElement()
-                    .accessibilityLabel("Used space on \(volume.name)")
-                    .accessibilityValue("\(Int(usedFraction * 100)) percent")
-                    Text("\(FormatHelpers.formatBytes(freeBytes)) free of \(FormatHelpers.formatBytes(totalBytes))")
-                        .font(FinderUI.captionFont)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    Spacer(minLength: 0)
                 }
-                .padding(.leading, FinderUI.sidebarRowInset + FinderUI.sidebarIconWidth + FinderUI.rowSpacing)
-                .padding(.trailing, FinderUI.sidebarRowInset)
-                .padding(.top, -2)
-                .padding(.bottom, 4)
-                .help("\(FormatHelpers.formatBytes(freeBytes)) free of \(FormatHelpers.formatBytes(totalBytes))")
+                .foregroundStyle(isSelected ? selectedTextColor : Color.primary)
+                .padding(.horizontal, FinderUI.sidebarRowInset)
+                .padding(.vertical, capacity == nil ? 0 : 5)
+                .frame(minHeight: FinderUI.sidebarRowHeight)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(capacityText.map { "\(volume.url.path) · \($0)" } ?? volume.url.path)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(volume.name)
+            .accessibilityValue([isSelected ? String(localized: "Current folder: \(volume.url.path)") : volume.url.path,
+                                 capacityText].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+
+            if volume.isRemovable {
+                sidebarActionButton(icon: "eject", label: "Eject volume \(volume.name)") {
+                    appState.ejectVolume(volume)
+                }
+                .disabled(appState.ejectingVolumePaths.contains(volume.url.path))
+                .foregroundStyle(isSelected ? selectedTextColor : Color.secondary)
             }
         }
+        .padding(.trailing, 4)
+        .background(rowBackground(isSelected: isSelected))
     }
 
     private func sidebarSectionHeader(_ text: LocalizedStringKey) -> some View {

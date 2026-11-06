@@ -281,11 +281,20 @@ enum DiskMapPresentation {
         return rows
     }
 
-    static func diagnostic(for tree: DiskTree) -> String? {
+    /// What the scan left out that someone could act on: a warning.
+    static func diagnostic(for tree: DiskTree, hasFullDiskAccess: Bool) -> String? {
         var messages: [String] = []
         if tree.reachedEntryLimit { messages.append(String(localized: "Partial results: reached the limit of \(DiskScanner.defaultMaxEntries.formatted()) entries.")) }
-        if tree.unreadableDirectoryCount > 0 { messages.append(String(localized: "Folders without access: \(tree.unreadableDirectoryCount.formatted()).")) }
+        if tree.unreadableDirectoryCount > 0, !hasFullDiskAccess { messages.append(String(localized: "Folders without access: \(tree.unreadableDirectoryCount.formatted()).")) }
         if tree.datalessDirectoryCount > 0 { messages.append(String(localized: "iCloud folders without local content: \(tree.datalessDirectoryCount.formatted()).")) }
+        return messages.isEmpty ? nil : messages.joined(separator: " ")
+    }
+
+    /// How the scan counted, which is normal on any Mac: a plain note.
+    /// With Full Disk Access the folders left are the ones only root can read.
+    static func note(for tree: DiskTree, hasFullDiskAccess: Bool) -> String? {
+        var messages: [String] = []
+        if tree.unreadableDirectoryCount > 0, hasFullDiskAccess { messages.append(String(localized: "System folders only root can read: \(tree.unreadableDirectoryCount.formatted()).")) }
         if tree.skippedMountCount > 0 { messages.append(String(localized: "Other disks and mounts skipped: \(tree.skippedMountCount.formatted()).")) }
         if tree.cloneSharedBytes > 0 { messages.append(String(localized: "APFS clones counted once: \(FormatHelpers.formatBytes(tree.cloneSharedBytes)) was not counted twice.")) }
         return messages.isEmpty ? nil : messages.joined(separator: " ")
@@ -320,6 +329,8 @@ public struct WizTreeAnalyzerView: View {
     @ViewState private var verificationWorkState: AnalysisWorkRequest.State = .finished
     @ViewState private var scanIsComplete = false
     @ViewState private var scanDiagnostic: String?
+    @ViewState private var scanNote: String?
+    @ViewState private var hasFullDiskAccess = true
     @ViewState private var duplicateActionError: String?
     @ViewState private var isValidatingDuplicates = false
     @ObservedObject private var mapStore = DiskMapStore.shared
@@ -406,8 +417,11 @@ public struct WizTreeAnalyzerView: View {
             if let diagnostic = scanDiagnostic {
                 analysisNotice(diagnostic)
             }
-            if isMapMode, let mapTree, mapTree.unreadableDirectoryCount > 0 {
+            if isMapMode, let mapTree, mapTree.unreadableDirectoryCount > 0, !hasFullDiskAccess {
                 fullDiskAccessHint
+            }
+            if let note = scanNote {
+                analysisNote(note)
             }
             if let error = duplicateActionError {
                 analysisNotice(error, isError: true)
@@ -509,22 +523,37 @@ public struct WizTreeAnalyzerView: View {
                 // One row: the total on the left, modes and scan actions on the right.
                 // The toolbar's pie button already says this is the disk analysis.
                 HStack(spacing: FinderUI.sectionSpacing) {
-                    HStack(alignment: .firstTextBaseline, spacing: FinderUI.rowSpacing) { analysisTelemetry }
+                    HStack(alignment: .firstTextBaseline, spacing: FinderUI.rowSpacing) { analysisTelemetry(wrapping: false) }
                         .font(FinderUI.detailFont)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 12)
                     analysisModePicker
                         .fixedSize()
-                    HStack(spacing: 6) { wholeDiskButton; refreshScanButton }
+                    HStack(spacing: 6) { wholeDiskButton(iconOnly: false); refreshScanButton }
                 }
+                // Narrower panes, as in the dual view: modes and actions above the total,
+                // the scan button down to its icon, and the details wrapping, so the header
+                // never asks for more width than the pane has.
                 VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
-                    HStack {
-                        analysisModePicker
-                            .fixedSize()
-                        Spacer()
-                        HStack(spacing: 6) { wholeDiskButton; refreshScanButton }
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            analysisModePicker
+                                .fixedSize()
+                            Spacer()
+                            HStack(spacing: 6) { wholeDiskButton(iconOnly: false); refreshScanButton }
+                        }
+                        HStack {
+                            analysisModePicker
+                                .fixedSize()
+                            Spacer()
+                            HStack(spacing: 6) { wholeDiskButton(iconOnly: true); refreshScanButton }
+                        }
+                        VStack(alignment: .leading, spacing: FinderUI.rowSpacing) {
+                            analysisModePicker
+                            HStack(spacing: 6) { wholeDiskButton(iconOnly: true); refreshScanButton }
+                        }
                     }
-                    HStack(alignment: .firstTextBaseline, spacing: FinderUI.rowSpacing) { analysisTelemetry }
+                    HStack(alignment: .firstTextBaseline, spacing: FinderUI.rowSpacing) { analysisTelemetry(wrapping: true) }
                         .font(FinderUI.detailFont)
                         .foregroundStyle(.secondary)
                 }
@@ -605,14 +634,14 @@ public struct WizTreeAnalyzerView: View {
     }
 
     @ViewBuilder
-    private var analysisTelemetry: some View {
+    private func analysisTelemetry(wrapping: Bool) -> some View {
         Text(FormatHelpers.formatBytes(totalScannedBytes))
             .font(.system(size: 22, weight: .semibold))
             .monospacedDigit()
             .foregroundStyle(.primary)
             .fixedSize()
         Text(telemetryDetails)
-            .fixedSize()
+            .fixedSize(horizontal: !wrapping, vertical: true)
             .help(scanScopeNote)
             .accessibilityHint(scanScopeNote)
     }
@@ -634,14 +663,19 @@ public struct WizTreeAnalyzerView: View {
         return scanIsComplete ? String(localized: "Total") : String(localized: "At least")
     }
 
-    private var wholeDiskButton: some View {
+    private func wholeDiskButton(iconOnly: Bool) -> some View {
         Button {
             performPaneAction { showWholeDisk() }
         } label: {
-            Label("Scan Whole Disk", systemImage: "internaldrive")
+            if iconOnly {
+                Label("Scan Whole Disk", systemImage: "internaldrive").labelStyle(.iconOnly)
+            } else {
+                Label("Scan Whole Disk", systemImage: "internaldrive")
+            }
         }
-        .buttonStyle(AnalysisHeaderButtonStyle())
+        .buttonStyle(AnalysisHeaderButtonStyle(iconOnly: iconOnly))
         .help("Scan the whole disk that contains this folder")
+        .accessibilityLabel("Scan Whole Disk")
     }
 
     private var fullDiskAccessHint: some View {
@@ -714,6 +748,16 @@ public struct WizTreeAnalyzerView: View {
             .accessibilityElement(children: .combine)
     }
 
+    private func analysisNote(_ message: String) -> some View {
+        Label(message, systemImage: "info.circle")
+            .font(FinderUI.captionFont)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, FinderUI.sectionSpacing)
+            .padding(.vertical, FinderUI.rowSpacing)
+            .accessibilityElement(children: .combine)
+    }
+
     private func analysisEmptyState(title: String, message: String, systemImage: String) -> some View {
         VStack(spacing: FinderUI.rowSpacing) {
             Image(systemName: systemImage)
@@ -737,17 +781,22 @@ public struct WizTreeAnalyzerView: View {
 
     private var categoryBreakdownStrip: some View {
         VStack(alignment: .leading, spacing: 5) {
+            // Shares of the categorized bytes, so the bar always spans the full width:
+            // a whole-disk total also holds the unscanned block, which has no category.
+            let categorizedBytes = categoryStats.reduce(Int64(0)) { $0 + $1.1 }
+            let segments = categoryStats.filter { categorizedBytes > 0 && Double($0.1) / Double(categorizedBytes) > 0.005 }
+            let segmentBytes = segments.reduce(Int64(0)) { $0 + $1.1 }
             GeometryReader { geo in
+                let barWidth = max(0, geo.size.width - CGFloat(max(0, segments.count - 1)) * 2)
                 HStack(spacing: 2) {
-                    ForEach(categoryStats, id: \.0.rawValue) { cat, bytes, _ in
-                        let frac = totalScannedBytes > 0 ? CGFloat(bytes) / CGFloat(totalScannedBytes) : 0
-                        if frac > 0.005 {
-                            Rectangle()
-                                .fill(cat.treemapColor)
-                                .frame(width: max(4, geo.size.width * frac))
-                        }
+                    ForEach(segments, id: \.0.rawValue) { cat, bytes, _ in
+                        let frac = segmentBytes > 0 ? CGFloat(bytes) / CGFloat(segmentBytes) : 0
+                        Rectangle()
+                            .fill(cat.treemapColor)
+                            .frame(width: max(4, barWidth * frac))
                     }
                 }
+                .frame(width: geo.size.width, alignment: .leading)
                 .clipShape(Capsule())
             }
             .frame(height: 8)
@@ -1541,6 +1590,7 @@ public struct WizTreeAnalyzerView: View {
         isScanning = true
         scanIsComplete = false
         scanDiagnostic = nil
+        scanNote = nil
         largestFiles = []
         duplicateGroups = []
         categoryStats = []
@@ -1674,6 +1724,7 @@ public struct WizTreeAnalyzerView: View {
         scanDurationMs = 0
         scanIsComplete = false
         scanDiagnostic = nil
+        scanNote = nil
     }
 
     private func refreshDiskMapContents(token: AnalysisRequestToken) {
@@ -1682,7 +1733,10 @@ public struct WizTreeAnalyzerView: View {
         totalScannedFiles = tree.fileCount(mapScope)
         scanDurationMs = tree.elapsedMilliseconds
         scanIsComplete = tree.isComplete
-        scanDiagnostic = DiskMapPresentation.diagnostic(for: tree)
+        FullDiskAccess.refresh()
+        hasFullDiskAccess = FullDiskAccess.isGranted()
+        scanDiagnostic = DiskMapPresentation.diagnostic(for: tree, hasFullDiskAccess: hasFullDiskAccess)
+        scanNote = DiskMapPresentation.note(for: tree, hasFullDiskAccess: hasFullDiskAccess)
         treeRows = DiskMapPresentation.rows(tree: tree, scope: mapScope, expanded: expandedNodes)
         publishDiskMapSelection(token: token)
         renderMap()

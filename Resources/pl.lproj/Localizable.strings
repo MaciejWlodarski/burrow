@@ -697,6 +697,7 @@
 "Subfolders" = "Podfoldery";
 "Subfolders: %@" = "Podfoldery: %@";
 "Symlink" = "Dowiązanie";
+"System folders only root can read: %@." = "Foldery systemowe tylko dla roota: %@.";
 "System Trash · Items: %lld" = "Kosz systemowy · Elementy: %lld";
 "Tag: %@" = "Tag: %@";
 "Tags" = "Tagi";
@@ -789,7 +790,6 @@
 "Use ~ or ~/folder for your own home folder." = "Użyj ~ lub ~/folder dla własnego folderu domowego.";
 "Used" = "Zajęte";
 "Used space map" = "Mapa zajętego miejsca";
-"Used space on %@" = "Zajęte miejsce na %@";
 "Verification canceled." = "Anulowano weryfikację.";
 "Verification canceled. A system read in progress may still be finishing." = "Anulowano weryfikację. Trwający odczyt systemowy może jeszcze kończyć pracę.";
 "Verification deferred: analysis is busy. Try the operation again." = "Odroczono weryfikację: analiza jest zajęta. Ponów operację.";
