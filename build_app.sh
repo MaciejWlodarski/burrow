@@ -90,18 +90,8 @@ xcrun swiftc \
     -module-cache-path "${MODULE_CACHE}" \
     -target "$(uname -m)-apple-macosx15.0" \
     -sdk "${SDK_PATH}" \
-    scripts/generate_icon.swift -framework AppKit -o "${ICON_GEN_BIN}"
-"${ICON_GEN_BIN}" "${ICONSET_DIR}/icon_512x512@2x.png"
-sips -z 1024 1024 "${ICONSET_DIR}/icon_512x512@2x.png" >/dev/null
-for icon_size in 16 32 128 256 512; do
-    sips -z "${icon_size}" "${icon_size}" "${ICONSET_DIR}/icon_512x512@2x.png" \
-        --out "${ICONSET_DIR}/icon_${icon_size}x${icon_size}.png" >/dev/null
-    if [[ "${icon_size}" -lt 512 ]]; then
-        retina_size=$((icon_size * 2))
-        sips -z "${retina_size}" "${retina_size}" "${ICONSET_DIR}/icon_512x512@2x.png" \
-            --out "${ICONSET_DIR}/icon_${icon_size}x${icon_size}@2x.png" >/dev/null
-    fi
-done
+    scripts/render_icon.swift -framework AppKit -o "${ICON_GEN_BIN}"
+"${ICON_GEN_BIN}" Resources/AppIcon.svg "${ICONSET_DIR}"
 iconutil -c icns "${ICONSET_DIR}" -o "${RESOURCES_DIR}/AppIcon.icns"
 codesign --force "${SIGN_ARGS[@]}" --timestamp=none "${STAGED_APP}"
 codesign --verify --strict "${STAGED_APP}"
