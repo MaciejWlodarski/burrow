@@ -14,7 +14,7 @@ rm -f -- "${PREVIEW_OUTPUT}/verification.txt"
 sed '/^@main$/d' Sources/Burrow/BurrowApp.swift > "${PREVIEW_TMP_DIR}/App.swift"
 xcrun swiftc -parse-as-library \
     -module-cache-path "${PWD}/.build/preview-module-cache" \
-    -target "$(uname -m)-apple-macosx14.0" \
+    -target "$(uname -m)-apple-macosx15.0" \
     -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
     Sources/Burrow/Models/*.swift Sources/Burrow/Engine/*.swift Sources/Burrow/Views/*.swift \
     "${PREVIEW_TMP_DIR}/App.swift" scripts/preview_app.swift -o "${PREVIEW_APP}/Contents/MacOS/NativePreview"

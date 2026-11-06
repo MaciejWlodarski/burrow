@@ -49,7 +49,7 @@ compile() {
         xcrun swiftc \
             -module-cache-path "${MODULE_CACHE}/${arch}" \
             -O \
-            -target "${arch}-apple-macosx14.0" \
+            -target "${arch}-apple-macosx15.0" \
             -sdk "${SDK_PATH}" \
             "$@" \
             -o "${output}.${arch}"
@@ -88,7 +88,7 @@ for lproj in Resources/*.lproj(N); do
 done
 xcrun swiftc \
     -module-cache-path "${MODULE_CACHE}" \
-    -target "$(uname -m)-apple-macosx14.0" \
+    -target "$(uname -m)-apple-macosx15.0" \
     -sdk "${SDK_PATH}" \
     scripts/generate_icon.swift -framework AppKit -o "${ICON_GEN_BIN}"
 "${ICON_GEN_BIN}" "${ICONSET_DIR}/icon_512x512@2x.png"

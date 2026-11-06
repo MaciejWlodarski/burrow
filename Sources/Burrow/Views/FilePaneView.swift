@@ -360,22 +360,11 @@ public struct FilePaneView: View {
         }
     }
 
-    @ViewBuilder
     private func searchMatchText(_ name: String, isSelected: Bool) -> some View {
-        #if compiler(>=6.0)
-        if #available(macOS 15.0, *) {
-            matchText(name, isSelected: isSelected)
-                .textRenderer(SearchMatchRenderer())
-        } else {
-            Text(highlightedName(name, isSelected: isSelected))
-        }
-        #else
-        Text(highlightedName(name, isSelected: isSelected))
-        #endif
+        matchText(name, isSelected: isSelected)
+            .textRenderer(SearchMatchRenderer())
     }
 
-    #if compiler(>=6.0)
-    @available(macOS 15.0, *)
     private func matchText(_ name: String, isSelected: Bool) -> Text {
         var result = Text(verbatim: "")
         var cursor = name.startIndex
@@ -388,7 +377,6 @@ public struct FilePaneView: View {
         if cursor < name.endIndex { result = result + Text(verbatim: String(name[cursor...])) }
         return result
     }
-    #endif
 
     /// Non-overlapping ranges of the typed terms inside a name, in order.
     private func matchRanges(in name: String) -> [Range<String.Index>] {
@@ -405,26 +393,6 @@ public struct FilePaneView: View {
             }
         }
         return ranges.sorted { $0.lowerBound < $1.lowerBound }
-    }
-
-    /// Search results show the typed text in bold within each name.
-    private func highlightedName(_ name: String, isSelected: Bool) -> AttributedString {
-        var text = AttributedString(name)
-        let terms = pane.searchQuery.split(separator: " ").map(String.init)
-            .filter { !$0.isEmpty && !$0.contains(":") && $0.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." } }
-        guard hasSearchQuery, !terms.isEmpty else { return text }
-        for term in terms {
-            var searchStart = text.startIndex
-            while searchStart < text.endIndex,
-                  let range = text[searchStart...].range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) {
-                text[range].font = FinderUI.bodyFont.weight(.semibold)
-                // Semibold on a faint accent wash: the name keeps its colour, so the
-                // match neither reads as a link nor vanishes on a selected row.
-                if !isSelected { text[range].backgroundColor = FinderUI.matchHighlight }
-                searchStart = range.upperBound
-            }
-        }
-        return text
     }
 
     private var restoredSessionPlaceholder: some View {

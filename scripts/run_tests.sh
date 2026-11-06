@@ -24,7 +24,7 @@ export CFFIXED_USER_HOME="${HOME}"
 mkdir -p "${BURROW_TEST_ROOT}" "${HOME}"
 xcrun swiftc -parse-as-library -D BURROW_TESTING \
     -module-cache-path "${TEST_MODULE_CACHE}" \
-    -target "$(uname -m)-apple-macosx14.0" \
+    -target "$(uname -m)-apple-macosx15.0" \
     -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
     Sources/Burrow/Models/*.swift Sources/Burrow/Engine/*.swift \
     Sources/Burrow/Views/*.swift \

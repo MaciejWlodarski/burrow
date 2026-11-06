@@ -70,7 +70,7 @@ jobs:
             echo 'From Terminal: `xattr -dr com.apple.quarantine /Applications/Burrow.app`.'
             echo "Burrow then offers to set up **Full Disk Access**, so folder sizes, search and the disk map need no further prompts."
             echo
-            echo "Requires macOS 14 Sonoma or later. Universal: Apple silicon and Intel."
+            echo "Requires macOS 15 Sequoia or later. Universal: Apple silicon and Intel."
             echo
             echo "SHA-256:"
             echo '```'

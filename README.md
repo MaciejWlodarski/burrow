@@ -14,7 +14,7 @@
 <p align="center">
   <a href="https://github.com/MaciejWlodarski/burrow/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/MaciejWlodarski/burrow?label=release"></a>
   <a href="https://github.com/MaciejWlodarski/burrow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/MaciejWlodarski/burrow/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white">
+  <img alt="macOS 15+" src="https://img.shields.io/badge/macOS-15%2B-000000?logo=apple&logoColor=white">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.10%2B-F05138?logo=swift&logoColor=white">
   <img alt="SwiftUI and AppKit" src="https://img.shields.io/badge/UI-SwiftUI%20%2B%20AppKit-0A84FF">
   <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-34C759">
@@ -121,7 +121,7 @@ Other clients take the usual entry: `{"mcpServers": {"burrow": {"command": "burr
 
 ## Install
 
-**Requirements:** macOS 14 Sonoma or later, on Apple silicon or Intel.
+**Requirements:** macOS 15 Sequoia or later, on Apple silicon or Intel.
 
 **Download.** Get [**Burrow.dmg**](https://github.com/MaciejWlodarski/burrow/releases/latest/download/Burrow.dmg) from the [latest release](https://github.com/MaciejWlodarski/burrow/releases/latest), open it and drag Burrow to Applications.
 

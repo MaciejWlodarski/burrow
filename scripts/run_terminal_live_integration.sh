@@ -11,7 +11,7 @@ mkdir -p "${BURROW_TEST_ROOT}" "${HOME}" "${TEST_TMP_DIR}/module-cache"
 sed '/^@main$/d' Sources/Burrow/BurrowApp.swift > "${TEST_TMP_DIR}/App.swift"
 xcrun swiftc -parse-as-library -D BURROW_TESTING \
     -module-cache-path "${BURROW_MODULE_CACHE:-${TEST_TMP_DIR}/module-cache}" \
-    -target "$(uname -m)-apple-macosx14.0" \
+    -target "$(uname -m)-apple-macosx15.0" \
     -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
     Sources/Burrow/Models/*.swift Sources/Burrow/Engine/*.swift \
     Sources/Burrow/Views/*.swift "${TEST_TMP_DIR}/App.swift" \

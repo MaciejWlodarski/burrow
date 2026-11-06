@@ -100,15 +100,11 @@ struct FinderSelectionSummary: Equatable {
     }
 }
 
-// TextRenderer and TextAttribute exist only in the macOS 15 SDK (Swift 6 toolchains).
-#if compiler(>=6.0)
 /// Marks the matched part of a search result name.
-@available(macOS 15.0, *)
 struct SearchMatchAttribute: TextAttribute {}
 
 /// Draws a soft rounded wash behind matched runs, slightly outset so it never
 /// clips the glyphs, then the text on top.
-@available(macOS 15.0, *)
 struct SearchMatchRenderer: TextRenderer {
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
@@ -123,7 +119,6 @@ struct SearchMatchRenderer: TextRenderer {
         }
     }
 }
-#endif
 
 /// The one look for every draggable horizontal split (tree and map, files and
 /// terminal): a 10 pt strip on the window surface, a hairline along its top edge

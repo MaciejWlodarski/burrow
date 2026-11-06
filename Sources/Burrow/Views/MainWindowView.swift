@@ -6,10 +6,7 @@ public struct MainWindowView: View {
     @ObservedObject var fileOps = FileOperationsManager.shared
     @ObservedObject var updates = UpdateChecker.shared
     @Environment(\.openWindow) private var openWindow
-    // OpenSettingsAction ships with the macOS 15 SDK (it back-deploys to macOS 14).
-    #if compiler(>=6.0)
     @Environment(\.openSettings) private var openSettings
-    #endif
 
     @ViewState private var terminalHeight = TerminalDrawerLayout.defaultHeight
     @ViewState private var terminalDragStart: CGFloat?
@@ -66,11 +63,7 @@ public struct MainWindowView: View {
         .onChange(of: appState.showSettingsSheet) { _, show in
             guard show else { return }
             appState.showSettingsSheet = false
-            #if compiler(>=6.0)
             openSettings()
-            #else
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            #endif
         }
         .sheet(isPresented: $appState.showFullDiskAccessSheet) { FullDiskAccessSheetView() }
         .alert(updateAlertTitle, isPresented: Binding(

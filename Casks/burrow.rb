@@ -7,7 +7,7 @@ cask "burrow" do
   desc "Dual-pane file manager with a whole-disk map and a CLI for scripts and agents"
   homepage "https://github.com/MaciejWlodarski/burrow"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: ">= :sequoia"
 
   app "Burrow.app"
   binary "#{appdir}/Burrow.app/Contents/Helpers/burrow"
