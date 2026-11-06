@@ -15,7 +15,7 @@
   <a href="https://github.com/MaciejWlodarski/burrow/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/MaciejWlodarski/burrow?label=release"></a>
   <a href="https://github.com/MaciejWlodarski/burrow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/MaciejWlodarski/burrow/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="macOS 15+" src="https://img.shields.io/badge/macOS-15%2B-000000?logo=apple&logoColor=white">
-  <img alt="Swift" src="https://img.shields.io/badge/Swift-5.10%2B-F05138?logo=swift&logoColor=white">
+  <img alt="Swift 6.0+" src="https://img.shields.io/badge/Swift-6.0%2B-F05138?logo=swift&logoColor=white">
   <img alt="SwiftUI and AppKit" src="https://img.shields.io/badge/UI-SwiftUI%20%2B%20AppKit-0A84FF">
   <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-34C759">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue"></a>
@@ -45,6 +45,7 @@ https://github.com/user-attachments/assets/154919ab-4196-4dbc-abe3-9a577abc60cc
 | **Indexed search** | Results as you type over an in-memory index, with fsearch-style filters, typo tolerance and content grep. |
 | **Whole-disk map** | A full-depth treemap and size tree of the entire disk in about 20 seconds. APFS clones and hard links count once. |
 | **`burrow` CLI and MCP server** | The same scanner from the terminal or as MCP tools for AI agents, with JSON output, a reusable scan cache, regenerable-clutter detection and a Trash-only `trash` command. |
+| **Network servers** | **Connect to Server** (⌘K) mounts SMB, AFP, NFS and WebDAV shares, with recent servers and the system sign-in. Shares are grouped under their server in the sidebar, show their real free space, and items on a disk without a Trash can be deleted after a warning, as in Finder. |
 | **Cloud storage** | iCloud Drive, Google Drive, OneDrive, Dropbox and other File Provider apps appear under **Cloud** in the sidebar. A cloud badge marks files stored only online; **Download Now** and **Remove Download** are in the context menu. Searching, folder sizes and previews never download anything by themselves. |
 | **Per-folder sorting and views** | One default in Settings; sort Downloads by date or show Pictures as icons, and only that folder remembers it. |
 | **Replaces Finder** | Optionally the default folder viewer: folders opened from the Dock, Spotlight, `open` and “Show in Finder” land in Burrow. |
@@ -146,7 +147,7 @@ The interface follows the macOS language (English or Polish). To choose one, ope
 
 ### Build from source
 
-You need the Xcode command-line tools (`xcode-select --install`).
+You need the Xcode 16 or newer command-line tools (`xcode-select --install`). There is no Xcode project and no third-party dependency.
 
 ```sh
 git clone https://github.com/MaciejWlodarski/burrow.git
@@ -170,6 +171,7 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 | ⌃Tab / ⇧⌃Tab | Next / previous tab |
 | ⌘F / ⌘P | Focus search / open quick search |
 | ⌘L / ⇧⌘G | Edit the path |
+| ⌘K | Connect to a server |
 | ⌘[ / ⌘] / ⌘↑ | Back / forward / parent folder |
 | ⌘↓ | Open the selected item |
 | ⌘R | Refresh the folder and active search |
@@ -193,37 +195,40 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 **Next**
 
 - [ ] **Notarized releases.** Releases are signed with a self-signed certificate today; notarization needs a paid Apple Developer account.
-- [ ] **More languages.** The interface is in English and Polish. A new language is one `Localizable.strings` file; see [Development](#development).
+- [ ] **Saved network drives.** Shares stay in the sidebar when disconnected, show whether they are connected, and reconnect when clicked, like mapped drives on Windows.
+- [ ] **More languages.** The interface is in English and Polish. A new language is one `Localizable.strings` file ([#40](https://github.com/MaciejWlodarski/burrow/issues/40)).
 - [ ] **Optional fsearch backend.** When the [fsearch](https://github.com/noahdunnagan/fsearch) daemon is running, query its whole-disk index and content grep over its local socket instead of indexing chosen folders only.
-- [ ] **Live disk map.** Keep a finished scan current with FSEvents instead of rescanning.
-- [ ] **More cloud controls.** Keep chosen folders downloaded, show download progress as a percentage, and share links through the provider.
+- [ ] **Live disk map.** Keep a finished scan current with FSEvents instead of rescanning ([#44](https://github.com/MaciejWlodarski/burrow/issues/44)).
+- [ ] **More cloud controls.** Keep chosen folders downloaded, show download progress as a percentage ([#43](https://github.com/MaciejWlodarski/burrow/issues/43)), and share links through the provider.
 
 **Done recently**
 
+- [x] **Connect to Server** (⌘K), deleting on network disks without a Trash, and their real free space.
 - [x] **Faster CLI for agents.** `--cache` reuses a scan between commands, and `burrow mcp` serves `scan`, `top`, `junk`, `size` and `trash` to agents.
 - [x] Per-folder view mode, like per-folder sorting.
-- [x] Hard links counted once in selection totals of search results, and search crawls kept on one disk.
-- [x] Refreshing an open folder reads it off the main thread, as opening one does.
 
 **Later**
 
 - [ ] Duplicate search built on the disk-map scan, without the current 60,000-entry cap.
-- [ ] Per-folder list columns: choose which columns a folder shows.
+- [ ] Per-folder list columns: choose which columns a folder shows ([#45](https://github.com/MaciejWlodarski/burrow/issues/45)).
 - [ ] Independent state for multiple windows.
 - [ ] A full terminal emulator in the command drawer (it runs `zsh -c` today).
 
-Ideas and bug reports are welcome in [issues](https://github.com/MaciejWlodarski/burrow/issues).
+Bug reports are welcome in [issues](https://github.com/MaciejWlodarski/burrow/issues), and questions and ideas in [Discussions](https://github.com/MaciejWlodarski/burrow/discussions). Issues labeled [good first issue](https://github.com/MaciejWlodarski/burrow/labels/good%20first%20issue) are a good place to start contributing.
 
 ## Project status
 
-Burrow is in early, active development and is used daily by its author. Expect rough edges:
+Burrow is in early, active development: an early beta, used daily by its author. Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Expect rough edges:
 
 - Releases are self-signed, not notarized, so the first launch needs **Open Anyway**.
+- It has been tested by hand on Apple silicon; reports from Intel Macs are welcome ([#46](https://github.com/MaciejWlodarski/burrow/issues/46)).
 - **Undo is not a backup.** File history lives in memory and does not survive a restart. Keep backups of important files and try destructive operations on disposable data first.
 
 The [guide](docs/GUIDE.md) documents behavior, limits and safety checks in detail: file operations and recovery, indexing coverage, session restoration, previews, comparison and duplicate cleanup.
 
 ## Development
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers building, tests, the code layout and conventions. The short version:
 
 ```sh
 zsh ./scripts/run_tests.sh
@@ -233,7 +238,7 @@ The regression runner compiles the app's models, engines and views with `BURROW_
 
 **Translations.** English is the source language. Polish lives in `Resources/pl.lproj/Localizable.strings`, keyed by the English text. To add a language, copy that file to `Resources/<code>.lproj/`, translate the values and add the code to `CFBundleLocalizations` in `Resources/Info.plist`. `python3 scripts/check_localization.py` reports missing translations and mismatched placeholders.
 
-**CI and releases.** [CI](.github/workflows/ci.yml) checks localization, builds a universal app and runs the regression suites on macOS 26, 15 and 14. Pushing a `v*` tag runs the [release workflow](.github/workflows/release.yml), which tests, builds, signs and publishes `Burrow.dmg` and `Burrow.zip` to GitHub Releases.
+**CI and releases.** [CI](.github/workflows/ci.yml) checks localization, builds a universal app and runs the regression suites on macOS 26 and 15. Pushing a `v*` tag runs the [release workflow](.github/workflows/release.yml), which tests, builds, signs and publishes `Burrow.dmg` and `Burrow.zip` to GitHub Releases.
 
 ## License
 

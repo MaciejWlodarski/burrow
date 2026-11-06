@@ -198,6 +198,6 @@ The repository includes `.github/workflows/ci.yml`, which checks localization, b
 
 ### Contributing
 
-Keep changes focused and include reproduction steps for bugs. For a file-operation issue, describe the source and destination volumes, the operation, expected behavior, and actual result. Use disposable fixtures and redact private paths from logs.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for building, tests, conventions and pull requests. In short: keep changes focused and include reproduction steps for bugs. For a file-operation issue, describe the source and destination volumes, the operation, expected behavior, and actual result. Use disposable fixtures and redact private paths from logs.
 
 Before proposing a change, review the [open pull requests](https://github.com/MaciejWlodarski/burrow/pulls) to avoid duplicating ongoing work. Run the relevant regression checks and note your macOS version, Swift version, and any manual UI testing in the pull request.
