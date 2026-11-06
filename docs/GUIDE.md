@@ -194,7 +194,7 @@ This experimental local harness builds a separate preview app and attempts keybo
 
 ### Branch-specific validation
 
-The repository includes `.github/workflows/ci.yml`, which checks localization, builds a universal app and runs the regression suites on macOS 26, 15 and 14 (the minimum deployment target). Consult the actual checks on the [relevant pull request](https://github.com/MaciejWlodarski/burrow/pulls); the presence of a workflow is not evidence that a particular revision has passed. Automated checks do not replace interactive testing of Quick Look, permissions, filesystem events, external volumes, or Thread Sanitizer runs.
+The repository includes `.github/workflows/ci.yml`, which checks localization, builds a universal app and runs the regression suites on macOS 26 and 15 (the minimum deployment target). Consult the actual checks on the [relevant pull request](https://github.com/MaciejWlodarski/burrow/pulls); the presence of a workflow is not evidence that a particular revision has passed. Automated checks do not replace interactive testing of Quick Look, permissions, filesystem events, external volumes, or Thread Sanitizer runs.
 
 ### Contributing
 
