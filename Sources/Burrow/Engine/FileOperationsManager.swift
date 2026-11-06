@@ -1273,6 +1273,7 @@ public final class FileOperationsManager: ObservableObject {
             var undo: [FileHistoryAction] = []
             var touched = Set<String>()
             var failures = 0
+            var withoutTrash: [FileItem] = []
             var validationError: String?
             var lastProgress = Date.distantPast
             for (index, item) in items.enumerated() {
@@ -1291,7 +1292,13 @@ public final class FileOperationsManager: ObservableObject {
                     self.enqueueDirectoryRefresh(item.parentPath)
                     touched.insert(item.parentPath)
                 } catch {
-                    failures += 1
+                    // Network disks have no Trash. Finder offers to delete such items
+                    // right away; a duplicate cleanup never does.
+                    if validating == nil, Self.isOnNetworkVolume(item.url) {
+                        withoutTrash.append(item)
+                    } else {
+                        failures += 1
+                    }
                 }
                 if items.count > 1, Date().timeIntervalSince(lastProgress) > 0.1 {
                     lastProgress = Date()
@@ -1301,6 +1308,7 @@ public final class FileOperationsManager: ObservableObject {
                 }
             }
             let pairs = trashedPairs, actions = undo, failed = failures, stopped = validationError, dirs = touched
+            let immediate = stopped == nil ? withoutTrash : []
             await MainActor.run {
                 for dir in dirs { FolderSizeCache.shared.invalidate(containing: dir) }
                 if !pairs.isEmpty {
@@ -1310,14 +1318,75 @@ public final class FileOperationsManager: ObservableObject {
                     self.lastStatusMessage = String(localized: "Deletion stopped: \(stopped) (moved \(pairs.count) items)")
                 } else if failed > 0 {
                     self.lastStatusMessage = String(localized: "Could not move \(failed) items to the Trash (no permission?)")
-                } else {
+                } else if !pairs.isEmpty || immediate.isEmpty {
                     self.lastStatusMessage = String(localized: "Moved to the Trash: \(pairs.count) items (⌘Z to restore)")
                 }
+                self.activeTransfer = nil
+                self.reloadVisiblePanes()
+                if immediate.isEmpty || !self.confirmImmediateDeletion(immediate, completion: completion) {
+                    completion?()
+                }
+            }
+        }
+    }
+
+    nonisolated static func isOnNetworkVolume(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal) == false
+    }
+
+    /// Asks, as Finder does, before deleting items on a disk without a Trash.
+    /// Returns true when the deletion started; it then calls completion itself.
+    private func confirmImmediateDeletion(_ items: [FileItem], completion: (@MainActor () -> Void)?) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = items.count == 1
+            ? String(localized: "Delete “\(items[0].name)” immediately?")
+            : String(localized: "Delete \(items.count) items immediately?")
+        alert.informativeText = String(localized: "This disk has no Trash, so the items will be deleted right away. This action cannot be undone.")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: String(localized: "Delete"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        // The modal alert runs a nested event loop, during which another operation can start.
+        guard beginMutation(title: String(localized: "Deleting"), totalCount: items.count) else { return false }
+        // Delete only what is still the item that was chosen.
+        let identities = items.map { try? fileIO.identity($0.url) }
+        let io = fileIO
+        Task.detached(priority: .userInitiated) { [self] in
+            var deleted = 0, failed = 0
+            var touched = Set<String>()
+            var lastProgress = Date.distantPast
+            for (index, item) in items.enumerated() {
+                do {
+                    guard let expected = identities[index], (try? io.identity(item.url)) == expected else {
+                        throw FileOperationFailure(message: "changed")
+                    }
+                    try FileManager.default.removeItem(at: item.url)
+                    deleted += 1
+                    touched.insert(item.parentPath)
+                    self.enqueueDirectoryRefresh(item.parentPath)
+                } catch {
+                    failed += 1
+                }
+                if items.count > 1, Date().timeIntervalSince(lastProgress) > 0.1 {
+                    lastProgress = Date()
+                    let progress = TransferProgressInfo(title: String(localized: "Deleting"),
+                        currentFile: item.name, completedCount: index + 1, totalCount: items.count)
+                    await MainActor.run { self.activeTransfer = progress }
+                }
+            }
+            let removed = deleted, notRemoved = failed, dirs = touched
+            await MainActor.run {
+                for dir in dirs { FolderSizeCache.shared.invalidate(containing: dir) }
+                self.lastStatusMessage = notRemoved > 0
+                    ? String(localized: "Could not delete \(notRemoved) items (deleted \(removed))")
+                    : String(localized: "Deleted: \(removed) items")
                 self.activeTransfer = nil
                 self.reloadVisiblePanes()
                 completion?()
             }
         }
+        return true
     }
 
     // MARK: - Native macOS Finder Color Tags

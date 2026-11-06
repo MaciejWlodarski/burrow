@@ -177,6 +177,7 @@ public final class AppState: ObservableObject {
     @Published public var showNewFileSheet: Bool = false
     @Published public var showNewFolderSheet: Bool = false
     @Published public var showCompareSheet: Bool = false
+    @Published public var showConnectToServerSheet: Bool = false
     @Published public var showSettingsSheet: Bool = false
     /// Offered once on first launch, and from Help at any time.
     @Published public var showFullDiskAccessSheet: Bool = false {

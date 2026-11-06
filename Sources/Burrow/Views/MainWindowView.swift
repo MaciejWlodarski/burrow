@@ -12,6 +12,10 @@ public struct MainWindowView: View {
     @ViewState private var terminalDragStart: CGFloat?
     /// The left pane's share of a two-pane window.
     @ViewState private var paneSplitFraction: CGFloat = 0.5
+    /// The pane a file operation was started from: its footer shows the progress
+    /// and the result, not the other pane's.
+    @ViewState private var fileActivitySide: PaneSide = .left
+    @ViewState private var fileActivityEnded: Date?
     @ViewState private var inspectorWidth = MainWindowView.defaultInspectorWidth
     @ViewState private var inspectorDragStart: CGFloat?
     @GestureState private var isResizingTerminal = false
@@ -60,6 +64,18 @@ public struct MainWindowView: View {
             NewFolderSheetView(appState: appState, activeTab: activeTab)
         }
         .sheet(isPresented: $appState.showCompareSheet) { FolderCompareSheetView(appState: appState) }
+        .sheet(isPresented: $appState.showConnectToServerSheet) {
+            ConnectToServerSheetView(appState: appState, activeTab: activeTab)
+        }
+        .onChange(of: fileOps.activeTransfer != nil) { _, isBusy in
+            if isBusy { fileActivitySide = appState.activePaneSide } else { fileActivityEnded = Date() }
+        }
+        .onChange(of: fileOps.lastStatusMessage) { _, message in
+            // A result right after an operation stays where its progress was.
+            guard message != nil, fileOps.activeTransfer == nil,
+                  fileActivityEnded.map({ Date().timeIntervalSince($0) > 1 }) ?? true else { return }
+            fileActivitySide = appState.activePaneSide
+        }
         .onChange(of: appState.showSettingsSheet) { _, show in
             guard show else { return }
             appState.showSettingsSheet = false
@@ -158,6 +174,7 @@ public struct MainWindowView: View {
                                                  isFocusedPane: appState.activePaneSide == .left)
                                     Divider()
                                     FinderStatusBar(appState: appState, activeTab: appState.leftTab,
+                                                    showsFileActivity: fileActivitySide == .left,
                                                     showsFreeSpace: FinderStatusBar.volume(for: appState.leftTab.currentURL.path, in: appState.mountedVolumes)?.id
                                                         != FinderStatusBar.volume(for: appState.rightPane.currentURL.path, in: appState.mountedVolumes)?.id)
                                 }
@@ -167,7 +184,8 @@ public struct MainWindowView: View {
                                     FilePaneView(appState: appState, pane: appState.rightPane, paneSide: .right,
                                                  isFocusedPane: appState.activePaneSide == .right)
                                     Divider()
-                                    FinderStatusBar(appState: appState, activeTab: appState.rightPane, showsActivity: false)
+                                    FinderStatusBar(appState: appState, activeTab: appState.rightPane, showsActivity: false,
+                                                    showsFileActivity: fileActivitySide == .right)
                                 }
                             }
                         } else {
@@ -344,8 +362,10 @@ private struct FinderStatusBar: View {
     @ObservedObject var fileOps = FileOperationsManager.shared
     @ObservedObject var folderSizes = FolderSizeCache.shared
     @ObservedObject var updates = UpdateChecker.shared
-    /// Transfers, updates and indexing are app-wide; in two panes only one footer shows them.
+    /// Updates and indexing are app-wide; in two panes only one footer shows them.
     var showsActivity = true
+    /// File operations show in the footer of the pane they were started from.
+    var showsFileActivity = true
     /// Off for the left of two panes on the same disk: the right footer says it once.
     var showsFreeSpace = true
     static func volume(for path: String, in volumes: [VolumeInfoItem]) -> VolumeInfoItem? {
@@ -378,7 +398,7 @@ private struct FinderStatusBar: View {
                 Text("Opening “\(FileManager.default.displayName(atPath: opening.path))”…")
                     .lineLimit(1).truncationMode(.middle).help(opening.path)
             }
-            if showsActivity, let transfer = fileOps.activeTransfer {
+            if showsFileActivity, let transfer = fileOps.activeTransfer {
                 ProgressView(value: transfer.fraction).frame(width: 70)
                     .accessibilityLabel("File operation progress")
                 Text(transfer.currentFile).lineLimit(1).truncationMode(.middle).help(transfer.currentFile)
@@ -391,7 +411,7 @@ private struct FinderStatusBar: View {
                         .help("Stop after the current file")
                         .accessibilityLabel("Cancel file operation")
                 }
-            } else if showsActivity, let message = fileOps.lastStatusMessage {
+            } else if showsFileActivity, let message = fileOps.lastStatusMessage {
                 Text(message).lineLimit(1).truncationMode(.middle).help(message).textSelection(.enabled)
             }
             Spacer(minLength: 8)

@@ -163,6 +163,8 @@ struct BurrowApp: App {
 
                 Button("Go to Folder…") { appState.activeTab.requestPathEditing() }
                     .keyboardShortcut("g", modifiers: [.command, .shift])
+                Button("Connect to Server…") { appState.showConnectToServerSheet = true }
+                    .keyboardShortcut("k", modifiers: [.command])
                 Button("Home") {
                     appState.activeTab.navigate(to: FileManager.default.homeDirectoryForCurrentUser)
                 }

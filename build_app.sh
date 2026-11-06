@@ -66,7 +66,7 @@ compile "${MACOS_DIR}/${APP_NAME}" \
     Sources/Burrow/BurrowApp.swift \
     -framework AppKit -framework SwiftUI -framework QuickLookUI \
     -framework QuickLookThumbnailing -framework CoreServices \
-    -framework UniformTypeIdentifiers
+    -framework UniformTypeIdentifiers -framework NetFS
 
 # The `burrow` command-line tool shares the disk map's scanner. Helpers/ keeps
 # it apart from MacOS/Burrow on a case-insensitive disk.

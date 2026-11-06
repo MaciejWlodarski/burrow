@@ -166,7 +166,9 @@ private final class VolumeRefreshIngress: @unchecked Sendable {
             if values == nil { partial = true }
             items.append(VolumeInfoItem(name: values?.volumeName ?? (url.path == "/" ? "/" : url.lastPathComponent),
                 url: url, totalBytes: values?.volumeTotalCapacity.map(Int64.init),
-                freeBytes: values?.volumeAvailableCapacityForImportantUsage ?? values?.volumeAvailableCapacity.map(Int64.init),
+                // Network disks report 0 for important usage; their plain free space is right.
+                freeBytes: values?.volumeAvailableCapacityForImportantUsage.flatMap { $0 > 0 ? $0 : nil }
+                    ?? values?.volumeAvailableCapacity.map(Int64.init),
                 isRemovable: values?.volumeIsRemovable == true || values?.volumeIsEjectable == true ||
                     (values?.volumeIsInternal == false && url.path != "/"),
                 isNetwork: values?.volumeIsLocal == false,
