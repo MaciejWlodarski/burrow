@@ -31,7 +31,7 @@
   <a href="docs/GUIDE.md">Guide</a>
 </p>
 
-https://github.com/user-attachments/assets/154919ab-4196-4dbc-abe3-9a577abc60cc
+https://github.com/user-attachments/assets/8d9e4f40-e14a-4b92-8d0b-de5e37d060da
 
 ![Burrow in dual pane, each pane with its own tabs: a project folder on the left and one of its subfolders on the right](docs/images/dual-pane.png)
 
