@@ -475,13 +475,18 @@ public struct SidebarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("\(server.title) · mounted shares: \(server.volumes.count)")
-            .accessibilityLabel("Server \(server.title), \(server.volumes.count) shares")
+            .help(server.disconnectedShares.isEmpty
+                  ? String(localized: "\(server.title) · mounted shares: \(server.volumes.count)")
+                  : String(localized: "\(server.title) · connected: \(server.volumes.count) of \(server.volumes.count + server.disconnectedShares.count)"))
+            .accessibilityLabel("Server \(server.title), \(server.volumes.count + server.disconnectedShares.count) shares")
             .accessibilityValue(expanded ? String(localized: "Expanded") : String(localized: "Collapsed"))
             .accessibilityHint("Show or hide the mounted shares of this server")
             if expanded {
-                ForEach(server.volumes) { volume in volumeRow(volume) }
-                    .padding(.leading, FinderUI.panelInset)
+                Group {
+                    ForEach(server.volumes) { volume in volumeRow(volume) }
+                    ForEach(server.disconnectedShares) { share in disconnectedShareRow(share) }
+                }
+                .padding(.leading, FinderUI.panelInset)
             }
         }
     }
@@ -555,6 +560,68 @@ public struct SidebarView: View {
         }
         .padding(.trailing, 4)
         .background(rowBackground(isSelected: isSelected))
+        .contextMenu {
+            if let share = volume.networkShare {
+                if appState.isSaved(volume) {
+                    Button("Remove from Sidebar") { appState.removeSavedShare(share) }
+                } else {
+                    Button("Keep in Sidebar When Disconnected") { appState.saveShare(share) }
+                }
+            }
+        }
+    }
+
+    /// A saved drive that is not mounted: dimmed, and a click connects it and
+    /// opens it, like a mapped drive on Windows.
+    private func disconnectedShareRow(_ share: NetworkShare) -> some View {
+        let connecting = appState.connectingShareIDs.contains(share.id)
+        return HStack(spacing: FinderUI.sidebarRowGap) {
+            Button {
+                if !connecting { appState.connectSavedShare(share, openIn: activeTab) }
+            } label: {
+                HStack(spacing: FinderUI.rowSpacing) {
+                    Image(systemName: "folder")
+                        .foregroundStyle(.secondary)
+                        .frame(width: FinderUI.sidebarIconWidth)
+                        .accessibilityHidden(true)
+                    Text(share.name)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, FinderUI.sidebarRowInset)
+                .frame(minHeight: FinderUI.sidebarRowHeight)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(connecting ? String(localized: "Connecting to \(share.address)…")
+                             : String(localized: "\(share.address) · not connected. Click to connect."))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(share.name)
+            .accessibilityValue(connecting ? String(localized: "Connecting") : String(localized: "Not connected"))
+            .accessibilityHint("Connect to this share and open it")
+            .accessibilityAddTraits(.isButton)
+
+            if connecting {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityHidden(true)
+                sidebarActionButton(icon: "xmark.circle", label: "Stop connecting to \(share.name)") {
+                    appState.cancelConnecting(share)
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.trailing, 4)
+        .contextMenu {
+            if connecting {
+                Button("Stop Connecting") { appState.cancelConnecting(share) }
+            } else {
+                Button("Connect") { appState.connectSavedShare(share, openIn: activeTab) }
+            }
+            Divider()
+            Button("Remove from Sidebar") { appState.removeSavedShare(share) }
+        }
     }
 
     private func sidebarSectionHeader(_ text: LocalizedStringKey) -> some View {

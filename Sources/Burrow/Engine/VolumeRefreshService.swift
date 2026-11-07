@@ -172,7 +172,8 @@ private final class VolumeRefreshIngress: @unchecked Sendable {
                 isRemovable: values?.volumeIsRemovable == true || values?.volumeIsEjectable == true ||
                     (values?.volumeIsInternal == false && url.path != "/"),
                 isNetwork: values?.volumeIsLocal == false,
-                networkServer: NetworkServerIdentity.parse(remountURL: values?.volumeURLForRemounting)))
+                networkServer: NetworkServerIdentity.parse(remountURL: values?.volumeURLForRemounting),
+                networkShare: NetworkShare(url: values?.volumeURLForRemounting)))
         }
         items.sort { $0.url.path < $1.url.path }
         return .success(VolumeSnapshot(items: items, partial: partial))

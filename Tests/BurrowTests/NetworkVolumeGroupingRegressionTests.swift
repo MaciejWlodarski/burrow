@@ -60,6 +60,22 @@ struct NetworkVolumeGroupingRegressionTests {
         try expect(VolumeSidebarGroups.build(from: state.items).networkServers.first?.id == stableID)
         state.apply(.success(VolumeSnapshot(items: [])))
         try expect(VolumeSidebarGroups.build(from: state.items).networkServers.isEmpty)
+        // Saved drives that are not mounted join their server's group, or make one.
+        let photos = NetworkShare(address: "smb://alice@nas.example/Photos")!
+        let music = NetworkShare(address: "smb://nas.example/Music")!
+        let offsite = NetworkShare(address: "afp://backup.example/Archive")!
+        let mountedPhotos = VolumeInfoItem(name: "Photos", url: URL(fileURLWithPath: "/Volumes/Photos"),
+                                           totalBytes: nil, freeBytes: nil, isRemovable: true,
+                                           networkShare: NetworkShare(address: "smb://bob@NAS.example/photos"))
+        try expect(mountedPhotos.isNetwork && mountedPhotos.networkServer?.id == "smb://nas.example")
+        let withSaved = VolumeSidebarGroups.build(from: [mountedPhotos, local],
+                                                  saved: [photos, music, offsite, music]).networkServers
+        try expect(withSaved.map(\.id) == ["server:afp://backup.example", "server:smb://nas.example"])
+        try expect(withSaved[1].volumes.map(\.id) == ["/Volumes/Photos"])
+        try expect(withSaved[1].disconnectedShares.map(\.name) == ["Music"])
+        try expect(withSaved[0].volumes.isEmpty && withSaved[0].isServerKnown)
+        try expect(withSaved[0].disconnectedShares.map(\.name) == ["Archive"])
+        try expect(VolumeSidebarGroups.build(from: [local], saved: []).networkServers.isEmpty)
         print("PASS network server grouping, sanitized endpoints, unknown capacity and inventory transitions")
     }
 }

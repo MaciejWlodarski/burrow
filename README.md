@@ -45,7 +45,7 @@ https://github.com/user-attachments/assets/f77dc4a6-53f4-4fc8-901d-6c9d21b7db0c
 | **Indexed search** | Results as you type over an in-memory index, with fsearch-style filters, typo tolerance and content grep. |
 | **Whole-disk map** | A full-depth treemap and size tree of the entire disk in about 20 seconds. APFS clones and hard links count once. |
 | **`burrow` CLI and MCP server** | The same scanner from the terminal or as MCP tools for AI agents, with JSON output, a reusable scan cache, regenerable-clutter detection and a Trash-only `trash` command. |
-| **Network servers** | **Connect to Server** (⌘K) mounts SMB, AFP, NFS and WebDAV shares, with recent servers and the system sign-in. Shares are grouped under their server in the sidebar, show their real free space, and items on a disk without a Trash can be deleted after a warning, as in Finder. |
+| **Network servers** | **Connect to Server** (⌘K) mounts SMB, AFP, NFS and WebDAV shares, with recent servers and the system sign-in. Shares are grouped under their server in the sidebar, show their real free space, and items on a disk without a Trash can be deleted after a warning, as in Finder. Saved shares stay in the sidebar while disconnected, like mapped drives on Windows, and a click connects them again. |
 | **Cloud storage** | iCloud Drive, Google Drive, OneDrive, Dropbox and other File Provider apps appear under **Cloud** in the sidebar. A cloud badge marks files stored only online; **Download Now** and **Remove Download** are in the context menu. Searching, folder sizes and previews never download anything by themselves. |
 | **Per-folder sorting and views** | One default in Settings; sort Downloads by date or show Pictures as icons, and only that folder remembers it. |
 | **Replaces Finder** | Optionally the default folder viewer: folders opened from the Dock, Spotlight, `open` and “Show in Finder” land in Burrow. |
@@ -195,7 +195,6 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 **Next**
 
 - [ ] **Notarized releases.** Releases are signed with a self-signed certificate today; notarization needs a paid Apple Developer account.
-- [ ] **Saved network drives.** Shares stay in the sidebar when disconnected, show whether they are connected, and reconnect when clicked, like mapped drives on Windows.
 - [ ] **More languages.** The interface is in English and Polish. A new language is one `Localizable.strings` file ([#40](https://github.com/MaciejWlodarski/burrow/issues/40)).
 - [ ] **Optional fsearch backend.** When the [fsearch](https://github.com/noahdunnagan/fsearch) daemon is running, query its whole-disk index and content grep over its local socket instead of indexing chosen folders only.
 - [ ] **Live disk map.** Keep a finished scan current with FSEvents instead of rescanning ([#44](https://github.com/MaciejWlodarski/burrow/issues/44)).
@@ -203,6 +202,7 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 
 **Done recently**
 
+- [x] **Saved network drives.** Shares stay in the sidebar when disconnected, dimmed until a click connects them, like mapped drives on Windows; optionally they connect at launch with keychain passwords.
 - [x] **Connect to Server** (⌘K), deleting on network disks without a Trash, and their real free space.
 - [x] **Faster CLI for agents.** `--cache` reuses a scan between commands, and `burrow mcp` serves `scan`, `top`, `junk`, `size` and `trash` to agents.
 - [x] Per-folder view mode, like per-folder sorting.

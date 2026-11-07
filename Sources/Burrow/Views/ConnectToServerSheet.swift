@@ -13,6 +13,7 @@ struct ConnectToServerSheetView: View {
     @ViewState private var isConnecting = false
     @ViewState private var errorMessage: String?
     @ViewState private var mounter = ServerMount()
+    @ViewState private var keepInSidebar = SavedNetworkShares(defaults: AppState.preferences).keepsNewShares
     @FocusState private var isAddressFocused: Bool
 
     private var parsedURL: URL? { ServerAddress.url(from: address) }
@@ -79,6 +80,16 @@ struct ConnectToServerSheetView: View {
                 .disabled(isConnecting)
             }
 
+            Toggle(isOn: $keepInSidebar) {
+                Text("Keep in the sidebar when disconnected")
+            }
+            .toggleStyle(.checkbox)
+            .help("The share stays under its server in the sidebar; click it there to connect again.")
+            .disabled(isConnecting)
+            .onChange(of: keepInSidebar) { _, keep in
+                SavedNetworkShares(defaults: AppState.preferences).keepsNewShares = keep
+            }
+
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.circle")
                     .font(FinderUI.detailFont)
@@ -128,12 +139,22 @@ struct ConnectToServerSheetView: View {
                 guard let mountPoint = try await mounter.mount(url) else { return } // cancelled at sign-in
                 RecentServers().add(url)
                 recents = RecentServers().all
+                if keepInSidebar, let share = Self.share(mountedAt: mountPoint) ?? NetworkShare(url: url) {
+                    appState.saveShare(share)
+                }
                 appState.showConnectToServerSheet = false
                 activeTab.navigate(to: mountPoint)
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    /// The share as the system names it for remounting, so the saved drive
+    /// matches the mounted volume even when the address typed was a server alone.
+    private static func share(mountedAt mountPoint: URL) -> NetworkShare? {
+        let values = try? mountPoint.resourceValues(forKeys: [.volumeURLForRemountingKey])
+        return NetworkShare(url: values?.volumeURLForRemounting)
     }
 
     private func remove(_ recent: String) {

@@ -1122,6 +1122,15 @@ struct GeneralSettingsPane: View {
                     Text(notice).font(FinderUI.captionFont).foregroundStyle(.orange)
                 }
             }
+            Section {
+                Toggle(isOn: Binding(
+                    get: { appState.reconnectsSavedSharesAtLaunch },
+                    set: { appState.reconnectsSavedSharesAtLaunch = $0 }
+                )) {
+                    SettingsRowLabel(title: "Connect saved network drives at launch",
+                                     detail: "Uses passwords saved in the keychain, without a sign-in dialog. A drive that needs a password or is off stays disconnected; click it in the sidebar to connect.")
+                }
+            }
             UpdateSettingsSection()
         }
         .formStyle(.grouped)

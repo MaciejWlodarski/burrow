@@ -1003,3 +1003,22 @@
 "Deleting" = "Usuwanie";
 "Could not delete %lld items (deleted %lld)" = "Nie udało się usunąć %lld elem. (usunięto %lld)";
 "Deleted: %lld items" = "Usunięto: %lld elem.";
+
+/* Saved network drives */
+"%@ cannot be reached. Check that the server is on and on this network." = "Nie można połączyć się z %@. Sprawdź, czy serwer jest włączony i w tej sieci.";
+"Connecting to %@…" = "Łączenie z %@…";
+"Connected to %@" = "Połączono z %@";
+"Could not connect to %@: %@" = "Nie udało się połączyć z %1$@: %2$@";
+"Keep in the sidebar when disconnected" = "Zachowaj w pasku bocznym po rozłączeniu";
+"The share stays under its server in the sidebar; click it there to connect again." = "Udział zostaje pod swoim serwerem w pasku bocznym; kliknij go tam, aby połączyć się ponownie.";
+"%@ · connected: %lld of %lld" = "%1$@ · połączone: %2$lld z %3$lld";
+"Remove from Sidebar" = "Usuń z paska bocznego";
+"Keep in Sidebar When Disconnected" = "Zachowaj w pasku bocznym po rozłączeniu";
+"%@ · not connected. Click to connect." = "%@ · nie połączono. Kliknij, aby połączyć.";
+"Connecting" = "Łączenie";
+"Not connected" = "Nie połączono";
+"Connect to this share and open it" = "Połącz z tym udziałem i otwórz go";
+"Stop Connecting" = "Przerwij łączenie";
+"Stop connecting to %@" = "Przerwij łączenie z %@";
+"Connect saved network drives at launch" = "Łącz zapisane dyski sieciowe przy uruchomieniu";
+"Uses passwords saved in the keychain, without a sign-in dialog. A drive that needs a password or is off stays disconnected; click it in the sidebar to connect." = "Używa haseł zapisanych w pęku kluczy, bez okna logowania. Dysk, który wymaga hasła albo jest wyłączony, zostaje rozłączony; kliknij go w pasku bocznym, aby się połączyć.";

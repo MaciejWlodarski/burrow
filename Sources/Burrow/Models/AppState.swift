@@ -204,7 +204,15 @@ public final class AppState: ObservableObject {
     @Published public private(set) var volumeInventory = VolumeInventoryState()
     public var mountedVolumes: [VolumeInfoItem] { volumeInventory.items }
     public var localMountedVolumes: [VolumeInfoItem] { VolumeSidebarGroups.build(from: mountedVolumes).localVolumes }
-    public var networkServerGroups: [NetworkVolumeGroup] { VolumeSidebarGroups.build(from: mountedVolumes).networkServers }
+    public var networkServerGroups: [NetworkVolumeGroup] {
+        VolumeSidebarGroups.build(from: mountedVolumes, saved: savedNetworkShares).networkServers
+    }
+    /// Shares listed in the sidebar while disconnected, like mapped drives on Windows.
+    @Published public private(set) var savedNetworkShares: [NetworkShare] = []
+    /// Saved shares with a connection in progress, by share id.
+    @Published private(set) var connectingShareIDs: Set<String> = []
+    private var shareConnections: [String: (task: Task<Void, Never>, mount: ServerMount)] = [:]
+    var savedShareStore: SavedNetworkShares { SavedNetworkShares(defaults: Self.preferences) }
     private var volumeService: VolumeRefreshService?
     private lazy var sidebarFavoritesStore: SidebarFavoritesStore = {
         let store = SidebarFavoritesStore(
@@ -292,7 +300,9 @@ public final class AppState: ObservableObject {
         #endif
 
         setupSidebarLocations()
+        savedNetworkShares = savedShareStore.all
         #if !BURROW_TESTING
+        reconnectSavedSharesAtLaunch()
         let volumes = VolumeRefreshService.production()
         volumeService = volumes
         volumes.start { [weak self] result in
@@ -562,6 +572,91 @@ public final class AppState: ObservableObject {
         } else {
             refreshMountedVolumes()
             FileOperationsManager.shared.lastStatusMessage = String(localized: "Ejected volume \(vol.name)")
+        }
+    }
+
+    // MARK: - Saved network drives
+
+    public var reconnectsSavedSharesAtLaunch: Bool {
+        get { savedShareStore.reconnectsAtLaunch }
+        set { objectWillChange.send(); savedShareStore.reconnectsAtLaunch = newValue }
+    }
+
+    public func isSaved(_ volume: VolumeInfoItem) -> Bool {
+        guard let share = volume.networkShare else { return false }
+        return savedNetworkShares.contains { $0.id == share.id }
+    }
+
+    /// Keeps the share in the sidebar, also while it is disconnected.
+    public func saveShare(_ share: NetworkShare) {
+        savedShareStore.add(share)
+        savedNetworkShares = savedShareStore.all
+    }
+
+    /// Removes the drive from the sidebar. A mounted share stays mounted.
+    public func removeSavedShare(_ share: NetworkShare) {
+        cancelConnecting(share)
+        savedShareStore.remove(share)
+        savedNetworkShares = savedShareStore.all
+    }
+
+    /// Mounts a saved drive and opens it in `tab`. The server is checked first,
+    /// so one that is off reports so within seconds; the sign-in dialog, if any,
+    /// is the system's, and its password goes to the keychain only.
+    public func connectSavedShare(_ share: NetworkShare, openIn tab: PaneTabState?, interactive: Bool = true) {
+        guard let url = share.url, connectingShareIDs.insert(share.id).inserted else { return }
+        if interactive {
+            FileOperationsManager.shared.lastStatusMessage = String(localized: "Connecting to \(share.name)…")
+        }
+        let mount = ServerMount()
+        let task = Task { @MainActor [weak self] in
+            var message: String?
+            do {
+                let reachable = await ServerReachability.isReachable(url)
+                try Task.checkCancellation() // a stopped check is not an unreachable server
+                guard reachable else { throw ServerConnectionError.unreachable(server: share.server.title) }
+                if let mountPoint = try await mount.mount(url, allowUI: interactive) {
+                    self?.refreshMountedVolumes()
+                    if let tab { _ = tab.navigate(to: mountPoint, clearSearch: true) }
+                    message = interactive ? String(localized: "Connected to \(share.name)") : nil
+                }
+            } catch is CancellationError {
+            } catch {
+                message = interactive ? String(localized: "Could not connect to \(share.name): \(error.localizedDescription)") : nil
+            }
+            self?.finishConnecting(share, message: message)
+        }
+        shareConnections[share.id] = (task, mount)
+    }
+
+    public func cancelConnecting(_ share: NetworkShare) {
+        guard let connection = shareConnections[share.id] else { return }
+        connection.task.cancel()
+        connection.mount.cancel()
+    }
+
+    private func finishConnecting(_ share: NetworkShare, message: String?) {
+        shareConnections[share.id] = nil
+        connectingShareIDs.remove(share.id)
+        if let message {
+            FileOperationsManager.shared.lastStatusMessage = message
+        } else if FileOperationsManager.shared.lastStatusMessage == String(localized: "Connecting to \(share.name)…") {
+            FileOperationsManager.shared.lastStatusMessage = nil
+        }
+    }
+
+    /// With the setting on, saved drives that are not mounted connect in the
+    /// background, with keychain passwords only: no dialog appears at launch,
+    /// and a drive that needs a sign-in or is off stays disconnected.
+    private func reconnectSavedSharesAtLaunch() {
+        guard savedShareStore.reconnectsAtLaunch else { return }
+        let shares = savedNetworkShares
+        Task { [weak self] in
+            // Reading mounted volumes can stall on an unresponsive share; not on the main actor.
+            let missing = await Task.detached(priority: .utility) {
+                shares.filter { share in share.url.map { ServerMount.existingMount(of: $0) == nil } ?? false }
+            }.value
+            for share in missing { self?.connectSavedShare(share, openIn: nil, interactive: false) }
         }
     }
 
