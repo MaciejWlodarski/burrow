@@ -134,7 +134,7 @@ public struct FSearchToolbarSection: View {
                     .disabled(activeTab.selectedItems.isEmpty)
                     Divider()
                     Button("Open in Finder", systemImage: "macwindow") {
-                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: activeTab.currentURL.path)
+                        AppleFinder.open(folder: activeTab.currentURL)
                     }
                     Toggle("Terminal", isOn: $appState.showTerminalDrawer)
                     if appState.isDualPane {

@@ -1365,9 +1365,13 @@ struct SettingsRowLabel: View {
 /// Lets the user hand folder opening and "Show in Finder" over to Burrow.
 struct DefaultFileViewerSettingsSection: View {
     @ViewState private var isDefault = DefaultFileViewer.isDefault
+    @ViewState private var isFolderHandler = DefaultFileViewer.isFolderHandler
     @ViewState private var folderHandlerLocked = DefaultFileViewer.isFolderHandlerLocked()
     @ViewState private var isWorking = false
     @ViewState private var errorMessage: String?
+    @ViewState private var redirectsFinder = FinderWindowRedirector.isEnabled
+    @ViewState private var accessibilityGranted = AXIsProcessTrusted()
+    @ViewState private var automation: AppleFinder.Automation = .notAsked
 
     var body: some View {
         Section {
@@ -1387,9 +1391,7 @@ struct DefaultFileViewerSettingsSection: View {
                         }
                     }
                 }
-                Text(folderHandlerLocked
-                     ? "“Show in Finder” from other apps opens in Burrow. macOS \(DefaultFileViewer.systemVersion) does not let any app take over opening folders, so those still open in Finder, as do the Desktop and the Dock’s Trash."
-                     : "Folders opened from other apps and “Show in Finder” open in Burrow. The Desktop and the Dock’s Trash stay with Finder.")
+                Text(explanation)
                     .font(FinderUI.detailFont)
                     .lineSpacing(2)
                     .foregroundStyle(FinderUI.metadataColor)
@@ -1398,10 +1400,67 @@ struct DefaultFileViewerSettingsSection: View {
             if let errorMessage {
                 Text(errorMessage).font(FinderUI.captionFont).foregroundStyle(.orange)
             }
+            Toggle(isOn: Binding(get: { redirectsFinder }, set: { setRedirect($0) })) {
+                SettingsRowLabel(title: "Open Finder windows in Burrow",
+                                 detail: "Catches what the setting above cannot: the Dock’s Finder icon and folders, and apps that call Finder directly. Each new Finder window closes and its folder opens in Burrow. Hold Option to keep a window in Finder.")
+            }
+            if redirectsFinder, let missing = missingPermission {
+                HStack(alignment: .firstTextBaseline, spacing: FinderUI.rowSpacing) {
+                    Text(missing.message)
+                        .font(FinderUI.captionFont)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button("Open Privacy Settings") { NSWorkspace.shared.open(missing.settingsURL) }
+                }
+            }
         }
-        .onAppear {
-            isDefault = DefaultFileViewer.isDefault
-            folderHandlerLocked = DefaultFileViewer.isFolderHandlerLocked()
+        .onAppear(perform: refresh)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
+    }
+
+    private var explanation: LocalizedStringKey {
+        if folderHandlerLocked && !isFolderHandler {
+            return "“Show in Finder” from other apps opens in Burrow. macOS \(DefaultFileViewer.systemVersion) does not let apps take over opening folders, so Burrow also added itself to the system’s list of folder handlers. If macOS accepts that, folders open in Burrow after you log out and back in. The option below covers the rest."
+        }
+        return "Folders opened from other apps and “Show in Finder” open in Burrow. The Desktop and the Dock’s Trash stay with Finder."
+    }
+
+    private var missingPermission: (message: LocalizedStringKey, settingsURL: URL)? {
+        if !accessibilityGranted {
+            return ("Burrow needs Accessibility permission to notice new Finder windows.",
+                    URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        }
+        if automation == .denied {
+            return ("Allow Burrow to control Finder in Privacy & Security → Automation.",
+                    URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!)
+        }
+        return nil
+    }
+
+    private func refresh() {
+        isDefault = DefaultFileViewer.isDefault
+        isFolderHandler = DefaultFileViewer.isFolderHandler
+        folderHandlerLocked = DefaultFileViewer.isFolderHandlerLocked()
+        redirectsFinder = FinderWindowRedirector.isEnabled
+        accessibilityGranted = AXIsProcessTrusted()
+        guard redirectsFinder else { return }
+        Task.detached(priority: .utility) {
+            let status = AppleFinder.automationPermission(ask: false)
+            await MainActor.run { automation = status }
+        }
+    }
+
+    private func setRedirect(_ enabled: Bool) {
+        redirectsFinder = enabled
+        FinderWindowRedirector.setEnabled(enabled)
+        guard enabled else { return }
+        // Both prompts appear once; macOS remembers the answers.
+        let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        accessibilityGranted = AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary)
+        Task.detached(priority: .userInitiated) {
+            let status = AppleFinder.automationPermission(ask: true)
+            await MainActor.run { automation = status }
         }
     }
 
@@ -1411,11 +1470,15 @@ struct DefaultFileViewerSettingsSection: View {
         let finish: @MainActor (String?) -> Void = { error in
             isWorking = false
             errorMessage = error
-            isDefault = DefaultFileViewer.isDefault
-            folderHandlerLocked = DefaultFileViewer.isFolderHandlerLocked()
+            refresh()
         }
-        if makeDefault { DefaultFileViewer.makeDefault(completion: finish) }
-        else { DefaultFileViewer.restoreFinder(completion: finish) }
+        if makeDefault {
+            DefaultFileViewer.makeDefault(completion: finish)
+        } else {
+            // Finder gets everything back, including its own windows.
+            if FinderWindowRedirector.isEnabled { setRedirect(false) }
+            DefaultFileViewer.restoreFinder(completion: finish)
+        }
     }
 }
 

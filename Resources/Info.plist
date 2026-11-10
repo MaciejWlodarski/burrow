@@ -44,6 +44,8 @@
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Burrow asks Finder which folder a new Finder window shows, so it can open that folder instead, and shows items in Finder when you ask it to.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>

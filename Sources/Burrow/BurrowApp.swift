@@ -338,6 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        if FinderWindowRedirector.isEnabled { FinderWindowRedirector.shared.start() }
 
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard FinderCommandRouting.shouldRouteFileKeyEvent(event) else { return event }

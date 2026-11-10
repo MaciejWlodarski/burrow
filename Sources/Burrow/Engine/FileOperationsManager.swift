@@ -1758,7 +1758,7 @@ public final class FileOperationsManager: ObservableObject {
 
     public func revealInAppleFinder(_ items: [FileItem]) {
         guard !items.isEmpty else { return }
-        NSWorkspace.shared.activateFileViewerSelecting(items.map(\.url))
+        AppleFinder.reveal(items.map(\.url))
     }
 
     // MARK: - Git Status Detection

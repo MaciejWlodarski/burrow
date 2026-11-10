@@ -1028,4 +1028,11 @@
 "Burrow wants to move %lld items that belong to another user to the Trash." = "Burrow chce przenieść do Kosza elementy innego użytkownika (%lld).";
 "Moved to the Trash: %lld items" = "Przeniesiono do Kosza: %lld elem.";
 "Moving to the Trash was cancelled" = "Anulowano przenoszenie do Kosza";
-"“Show in Finder” from other apps opens in Burrow. macOS %@ does not let any app take over opening folders, so those still open in Finder, as do the Desktop and the Dock’s Trash." = "„Pokaż w Finderze” z innych aplikacji otwiera się w Burrow. macOS %@ nie pozwala żadnej aplikacji przejąć otwierania folderów, więc te nadal otwierają się w Finderze, podobnie jak Biurko i Kosz w Docku.";
+
+/* Finder window redirect */
+"“Show in Finder” from other apps opens in Burrow. macOS %@ does not let apps take over opening folders, so Burrow also added itself to the system’s list of folder handlers. If macOS accepts that, folders open in Burrow after you log out and back in. The option below covers the rest." = "„Pokaż w Finderze” z innych aplikacji otwiera się w Burrow. macOS %@ nie pozwala aplikacjom przejąć otwierania folderów, więc Burrow dopisał się też do systemowej listy aplikacji dla folderów. Jeśli macOS to zaakceptuje, foldery będą otwierać się w Burrow po wylogowaniu i ponownym zalogowaniu. Resztę obejmuje opcja poniżej.";
+"Open Finder windows in Burrow" = "Otwieraj okna Findera w Burrow";
+"Catches what the setting above cannot: the Dock’s Finder icon and folders, and apps that call Finder directly. Each new Finder window closes and its folder opens in Burrow. Hold Option to keep a window in Finder." = "Przechwytuje to, czego nie obejmuje ustawienie powyżej: ikonę Findera i foldery w Docku oraz aplikacje, które wywołują Findera bezpośrednio. Każde nowe okno Findera zamyka się, a jego folder otwiera się w Burrow. Przytrzymaj Option, aby zostawić okno w Finderze.";
+"Burrow needs Accessibility permission to notice new Finder windows." = "Burrow potrzebuje uprawnienia Dostępność, aby zauważać nowe okna Findera.";
+"Allow Burrow to control Finder in Privacy & Security → Automation." = "Pozwól Burrow sterować Finderem w Prywatność i ochrona → Automatyzacja.";
+"Open Privacy Settings" = "Otwórz ustawienia prywatności";

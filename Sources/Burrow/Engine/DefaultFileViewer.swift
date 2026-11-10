@@ -64,6 +64,7 @@ enum DefaultFileViewer {
     @MainActor
     static func restoreFinder(completion: @escaping @MainActor (String?) -> Void) {
         setFileViewer(nil)
+        if LaunchServicesHandlers.folderHandler != nil { LaunchServicesHandlers.setFolderHandler(nil) }
         // A locked handler is still Finder: nothing else to restore.
         if isFolderHandlerLocked(), !isFolderHandler {
             Task { @MainActor in completion(nil) }
@@ -87,6 +88,10 @@ enum DefaultFileViewer {
             Task { @MainActor in
                 if let error, isLockedFolderHandlerError(error) {
                     AppState.preferences.set(systemVersion, forKey: folderHandlerLockKey)
+                    // The same entry the API would write, added by hand as other file
+                    // managers document it. macOS reads it at the next login, if at all.
+                    let target = Bundle(url: appURL)?.bundleIdentifier
+                    LaunchServicesHandlers.setFolderHandler(target == finderBundleID ? nil : target)
                     completion(nil)
                 } else if let error {
                     completion(String(localized: "Could not change the default application for folders: \(error.localizedDescription)"))
@@ -137,5 +142,42 @@ enum ExternalOpenRouter {
         } else {
             openMainWindow?()
         }
+    }
+}
+
+/// The user's LaunchServices handler list, written directly when the API that
+/// normally edits it refuses folders (macOS 27). LaunchServices reads it at login.
+enum LaunchServicesHandlers {
+    static let domain = "com.apple.LaunchServices/com.apple.launchservices.secure" as CFString
+    static let key = "LSHandlers" as CFString
+    static let folderType = "public.folder"
+
+    /// Drops every folder entry and, with a bundle id, adds one for it.
+    static func updating(_ handlers: [[String: Any]], folderHandler bundleID: String?) -> [[String: Any]] {
+        var result = handlers.filter { ($0["LSHandlerContentType"] as? String)?.lowercased() != folderType }
+        if let bundleID {
+            result.append([
+                "LSHandlerContentType": folderType,
+                "LSHandlerRoleAll": bundleID,
+                "LSHandlerPreferredVersions": ["LSHandlerRoleAll": "-"],
+            ])
+        }
+        return result
+    }
+
+    static func folderHandler(in handlers: [[String: Any]]) -> String? {
+        handlers.first { ($0["LSHandlerContentType"] as? String)?.lowercased() == folderType }?["LSHandlerRoleAll"] as? String
+    }
+
+    static var handlers: [[String: Any]] {
+        CFPreferencesCopyValue(key, domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost) as? [[String: Any]] ?? []
+    }
+
+    static var folderHandler: String? { folderHandler(in: handlers) }
+
+    static func setFolderHandler(_ bundleID: String?) {
+        let updated = updating(handlers, folderHandler: bundleID)
+        CFPreferencesSetValue(key, updated as CFArray, domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+        CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
     }
 }
