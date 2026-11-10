@@ -1365,6 +1365,7 @@ struct SettingsRowLabel: View {
 /// Lets the user hand folder opening and "Show in Finder" over to Burrow.
 struct DefaultFileViewerSettingsSection: View {
     @ViewState private var isDefault = DefaultFileViewer.isDefault
+    @ViewState private var folderHandlerLocked = DefaultFileViewer.isFolderHandlerLocked()
     @ViewState private var isWorking = false
     @ViewState private var errorMessage: String?
 
@@ -1386,7 +1387,9 @@ struct DefaultFileViewerSettingsSection: View {
                         }
                     }
                 }
-                Text("Folders opened from other apps and “Show in Finder” open in Burrow. The Desktop and the Dock’s Trash stay with Finder.")
+                Text(folderHandlerLocked
+                     ? "“Show in Finder” from other apps opens in Burrow. macOS \(DefaultFileViewer.systemVersion) does not let any app take over opening folders, so those still open in Finder, as do the Desktop and the Dock’s Trash."
+                     : "Folders opened from other apps and “Show in Finder” open in Burrow. The Desktop and the Dock’s Trash stay with Finder.")
                     .font(FinderUI.detailFont)
                     .lineSpacing(2)
                     .foregroundStyle(FinderUI.metadataColor)
@@ -1396,7 +1399,10 @@ struct DefaultFileViewerSettingsSection: View {
                 Text(errorMessage).font(FinderUI.captionFont).foregroundStyle(.orange)
             }
         }
-        .onAppear { isDefault = DefaultFileViewer.isDefault }
+        .onAppear {
+            isDefault = DefaultFileViewer.isDefault
+            folderHandlerLocked = DefaultFileViewer.isFolderHandlerLocked()
+        }
     }
 
     private func apply(makeDefault: Bool) {
@@ -1406,6 +1412,7 @@ struct DefaultFileViewerSettingsSection: View {
             isWorking = false
             errorMessage = error
             isDefault = DefaultFileViewer.isDefault
+            folderHandlerLocked = DefaultFileViewer.isFolderHandlerLocked()
         }
         if makeDefault { DefaultFileViewer.makeDefault(completion: finish) }
         else { DefaultFileViewer.restoreFinder(completion: finish) }

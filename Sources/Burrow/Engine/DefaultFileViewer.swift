@@ -27,7 +27,32 @@ enum DefaultFileViewer {
         return Bundle(url: url)?.bundleIdentifier == bundleID
     }
 
-    static var isDefault: Bool { isFileViewer && isFolderHandler }
+    /// macOS 27 refuses any change of the folder handler, even back to Finder
+    /// (LaunchServices answers paramErr). "Show in Finder" still follows
+    /// `NSFileViewer`, so Burrow is as much the default as the system allows.
+    static let folderHandlerLockKey = "bf.defaultViewer.folderHandlerLockedOn"
+
+    static var systemVersion: String {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return "\(version.majorVersion).\(version.minorVersion)"
+    }
+
+    /// True when this macOS version refused a folder handler change. It is
+    /// remembered per version, so an update that lifts the lock is retried.
+    @MainActor
+    static func isFolderHandlerLocked(defaults: UserDefaults? = nil) -> Bool {
+        (defaults ?? AppState.preferences).string(forKey: folderHandlerLockKey) == systemVersion
+    }
+
+    static func isLockedFolderHandlerError(_ error: Error) -> Bool {
+        let error = error as NSError
+        if error.domain == NSOSStatusErrorDomain, error.code == paramErr { return true }
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? Error { return isLockedFolderHandlerError(underlying) }
+        return false
+    }
+
+    @MainActor
+    static var isDefault: Bool { isFileViewer && (isFolderHandler || isFolderHandlerLocked()) }
 
     /// Makes Burrow the folder handler and file viewer. macOS may ask the user
     /// to confirm the handler change; the completion reports the final state.
@@ -36,8 +61,14 @@ enum DefaultFileViewer {
         setFolderHandler(appURL: Bundle.main.bundleURL, completion: completion)
     }
 
+    @MainActor
     static func restoreFinder(completion: @escaping @MainActor (String?) -> Void) {
         setFileViewer(nil)
+        // A locked handler is still Finder: nothing else to restore.
+        if isFolderHandlerLocked(), !isFolderHandler {
+            Task { @MainActor in completion(nil) }
+            return
+        }
         guard let finderURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: finderBundleID) else {
             Task { @MainActor in completion(String(localized: "The Finder application was not found.")) }
             return
@@ -54,7 +85,10 @@ enum DefaultFileViewer {
     private static func setFolderHandler(appURL: URL, completion: @escaping @MainActor (String?) -> Void) {
         NSWorkspace.shared.setDefaultApplication(at: appURL, toOpen: .folder) { error in
             Task { @MainActor in
-                if let error {
+                if let error, isLockedFolderHandlerError(error) {
+                    AppState.preferences.set(systemVersion, forKey: folderHandlerLockKey)
+                    completion(nil)
+                } else if let error {
                     completion(String(localized: "Could not change the default application for folders: \(error.localizedDescription)"))
                 } else {
                     completion(nil)

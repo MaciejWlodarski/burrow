@@ -1028,3 +1028,4 @@
 "Burrow wants to move %lld items that belong to another user to the Trash." = "Burrow chce przenieść do Kosza elementy innego użytkownika (%lld).";
 "Moved to the Trash: %lld items" = "Przeniesiono do Kosza: %lld elem.";
 "Moving to the Trash was cancelled" = "Anulowano przenoszenie do Kosza";
+"“Show in Finder” from other apps opens in Burrow. macOS %@ does not let any app take over opening folders, so those still open in Finder, as do the Desktop and the Dock’s Trash." = "„Pokaż w Finderze” z innych aplikacji otwiera się w Burrow. macOS %@ nie pozwala żadnej aplikacji przejąć otwierania folderów, więc te nadal otwierają się w Finderze, podobnie jak Biurko i Kosz w Docku.";
