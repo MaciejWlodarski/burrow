@@ -67,6 +67,7 @@ func expect(_ condition: @autoclosure () -> Bool, file: StaticString = #filePath
             try CloudFilesRegressionTests.runAll()
             try await VolumeRefreshRegressionTests.runAll()
             try ServerConnectionRegressionTests.runAll()
+            try AdminTrashRegressionTests.runAll()
             print("PASS Connect to Server parses addresses and keeps recent servers without passwords")
             try await SessionRestorationRegressionTests().runAll()
             try await QuickLookOwnershipRegressionTests().runAll()

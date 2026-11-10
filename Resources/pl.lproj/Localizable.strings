@@ -1022,3 +1022,9 @@
 "Stop connecting to %@" = "Przerwij łączenie z %@";
 "Connect saved network drives at launch" = "Łącz zapisane dyski sieciowe przy uruchomieniu";
 "Uses passwords saved in the keychain, without a sign-in dialog. A drive that needs a password or is off stays disconnected; click it in the sidebar to connect." = "Używa haseł zapisanych w pęku kluczy, bez okna logowania. Dysk, który wymaga hasła albo jest wyłączony, zostaje rozłączony; kliknij go w pasku bocznym, aby się połączyć.";
+
+/* Trash with an administrator password */
+"Burrow wants to move “%@” to the Trash. It belongs to another user." = "Burrow chce przenieść „%@” do Kosza. Ten element należy do innego użytkownika.";
+"Burrow wants to move %lld items that belong to another user to the Trash." = "Burrow chce przenieść do Kosza elementy innego użytkownika (%lld).";
+"Moved to the Trash: %lld items" = "Przeniesiono do Kosza: %lld elem.";
+"Moving to the Trash was cancelled" = "Anulowano przenoszenie do Kosza";

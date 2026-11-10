@@ -182,7 +182,7 @@ To try a build without installing it, run `zsh ./build_app.sh` and `open Burrow.
 | ⇧⌘N / ⌥⌘N | New folder / new file from a template |
 | ⌘C / ⌘X / ⌘V | Copy / cut / paste |
 | ⌥⌘C / ⌘D | Copy paths / duplicate selection |
-| ⌘Delete | Move the selection to Trash |
+| ⌘Delete | Move the selection to Trash (items owned by another user, such as apps installed by a package, ask for an administrator password, as in Finder) |
 | ⌘Z / ⇧⌘Z | Undo / redo |
 | ⇧⌘. | Toggle hidden files |
 | ⌃⌘S / ⌘I | Toggle sidebar / inspector |

@@ -1274,6 +1274,7 @@ public final class FileOperationsManager: ObservableObject {
             var touched = Set<String>()
             var failures = 0
             var withoutTrash: [FileItem] = []
+            var needsAdministrator: [FileItem] = []
             var validationError: String?
             var lastProgress = Date.distantPast
             for (index, item) in items.enumerated() {
@@ -1296,6 +1297,10 @@ public final class FileOperationsManager: ObservableObject {
                     // right away; a duplicate cleanup never does.
                     if validating == nil, Self.isOnNetworkVolume(item.url) {
                         withoutTrash.append(item)
+                    } else if validating == nil, AdminTrash.isPermissionDenied(error) {
+                        // Items of another user, such as apps installed by a package:
+                        // Finder asks for an administrator password, and so do we.
+                        needsAdministrator.append(item)
                     } else {
                         failures += 1
                     }
@@ -1309,15 +1314,38 @@ public final class FileOperationsManager: ObservableObject {
             }
             let pairs = trashedPairs, actions = undo, failed = failures, stopped = validationError, dirs = touched
             let immediate = stopped == nil ? withoutTrash : []
+            let elevated = stopped == nil ? needsAdministrator : []
+            let unmovedForStop = stopped == nil ? 0 : needsAdministrator.count
             await MainActor.run {
                 for dir in dirs { FolderSizeCache.shared.invalidate(containing: dir) }
                 if !pairs.isEmpty {
                     self.pushUndo(UndoableFileOperation(label: String(localized: "Trash (\(pairs.count) items)"), kind: .actions(actions)))
                 }
+                var notMovedTotal = failed + unmovedForStop
+                var elevatedCount = 0
+                var elevatedCancelled = false
+                if !elevated.isEmpty {
+                    switch AdminTrash.moveToTrash(elevated.map(\.url)) {
+                    case .moved(let moved, let notMoved):
+                        elevatedCount = moved
+                        notMovedTotal += notMoved
+                    case .cancelled:
+                        elevatedCancelled = true
+                    }
+                    for item in elevated {
+                        self.enqueueDirectoryRefresh(item.parentPath)
+                        FolderSizeCache.shared.invalidate(containing: item.parentPath)
+                    }
+                }
                 if let stopped {
                     self.lastStatusMessage = String(localized: "Deletion stopped: \(stopped) (moved \(pairs.count) items)")
-                } else if failed > 0 {
-                    self.lastStatusMessage = String(localized: "Could not move \(failed) items to the Trash (no permission?)")
+                } else if notMovedTotal > 0 {
+                    self.lastStatusMessage = String(localized: "Could not move \(notMovedTotal) items to the Trash (no permission?)")
+                } else if elevatedCount > 0 {
+                    // ⌘Z cannot put them back: their folder needs the password too.
+                    self.lastStatusMessage = String(localized: "Moved to the Trash: \(pairs.count + elevatedCount) items")
+                } else if elevatedCancelled, pairs.isEmpty {
+                    self.lastStatusMessage = String(localized: "Moving to the Trash was cancelled")
                 } else if !pairs.isEmpty || immediate.isEmpty {
                     self.lastStatusMessage = String(localized: "Moved to the Trash: \(pairs.count) items (⌘Z to restore)")
                 }
