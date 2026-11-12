@@ -170,6 +170,18 @@ public final class FSearchIndex: @unchecked Sendable {
         get { stateLock.lock(); defer { stateLock.unlock() }; return _isIndexing }
         set { stateLock.lock(); defer { stateLock.unlock() }; _isIndexing = newValue }
     }
+    private var _scannedCount = 0
+    public var scannedCount: Int {
+        stateLock.lock(); defer { stateLock.unlock() }; return _scannedCount
+    }
+    public func cancelIndexing() {
+        stateLock.lock(); defer { stateLock.unlock() }
+        indexingGeneration &+= 1
+        pendingReindex = false
+    }
+    private func crawlIsObsolete(_ generation: UInt64) -> Bool {
+        stateLock.lock(); defer { stateLock.unlock() }; return indexingGeneration != generation
+    }
     private var _indexedCount: Int = 0
     public private(set) var indexedCount: Int {
         get { stateLock.lock(); defer { stateLock.unlock() }; return _indexedCount }
@@ -297,6 +309,8 @@ public final class FSearchIndex: @unchecked Sendable {
 
     /// Reserves the next pass before releasing stateLock; no false idle gap.
     private func launchCrawlLocked() {
+        let generation = indexingGeneration
+        _scannedCount = 0
         let privacy = indexPrivacy
         let blockedRoots = privacy.map { p in _configuredRoots.filter { !p.allowsIndexing($0) } } ?? []
         let targetRoots = _configuredRoots.filter { !blockedRoots.contains($0) }
@@ -340,30 +354,41 @@ public final class FSearchIndex: @unchecked Sendable {
             #endif
             let result = BulkCrawler.crawlTreeResult(roots: crawlRoots, skipHeavyDevDirs: skipHeavy,
                 customSkippedDirs: skippedSet, skippedPaths: privateSkips,
-                excludedPaths: BulkCrawler.otherDisks(inside: crawlRoots), maxEntries: 500_000, progress: { count in
+                excludedPaths: BulkCrawler.otherDisks(inside: crawlRoots), maxEntries: 500_000, isCancelled: { self.crawlIsObsolete(generation) }, progress: { count in
+                    self.stateLock.lock()
+                    if self.indexingGeneration == generation { self._scannedCount = count }
+                    self.stateLock.unlock()
                     #if BURROW_TESTING
                     self.crawlProgressHookForTesting?(count)
                     #endif
                 })
             let configurationChanged = configuration != self.cacheConfigurationData()
-            self.installEntries(result.entries, isPartial: !result.isComplete || configurationChanged || !watcherStarted
-                || unmonitoredSupplementalScope || !blockedRoots.isEmpty)
-            self.loadedFromMMapCache = false
-            self.trigramLock.lock()
-            self.trigramBloomCache.removeAll(keepingCapacity: true)
-            self.trigramLock.unlock()
             let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000
-            self.lastCrawlDurationMs = ms
-            // Session-only supplemental scopes are not part of the cache's
-            // configured-root signature. Persist only the configured subset.
-            if persist && result.isComplete && !configurationChanged {
-                let configuredEntries = result.entries.filter { entry in
-                    normalizedConfiguredRoots.contains { Self.isWithin(entry.fullPath, root: $0) }
+            // Publication and cancellation share the same authority. A cancel
+            // arriving after traversal returns must still reject the old result.
+            self.stateLock.lock()
+            let publish = !result.wasCancelled && self.indexingGeneration == generation
+            if publish {
+                self.installEntries(result.entries, isPartial: !result.isComplete || configurationChanged || !watcherStarted
+                    || unmonitoredSupplementalScope || !blockedRoots.isEmpty)
+                self.loadedFromMMapCache = false
+                self.lastCrawlDurationMs = ms
+            }
+            self.stateLock.unlock()
+            if publish {
+                self.trigramLock.lock()
+                self.trigramBloomCache.removeAll(keepingCapacity: true)
+                self.trigramLock.unlock()
+                // Supplemental scopes are session-only, outside the cache signature.
+                if persist && result.isComplete && !configurationChanged {
+                    let configuredEntries = result.entries.filter { entry in
+                        normalizedConfiguredRoots.contains { Self.isWithin(entry.fullPath, root: $0) }
+                    }
+                    self.saveIndexToDiskMMapCache(configuredEntries, configuration: configuration)
                 }
-                self.saveIndexToDiskMMapCache(configuredEntries, configuration: configuration)
             }
             self.stateLock.lock()
-            let repeatCrawl = self.pendingReindex || configurationChanged
+            let repeatCrawl = self.pendingReindex || (!result.wasCancelled && configurationChanged)
             self.pendingReindex = false
             self.updateLock.unlock()
             if repeatCrawl {
@@ -1394,6 +1419,47 @@ public final class FSearchIndex: @unchecked Sendable {
 
     // MARK: - macOS FSEvents Real-Time Differential Index Watcher
 
+    private var eventRootAliases: [(path: String, canonical: String)] = []
+
+    static func isContentChange(_ flags: FSEventStreamEventFlags) -> Bool {
+        let changes = FSEventStreamEventFlags(kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemRemoved |
+            kFSEventStreamEventFlagItemRenamed | kFSEventStreamEventFlagItemModified |
+            kFSEventStreamEventFlagItemInodeMetaMod | kFSEventStreamEventFlagItemFinderInfoMod |
+            kFSEventStreamEventFlagItemChangeOwner | kFSEventStreamEventFlagItemXattrMod)
+        return flags & changes != 0
+    }
+
+    static func isExcludedEventPath(_ path: String, roots: [String], skippedNames: Set<String>,
+                                    includeLeaf: Bool = true, home: String = NSHomeDirectory()) -> Bool {
+        // Explicit roots remain eligible even if their own name is usually skipped.
+        guard let root = roots.filter({ isWithin(path, root: $0) }).max(by: { $0.count < $1.count }) else { return true }
+        let relative = path.dropFirst(root.count).split(separator: "/")
+        let components = includeLeaf ? relative[...] : relative.dropLast()
+        var parent = root
+        for component in components {
+            if skippedNames.contains(String(component)) || (component == "Library" && parent == home) { return true }
+            parent = (parent as NSString).appendingPathComponent(String(component))
+        }
+        return false
+    }
+
+    /// Excluded directories still have an entry in their parent's listing.
+    /// Their own create/remove/rename refreshes that listing, never their tree.
+    static func eventRefreshDirectories(path: String, isDirectory: Bool, roots: [String],
+                                        skipHeavy: Bool, skippedNames: Set<String>,
+                                        home: String = NSHomeDirectory()) -> Set<String> {
+        if skipHeavy && isExcludedEventPath(path, roots: roots, skippedNames: skippedNames, includeLeaf: false, home: home) {
+            return []
+        }
+        let parent = (path as NSString).deletingLastPathComponent
+        var directories = Set<String>()
+        if roots.contains(where: { isWithin(parent, root: $0) }) { directories.insert(parent) }
+        if isDirectory && (!skipHeavy || !isExcludedEventPath(path, roots: roots, skippedNames: skippedNames, home: home)) {
+            directories.insert(path)
+        }
+        return directories
+    }
+
     private func startFSEvents(watching paths: [String]) -> Bool {
         stopFSEvents()
         guard enableMonitoring, !paths.isEmpty else { return true }
@@ -1407,48 +1473,48 @@ public final class FSearchIndex: @unchecked Sendable {
             copyDescription: nil
         )
 
+        // Resolve roots once, not once per event in a burst of thousands.
+        let rootAliases = paths.map { root in
+            let url = URL(fileURLWithPath: root).standardizedFileURL
+            return (path: url.path, canonical: url.resolvingSymlinksInPath().path)
+        }.sorted { $0.canonical.count > $1.canonical.count }
+        // The C callback cannot capture these; store alongside its stream.
+        stateLock.lock()
+        eventRootAliases = rootAliases
+        stateLock.unlock()
         let callback: FSEventStreamCallback = { (_, clientCallBackInfo, numEvents, eventPaths, eventFlags, _) in
             guard let info = clientCallBackInfo else { return }
             let engine = Unmanaged<FSearchIndex>.fromOpaque(info).takeUnretainedValue()
             guard let pathsArray = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] else { return }
+            engine.stateLock.lock()
+            let aliases = engine.eventRootAliases
+            let roots = engine._configuredRoots.map { URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL.path }
+            let skipHeavy = engine._skipHeavyDevDirs
+            let skipped = engine._skippedDirectoryNames
+            engine.stateLock.unlock()
             var modifiedDirs = Set<String>()
             var requiresRebuild = false
             let rescanFlags = FSEventStreamEventFlags(kFSEventStreamEventFlagMustScanSubDirs |
                 kFSEventStreamEventFlagUserDropped | kFSEventStreamEventFlagKernelDropped |
                 kFSEventStreamEventFlagRootChanged | kFSEventStreamEventFlagEventIdsWrapped)
             for i in 0..<min(numEvents, pathsArray.count) {
+                let flags = eventFlags[i]
+                if flags & rescanFlags != 0 { requiresRebuild = true }
+                guard FSearchIndex.isContentChange(flags) || flags & rescanFlags != 0 else { continue }
                 var path = URL(fileURLWithPath: pathsArray[i]).standardizedFileURL.path
-                for root in engine.configuredRoots.sorted(by: { $0.count > $1.count }) {
-                    let url = URL(fileURLWithPath: root).standardizedFileURL
-                    let canonical = url.resolvingSymlinksInPath().path
-                    if FSearchIndex.isWithin(path, root: canonical) {
-                        path = url.path + String(path.dropFirst(canonical.count))
-                        break
-                    }
+                for alias in aliases where FSearchIndex.isWithin(path, root: alias.canonical) {
+                    path = alias.path + String(path.dropFirst(alias.canonical.count))
+                    break
                 }
-                if eventFlags[i] & rescanFlags != 0 { requiresRebuild = true }
-                // A directory event changes its parent's listing as well. This is
-                // essential for empty-directory creation and subtree renames.
-                let parent = (path as NSString).deletingLastPathComponent
-                if !parent.isEmpty && engine.configuredRoots.contains(where: {
-                    FSearchIndex.isWithin(parent, root: URL(fileURLWithPath: $0).standardizedFileURL.path)
-                }) { modifiedDirs.insert(parent) }
-                var isDirectory: ObjCBool = false
-                if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
-                    modifiedDirs.insert(path)
-                } else if eventFlags[i] & FSEventStreamEventFlags(kFSEventStreamEventFlagItemIsDir) != 0 {
-                    modifiedDirs.insert(path)
-                }
+                modifiedDirs.formUnion(FSearchIndex.eventRefreshDirectories(path: path,
+                    isDirectory: flags & FSEventStreamEventFlags(kFSEventStreamEventFlagItemIsDir) != 0,
+                    roots: roots, skipHeavy: skipHeavy, skippedNames: skipped))
             }
-            // Queue reconciliation behind the initial/full snapshot without
-            // blocking the event delivery queue. Repeated ancestors coalesce.
             for directory in modifiedDirs.sorted(by: { $0.count < $1.count }) {
                 engine.enqueueDirectoryRefresh(directory)
             }
             if !modifiedDirs.isEmpty { engine.onDirectoryChangedOnDisk?(modifiedDirs) }
-            if requiresRebuild {
-                engine.enqueueIndexRebuild()
-            }
+            if requiresRebuild { engine.enqueueIndexRebuild() }
         }
 
         let flags = FSEventStreamCreateFlags(

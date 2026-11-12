@@ -162,6 +162,7 @@ struct FolderSizeLifecycleRegressionTests {
         try await testNormalizedAliasesCoalesceAcrossPublicAPI()
         try await testParentComponentsRemainDistinctCacheKeys()
         try testNormalizedKeyPreservesSymlinkParentSpelling()
+        try await testFreshSizeSurvivesRowReappearance()
         try await testReacquiredCachedDemandRevalidatesWithoutErasingValue()
         try await testRevalidationRetainsPhysicalSlotsAndRejectsOldResult()
         try testPrivacyRulesForProtectedFolders()
@@ -171,10 +172,34 @@ struct FolderSizeLifecycleRegressionTests {
         print("PASS 25 folder-size lifecycle checks: ownership, bounded admission, cancellation, invalidation, LRU, demand and lexical keys")
     }
 
-    private func testReacquiredCachedDemandRevalidatesWithoutErasingValue() async throws {
+    private func testFreshSizeSurvivesRowReappearance() async throws {
         let gate = FolderSizeCalculatorGate()
         defer { gate.releaseAll() }
         let cache = FolderSizeCache(maxWorkers: 1, maxDemand: 4, maxResults: 4,
+            cancellableCalculator: { gate.calculate($0, isCancelled: $1) })
+        let owner = UUID(), path = "/scroll/reappearance"
+        defer { cache.release(owner: owner) }
+        cache.updateDemand(owner: owner, paths: [path])
+        try await waitFor("first visible row size") { gate.startedPaths.count == 1 }
+        gate.complete(0, bytes: 42)
+        try await waitFor("first size complete") { cache.size(for: path) == 42 }
+        for _ in 0..<100 {
+            cache.release(owner: owner)
+            cache.updateDemand(owner: owner, paths: [path], priority: .visible)
+            try expect(cache.size(for: path) == 42 && cache.debugSnapshot.running == 0 && cache.debugSnapshot.queued == 0)
+        }
+        // Real changes still invalidate fresh cached values immediately.
+        cache.invalidate(containing: path + "/changed.txt")
+        try expect(cache.result(for: path) == nil)
+        try await waitFor("changed folder is measured again") { gate.startedPaths.count == 2 }
+        gate.complete(1, bytes: 99)
+        try await waitFor("changed size published") { cache.size(for: path) == 99 }
+    }
+
+    private func testReacquiredCachedDemandRevalidatesWithoutErasingValue() async throws {
+        let gate = FolderSizeCalculatorGate()
+        defer { gate.releaseAll() }
+        let cache = FolderSizeCache(maxWorkers: 1, maxDemand: 4, maxResults: 4, cachedResultLifetime: 0,
             cancellableCalculator: { gate.calculate($0, isCancelled: $1) })
         let owner = UUID(), replacement = UUID(), path = "/revisit/project"
         defer { cache.release(owner: owner); cache.release(owner: replacement) }
@@ -439,7 +464,7 @@ struct FolderSizeLifecycleRegressionTests {
     private func testCacheHitAtAdmissionCapDoesNotEraseResult() async throws {
         let gate = FolderSizeCalculatorGate()
         defer { gate.releaseAll() }
-        let cache = FolderSizeCache(maxWorkers: 1, maxDemand: 2, maxResults: 3,
+        let cache = FolderSizeCache(maxWorkers: 1, maxDemand: 2, maxResults: 3, cachedResultLifetime: 0,
             cancellableCalculator: { gate.calculate($0, isCancelled: $1) })
         let initialOwner = UUID(), occupyingOwner = UUID(), retryOwner = UUID()
         defer {
@@ -557,7 +582,7 @@ struct FolderSizeLifecycleRegressionTests {
     private func testDeniedBackgroundCacheAttachmentPreservesDisplay() async throws {
         let gate = FolderSizeCalculatorGate()
         defer { gate.releaseAll() }
-        let cache = FolderSizeCache(maxWorkers: 1, maxDemand: 8, maxResults: 8,
+        let cache = FolderSizeCache(maxWorkers: 1, maxDemand: 8, maxResults: 8, cachedResultLifetime: 0,
             cancellableCalculator: { gate.calculate($0, isCancelled: $1) })
         let initialOwner = UUID(), backgroundOwner = UUID(), retryOwner = UUID()
         defer {
@@ -622,7 +647,7 @@ struct FolderSizeLifecycleRegressionTests {
     private func testIdleLRUEvictionPreservesOwnedResults() async throws {
         let gate = FolderSizeCalculatorGate()
         defer { gate.releaseAll() }
-        let cache = FolderSizeCache(maxWorkers: 1, maxDemand: 2, maxResults: 3,
+        let cache = FolderSizeCache(maxWorkers: 1, maxDemand: 2, maxResults: 3, cachedResultLifetime: 0,
             cancellableCalculator: { gate.calculate($0, isCancelled: $1) })
         let pinnedOwner = UUID(), temporaryOwner = UUID()
         defer { cache.release(owner: pinnedOwner); cache.release(owner: temporaryOwner) }

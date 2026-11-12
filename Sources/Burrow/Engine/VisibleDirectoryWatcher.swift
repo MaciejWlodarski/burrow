@@ -53,11 +53,16 @@ final class VisibleDirectoryWatcher: @unchecked Sendable {
         guard !paths.isEmpty else { return }
         var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
                                            retain: nil, release: nil, copyDescription: nil)
-        let callback: FSEventStreamCallback = { _, info, count, eventPaths, _, _ in
+        let callback: FSEventStreamCallback = { _, info, count, eventPaths, flags, _ in
             guard let info else { return }
             let watcher = Unmanaged<VisibleDirectoryWatcher>.fromOpaque(info).takeUnretainedValue()
             guard let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] else { return }
-            watcher.handle(Array(paths.prefix(count)))
+            let rescan = FSEventStreamEventFlags(kFSEventStreamEventFlagMustScanSubDirs |
+                kFSEventStreamEventFlagRootChanged | kFSEventStreamEventFlagUserDropped | kFSEventStreamEventFlagKernelDropped)
+            let changed = (0..<min(count, paths.count)).filter {
+                FSearchIndex.isContentChange(flags[$0]) || flags[$0] & rescan != 0
+            }.map { paths[$0] }
+            watcher.handle(changed)
         }
         let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes |
             kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagWatchRoot)

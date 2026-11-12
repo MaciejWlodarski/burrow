@@ -12,7 +12,7 @@ plutil -replace CFBundleIdentifier -string com.burrow.preview "${PREVIEW_APP}/Co
 rm -f -- "${PREVIEW_OUTPUT}/verification.txt"
 # Keep the real App/Scene and command definitions; the harness supplies main().
 sed '/^@main$/d' Sources/Burrow/BurrowApp.swift > "${PREVIEW_TMP_DIR}/App.swift"
-xcrun swiftc -parse-as-library \
+xcrun swiftc -parse-as-library -D BURROW_PREVIEW \
     -module-cache-path "${PWD}/.build/preview-module-cache" \
     -target "$(uname -m)-apple-macosx15.0" \
     -sdk "$(xcrun --sdk macosx --show-sdk-path)" \

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 public struct MainWindowView: View {
     @ObservedObject var appState = AppState.shared
@@ -298,6 +299,9 @@ private struct FinderTabView: View {
     @ObservedObject var appState: AppState
     let side: PaneSide
     @ViewState private var isHovered = false
+    @ViewState private var isDropTarget = false
+    @ViewState private var hoverTask: Task<Void, Never>?
+    @StateObject private var dropLoad = FileDropLoadController()
 
     private var isSelected: Bool { tab.id == appState.activeTabID(on: side) }
     private var isOnlyTab: Bool { appState.tabs(on: side).count == 1 }
@@ -344,6 +348,38 @@ private struct FinderTabView: View {
                     in: RoundedRectangle(cornerRadius: 6))
         .padding(.vertical, 4)
         .onHover { isHovered = $0 }
+        .overlay {
+            RoundedRectangle(cornerRadius: 6).stroke(isDropTarget ? Color.accentColor : .clear, lineWidth: 2)
+                .allowsHitTesting(false)
+        }
+        .onDrop(of: [.fileURL], delegate: FinderTabDropDelegate(
+            entered: {
+                isDropTarget = true
+                hoverTask?.cancel()
+                hoverTask = Task { @MainActor in
+                    do { try await Task.sleep(for: .milliseconds(450)) } catch { return }
+                    guard appState.tabs(on: side).contains(where: { $0.id == tab.id }) else { return }
+                    appState.selectTab(tab.id)
+                }
+            }, exited: { cancelHover() }, dropped: { providers in
+                cancelHover()
+                guard appState.tabs(on: side).contains(where: { $0.id == tab.id }),
+                      FileDropPaneContext.accepts(providers, in: tab) else { return false }
+                appState.selectTab(tab.id)
+                let context = FileDropPaneContext(pane: tab)
+                let destination = tab.currentURL
+                let copy = NSEvent.modifierFlags.contains(.option)
+                dropLoad.begin(providers: providers, destination: destination) { urls in
+                    guard context.allowsCommit(in: appState, side: side) else { return }
+                    FileOperationsManager.shared.handleDropURLs(urls, into: destination, copyInsteadOfMove: copy)
+                }
+                return true
+            }))
+        .onDisappear { cancelHover(); dropLoad.cancel() }
+        .onChange(of: tab.currentURL) { _, _ in dropLoad.cancel() }
+        .popover(isPresented: Binding(get: { dropLoad.diagnostic != nil }, set: { if !$0 { dropLoad.cancel() } })) {
+            FileDropLoadingStatusView(controller: dropLoad).frame(width: 340).padding(8)
+        }
         .help(tab.currentURL.path)
         .contextMenu {
             Button("Duplicate Tab") { appState.addNewTab(at: tab.currentURL, side: side) }
@@ -354,6 +390,12 @@ private struct FinderTabView: View {
                 .disabled(appState.recentlyClosedTabs.isEmpty)
         }
     }
+    private func cancelHover() {
+        hoverTask?.cancel()
+        hoverTask = nil
+        isDropTarget = false
+    }
+
 }
 
 private struct FinderStatusBar: View {
@@ -434,7 +476,12 @@ private struct FinderStatusBar: View {
             }
             if showsActivity && appState.isIndexing {
                 ProgressView().controlSize(.small).accessibilityLabel("Indexing files")
-                Text("Indexing…")
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    Text("Indexing…") + Text(" \(FSearchIndex.shared.scannedCount.formatted())")
+                }
+                Button { FSearchIndex.shared.cancelIndexing() } label: {
+                    Image(systemName: "xmark.circle").accessibilityLabel("Cancel")
+                }.buttonStyle(.plain)
             } else if let availableBytes {
                 // Same wording as the sidebar's disk row.
                 Text("\(FormatHelpers.formatBytes(availableBytes)) free").monospacedDigit()
@@ -460,3 +507,13 @@ extension EnvironmentValues {
     }
 }
 #endif
+
+private struct FinderTabDropDelegate: DropDelegate {
+    let entered: () -> Void
+    let exited: () -> Void
+    let dropped: ([NSItemProvider]) -> Bool
+    func validateDrop(info: DropInfo) -> Bool { info.hasItemsConforming(to: [.fileURL]) }
+    func dropEntered(info: DropInfo) { entered() }
+    func dropExited(info: DropInfo) { exited() }
+    func performDrop(info: DropInfo) -> Bool { dropped(info.itemProviders(for: [.fileURL])) }
+}

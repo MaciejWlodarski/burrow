@@ -190,13 +190,7 @@ struct BurrowApp: App {
                 .keyboardShortcut(.upArrow, modifiers: [.command])
 
                 Button("Open Selected Item") {
-                    if let item = appState.activeTab.primarySelectedItem {
-                        if item.isDirectory && item.fileExtension.lowercased() != "app" {
-                            appState.activeTab.navigate(to: item.url)
-                        } else {
-                            NSWorkspace.shared.open(item.url)
-                        }
-                    }
+                    appState.activeTab.openSelectedItems()
                 }
                 .keyboardShortcut(.downArrow, modifiers: [.command])
                 .disabled(appState.activeTab.selectedItems.isEmpty)

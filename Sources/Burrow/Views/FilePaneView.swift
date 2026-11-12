@@ -60,9 +60,7 @@ public struct FilePaneView: View {
     @Environment(\.controlActiveState) private var controlActiveState
     @ObservedObject var appState: AppState
     @ObservedObject var pane: PaneTabState
-    @ObservedObject var folderSizes = FolderSizeCache.shared
     @ObservedObject var fileOps = FileOperationsManager.shared
-    @ObservedObject var iconCache = FileIconCache.shared
     @StateObject private var dropLoad = FileDropLoadController()
     public let paneSide: PaneSide
     public let isFocusedPane: Bool
@@ -71,6 +69,7 @@ public struct FilePaneView: View {
     @ViewState private var listColumns = FileListColumns(width: 900)
     @ViewState private var dropTargetFolderPath: String? = nil
     @ViewState private var isPaneDropTargeted: Bool = false
+    @ViewState private var selectionClickTask: Task<Void, Never>?
 
     // Rubber-band / Marquee selection state in Icon view
     @ViewState private var marqueeStart: CGPoint? = nil
@@ -186,7 +185,7 @@ public struct FilePaneView: View {
                     case .list:
                         listBrowserView
                     case .icons:
-                        iconGridBrowserView
+                        IconGridUpdates { iconGridBrowserView }
                     case .columns:
                         if !hasSearchQuery {
                             millerColumnsBrowserView
@@ -229,15 +228,13 @@ public struct FilePaneView: View {
                 if !pane.isSessionPaused { paneBackgroundContextMenu }
             }
         }
-        .onDisappear { dropLoad.cancel() }
+        .onDisappear { dropLoad.cancel(); selectionClickTask?.cancel() }
         .onChange(of: pane.id) { _, _ in dropLoad.cancel() }
         .onChange(of: pane.currentURL.path) { _, _ in dropLoad.cancel() }
         .coordinateSpace(name: "FilePaneSpace")
         .background(NativeFileDragSource(pane: pane, frames: dragFrames, isActive: isFocusedPane, activate: activatePane))
         .onPreferenceChange(FileDragFramesKey.self) { dragFrames.frames = $0 }
-        .onChange(of: folderSizes.results) { _, _ in
-            if pane.sortField == .size { pane.applySortChange() }
-        }
+        .background(FolderSizeSortObserver(pane: pane))
         .simultaneousGesture(TapGesture().onEnded { activatePane() })
         .sheet(isPresented: Binding(
             get: { pane.renamingItemPath != nil },
@@ -488,14 +485,16 @@ public struct FilePaneView: View {
 
                     ScrollViewReader { proxy in
                         ScrollView {
-                            LazyVStack(spacing: 1) {
-                                ForEach(Array(pane.displayedItems.enumerated()), id: \.element.id) { index, item in
-                                    fileListRow(item: item, index: index, showDate: showDate, kindWidth: kindWidth,
+                            LazyVStack(spacing: 0) {
+                                ForEach(IndexedFileRows(items: pane.displayedItems)) { row in
+                                    fileListRow(item: row.item, index: row.index, showDate: showDate, kindWidth: kindWidth,
                                                 showsDisclosure: showsDisclosure)
-                                        .id(item.path)
                                 }
                             }
-                            .padding(5)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(PaneScrollKeeper(history: pane.scrollHistory, context: pane.scrollContext,
+                                contentIsEmpty: pane.displayedItems.isEmpty && !pane.isSearching))
                         }
                         .onChange(of: pane.selectionCursorPath) { _, path in
                             if let path { proxy.scrollTo(path) }
@@ -580,16 +579,14 @@ public struct FilePaneView: View {
                 }
 
                 // Two-line search rows get a larger icon to match their height.
-                Image(nsImage: FileIconCache.shared.icon(for: item))
-                    .resizable()
-                    .interpolation(.high)
+                FileListIcon(item: item)
                     // System folder art fills its box more than document art; 2 pt less
                     // keeps the two-line results optically even.
                     // A 32 pt box across both lines anchors the row; folder art fills its box
                     // more than document art, so it is drawn 4 pt smaller.
-                    .frame(width: showSubpath ? (item.isDirectory ? 26 : 32) : 20,
-                           height: showSubpath ? (item.isDirectory ? 26 : 32) : 20)
-                    .frame(width: showSubpath ? 32 : 20)
+                    .frame(width: showSubpath ? (item.isDirectory ? 26 : 32) : 16,
+                           height: showSubpath ? (item.isDirectory ? 26 : 32) : 16)
+                    .frame(width: showSubpath ? 32 : 16)
                     .opacity(item.isHidden || isCutItem ? 0.5 : 1.0)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -687,7 +684,8 @@ public struct FilePaneView: View {
         }
         .padding(.leading, 10)
         .padding(.trailing, 14)
-        .padding(.vertical, showSubpath || item.grepMatch != nil ? 6 : 5)
+        .padding(.vertical, showSubpath || item.grepMatch != nil ? 6 : 2)
+        .frame(minHeight: showSubpath || item.grepMatch != nil ? nil : 20)
         .opacity(isCutItem ? 0.5 : 1.0)
         .background(
             isSelected ? selectionBackgroundColor : (isFolderDropTarget ? Color.accentColor.opacity(0.18)
@@ -700,6 +698,9 @@ public struct FilePaneView: View {
         )
         .contentShape(Rectangle())
         .background {
+            #if BURROW_PREVIEW
+            FileRowPreviewMarker(path: item.path)
+            #endif
             GeometryReader { geometry in
                 // Rows run to the pane's edge, so only the vertical band matters. Leaving
                 // the width out keeps the frames unchanged while the window resizes.
@@ -763,7 +764,7 @@ public struct FilePaneView: View {
 
                         VStack(spacing: 6) {
                             ZStack(alignment: .bottomTrailing) {
-                                Image(nsImage: iconCache.icon(for: item, preferThumbnail: true))
+                                Image(nsImage: FileIconCache.shared.icon(for: item, preferThumbnail: true))
                                     .resizable()
                                     .scaledToFit()
                                     .frame(width: iconDim, height: iconDim)
@@ -870,6 +871,8 @@ public struct FilePaneView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .background(PaneScrollKeeper(history: pane.scrollHistory, context: pane.scrollContext,
+                                contentIsEmpty: pane.displayedItems.isEmpty && !pane.isSearching))
             .coordinateSpace(name: "IconGridSpace")
             .onPreferenceChange(IconFramePreferenceKey.self) { frames in
                 iconFrames.frames = frames
@@ -1080,19 +1083,29 @@ public struct FilePaneView: View {
 
     private func handleSelectionClick(item: FileItem) {
         let flags = NSEvent.modifierFlags
+        selectionClickTask?.cancel()
+        if (NSApp.currentEvent?.clickCount ?? 1) > 1, pane.selectedPaths.contains(item.path) { return }
+        if pane.selectedPaths.count > 1, pane.selectedPaths.contains(item.path),
+           flags.intersection([.command, .shift]).isEmpty {
+            let revision = pane.navigationRevision
+            let selection = pane.selectedPaths
+            selectionClickTask = Task { @MainActor in
+                do { try await Task.sleep(for: .seconds(NSEvent.doubleClickInterval)) } catch { return }
+                guard pane.navigationRevision == revision, pane.selectedPaths == selection else { return }
+                FinderPaneActionRouting.performIfCurrent(appState: appState, pane: pane, paneSide: paneSide) { pane.select(item) }
+            }
+            return
+        }
         performPaneAction {
             pane.select(item, extending: flags.contains(.shift), toggling: flags.contains(.command))
         }
     }
 
     private func openOrEnterItem(_ item: FileItem) {
+        selectionClickTask?.cancel()
         guard !pane.actionItems(for: item).isEmpty else { return }
         performPaneAction {
-            if item.isDirectory && item.fileExtension.lowercased() != "app" {
-                pane.navigate(to: item.url)
-            } else {
-                pane.openFile(item.url)
-            }
+            pane.openItems(pane.actionItems(for: item))
         }
     }
 
@@ -1511,3 +1524,53 @@ private struct FolderSizeLabel: View {
 
     private func request() { cache.updateDemand(owner: owner, paths: [path], priority: .visible) }
 }
+
+private struct FileListIcon: View {
+    let item: FileItem
+    @ObservedObject private var cache = FileIconCache.shared
+    var body: some View {
+        Image(nsImage: cache.icon(for: item, preferThumbnail: false))
+            .resizable().interpolation(.high)
+    }
+}
+
+private struct FolderSizeSortObserver: View {
+    @ObservedObject var pane: PaneTabState
+    @ObservedObject private var cache = FolderSizeCache.shared
+    var body: some View {
+        Color.clear.onChange(of: cache.results) { _, _ in
+            if pane.sortField == .size { pane.applySortChange() }
+        }
+    }
+}
+
+private struct IconGridUpdates<Content: View>: View {
+    @ObservedObject private var cache = FileIconCache.shared
+    @ViewBuilder var content: () -> Content
+    var body: some View { let _ = cache.thumbnailCapacityRevision; content() }
+}
+
+/// A random-access projection keeps ForEach's input cheap even for large folders.
+struct IndexedFileRows: RandomAccessCollection {
+    struct Element: Identifiable {
+        let index: Int
+        let item: FileItem
+        var id: String { item.path }
+    }
+    let items: [FileItem]
+    var startIndex: Int { items.startIndex }
+    var endIndex: Int { items.endIndex }
+    subscript(index: Int) -> Element { Element(index: index, item: items[index]) }
+}
+
+#if BURROW_PREVIEW
+final class FileRowPreviewMarkerView: NSView {
+    var path = ""
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+private struct FileRowPreviewMarker: NSViewRepresentable {
+    let path: String
+    func makeNSView(context: Context) -> FileRowPreviewMarkerView { FileRowPreviewMarkerView() }
+    func updateNSView(_ view: FileRowPreviewMarkerView, context: Context) { view.path = path }
+}
+#endif

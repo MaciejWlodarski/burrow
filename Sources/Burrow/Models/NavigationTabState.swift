@@ -194,6 +194,11 @@ public final class PaneTabState: ObservableObject, Identifiable {
         return queue
     }()
 
+    // Scroll geometry is bookkeeping, not observable UI state. Keep it per tab
+    // and location without invalidating every row on each wheel event.
+    let scrollHistory = PaneScrollHistory()
+    var scrollContext: String { "\(currentURL.path)\u{0}\(viewMode.rawValue)\u{0}\(searchScope.rawValue)\u{0}\(searchQuery)" }
+
     public var title: String {
         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return searchQuery
@@ -369,6 +374,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
         self.initialLocationEstablished = !loadImmediately
         self.currentURL = initialURL.standardizedFileURL
         self.columnTrailURLs = [initialURL.standardizedFileURL]
+        scrollHistory.contextProvider = { [weak self] in self?.scrollContext }
         applyFolderSort()
         folderSortSubscription = FolderSortPreferences.shared.objectWillChange.sink { [weak self] _ in
             // objectWillChange precedes the new values; read them on the next turn.
@@ -433,6 +439,20 @@ public final class PaneTabState: ObservableObject, Identifiable {
     func retainInitialLocation() { initialLocationEstablished = true }
 
     func openFile(_ url: URL) { fileOpener(url) }
+
+    func openItems(_ items: [FileItem]) {
+        let visible = Set(selectableItems.map(\.path))
+        let targets = items.filter { visible.contains($0.path) }
+        if targets.count == 1, let item = targets.first,
+           item.isDirectory && item.fileExtension.lowercased() != "app" {
+            navigate(to: item.url)
+        } else {
+            // Capture the batch before any external application gains focus.
+            for item in targets { openFile(item.url) }
+        }
+    }
+
+    func openSelectedItems() { openItems(selectedItems) }
 
     /// Only the first presentation may synchronize a pristine, fresh right pane.
     /// Session provenance never controls subsequent visibility changes.
@@ -550,6 +570,7 @@ public final class PaneTabState: ObservableObject, Identifiable {
             historyForward.removeLast()
             historyBack.append(currentURL)
         }
+        scrollHistory.recordExpandedFolders(expandedFolderPaths, for: scrollContext)
         clearNavigationFailure()
         initialLocationEstablished = true
         sessionAvailability = .ready
@@ -571,6 +592,8 @@ public final class PaneTabState: ObservableObject, Identifiable {
             searchQuery = ""
             activeFilterPills = []
         }
+        // Rebuild the remembered outline before the view restores pixel geometry.
+        if viewMode == .list { expandedFolderPaths = scrollHistory.expandedFolders(for: scrollContext) }
         // Install exactly the validated snapshot, never a second filesystem read.
         installDirectoryEntries(entries)
         FolderSizeCache.shared.noteListed(standardized.path)
@@ -702,11 +725,17 @@ public final class PaneTabState: ObservableObject, Identifiable {
                 guard let self, self.currentURL.path == targetPath,
                       self.directoryLoadGeneration == loadGeneration else { return }
                 FSearchIndex.shared.recordGitStatuses(snapshot.statuses, repositoryRoot: snapshot.repositoryRoot)
-                for idx in self.directoryItems.indices {
-                    self.directoryItems[idx].gitStatus = snapshot.statuses[self.directoryItems[idx].path]
+                var items = self.directoryItems
+                var changed = false
+                for idx in items.indices {
+                    let status = snapshot.statuses[items[idx].path]
+                    if items[idx].gitStatus != status { items[idx].gitStatus = status; changed = true }
                 }
-                if self.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    self.rebuildDisplayedItemsWithExpandedTree()
+                if changed {
+                    self.directoryItems = items
+                    if self.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        self.rebuildDisplayedItemsWithExpandedTree()
+                    }
                 }
             }
         }
@@ -838,27 +867,49 @@ public final class PaneTabState: ObservableObject, Identifiable {
         let generation = metadataGeneration
         let operation = BlockOperation()
         operation.addExecutionBlock { [weak self, weak operation] in
+            var batch: [String: [FinderTagColor]] = [:]
+            var lastPublish = ContinuousClock.now
             for item in pending {
                 guard let operation, !operation.isCancelled, self != nil else { return }
-                let tags = FinderTagColor.readTags(for: item.url)
+                batch[item.path] = FinderTagColor.readTags(for: item.url)
                 if operation.isCancelled { return }
-                Task { @MainActor [weak self] in
-                    guard let self, self.metadataGeneration == generation else { return }
-                    self.tagCache[item.path] = tags
-                    self.pendingTagPaths.remove(item.path)
-                    if let index = self.directoryItems.firstIndex(where: { $0.path == item.path }) {
-                        self.directoryItems[index].tags = tags
-                    }
-                    if let index = self.displayedItems.firstIndex(where: { $0.path == item.path }) {
-                        self.displayedItems[index].tags = tags
-                    }
-                    self.tagMetadataRevision &+= 1
+                if batch.count >= 256 || lastPublish.duration(to: .now) >= .milliseconds(100) {
+                    let completed = batch
+                    batch.removeAll(keepingCapacity: true)
+                    lastPublish = .now
+                    Task { @MainActor [weak self] in self?.installTagMetadata(completed, generation: generation) }
                 }
             }
+            let completed = batch
+            Task { @MainActor [weak self] in self?.installTagMetadata(completed, generation: generation) }
         }
         tagOperations.removeAll { $0.isFinished || $0.isCancelled }
         tagOperations.append(operation)
         Self.metadataQueue.addOperation(operation)
+    }
+
+    private func installTagMetadata(_ batch: [String: [FinderTagColor]], generation: UInt64) {
+        guard metadataGeneration == generation, !batch.isEmpty else { return }
+        let changedTags = batch.filter { (tagCache[$0.key] ?? []) != $0.value }
+        tagCache.merge(batch, uniquingKeysWith: { _, new in new })
+        pendingTagPaths.subtract(batch.keys)
+        guard !changedTags.isEmpty else { return }
+        // Most files have no tags: cache that negative result without publishing
+        // identical arrays. Tagged rows are installed once per batch, in O(n).
+        func updated(_ items: [FileItem]) -> [FileItem]? {
+            var copy = items
+            var changed = false
+            for index in copy.indices {
+                if let tags = changedTags[copy[index].path], tags != copy[index].tags {
+                    copy[index].tags = tags
+                    changed = true
+                }
+            }
+            return changed ? copy : nil
+        }
+        if let items = updated(directoryItems) { directoryItems = items }
+        if let items = updated(displayedItems) { displayedItems = items }
+        tagMetadataRevision &+= 1
     }
 
     public var visibleDirectoryPaths: Set<String> {

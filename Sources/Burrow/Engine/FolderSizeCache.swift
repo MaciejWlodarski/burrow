@@ -48,6 +48,8 @@ public final class FolderSizeCache: ObservableObject {
     private var pending: [String] = []
     private var current: [String: FolderSizeCancellation] = [:]
     private var running: [UUID: (path: String, token: FolderSizeCancellation)] = [:]
+    private var completedAt: [String: TimeInterval] = [:]
+    private let cachedResultLifetime: TimeInterval
     private var recency: [String: UInt64] = [:]
     private var tick: UInt64 = 0
     private var oneShotOwners: [String: UUID] = [:]
@@ -60,9 +62,11 @@ public final class FolderSizeCache: ObservableObject {
     var onPrivacyAccessChanged: (@MainActor () -> Void)?
 
     init(maxWorkers: Int = 2, maxDemand: Int = 256, maxResults: Int = 512,
+         cachedResultLifetime: TimeInterval = 30,
          privacy: FolderSizePrivacy? = nil,
          cancellableCalculator: (@Sendable (String, @Sendable () -> Bool) -> FolderSizeResult)? = nil) {
         precondition(maxWorkers > 0 && maxDemand > 0 && maxResults >= maxDemand)
+        self.cachedResultLifetime = cachedResultLifetime
         self.maxWorkers = maxWorkers
         self.maxDemand = maxDemand
         self.maxResults = maxResults
@@ -124,15 +128,17 @@ public final class FolderSizeCache: ObservableObject {
     public func updateDemand(owner: UUID, paths: [String], priority: DemandPriority = .interactive) {
         // A lease's class is stable while it owns any paths. Reserving capacity, rather than
         // preempting existing leases, avoids re-request/eviction storms.
-        let priority = priorities[owner] ?? priority
-        priorities[owner] = priority
         let requested = Set(paths.map(key))
         let previous = owners[owner] ?? []
+        guard previous != requested else { return }
+        let priority = priorities[owner] ?? priority
+        priorities[owner] = priority
         for path in previous.subtracting(requested) { removeInterest(owner: owner, path: path) }
         var accepted = previous.intersection(requested)
         for path in requested.subtracting(accepted).sorted() {
             guard canAdmit(path: path, priority: priority) else { continue }
             let needsRevalidation = demand[path] == nil && results[path] != nil
+                && ProcessInfo.processInfo.systemUptime - (completedAt[path] ?? 0) >= cachedResultLifetime
             demand[path, default: []].insert(owner)
             accepted.insert(path)
             touch(path)
@@ -145,7 +151,8 @@ public final class FolderSizeCache: ObservableObject {
     }
 
     public func release(owner: UUID) {
-        for path in owners.removeValue(forKey: owner) ?? [] { removeInterest(owner: owner, path: path) }
+        guard let paths = owners.removeValue(forKey: owner) else { return }
+        for path in paths { removeInterest(owner: owner, path: path) }
         priorities.removeValue(forKey: owner)
         drain()
         changed()
@@ -288,7 +295,8 @@ public final class FolderSizeCache: ObservableObject {
             current.removeValue(forKey: job.path)
             // Trim before publishing, including for synchronous subscribers.
             evictIdleResults(reserving: results[job.path] == nil ? 1 : 0)
-            results[job.path] = computed
+            completedAt[job.path] = ProcessInfo.processInfo.systemUptime
+            if results[job.path] != computed { results[job.path] = computed }
             touch(job.path)
             if let owner = oneShotOwners.removeValue(forKey: job.path) { release(owner: owner) }
         }
@@ -307,6 +315,7 @@ public final class FolderSizeCache: ObservableObject {
             }) else { break }
             results.removeValue(forKey: victim)
             recency.removeValue(forKey: victim)
+            completedAt.removeValue(forKey: victim)
         }
     }
     private func changed() { activityRevision &+= 1 }
@@ -327,6 +336,7 @@ public final class FolderSizeCache: ObservableObject {
         for path in paths {
             results.removeValue(forKey: path)
             recency.removeValue(forKey: path)
+            completedAt.removeValue(forKey: path)
             current.removeValue(forKey: path)?.cancel()
             pending.removeAll { $0 == path }
             enqueueIfNeeded(path)

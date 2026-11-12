@@ -12,7 +12,9 @@ Detailed behavior, limits and safety notes. The [README](../README.md) has the o
 - **An Explorer-style address bar in each pane.** Click a folder to jump to it, or the › after it to pick a subfolder; long paths collapse into a « menu. Click the empty space or press **⌘L** to edit the path; **Return** navigates, and **Escape** or any click outside returns to the breadcrumbs. Paths support `~` and relative locations, and paths on another volume start at that volume.
 - **Adjustable layout** with resizable panes, an optional sidebar and inspector, and system light and dark appearances.
 
-Back and Forward validate the destination before changing the current folder or history. If a destination is missing, unreadable, or no longer a directory, the current location, listing, and history are retained and an error is shown. Hiding and showing the right pane preserves its established location.
+Mouse buttons 4 and 5 go Back and Forward in the pane under the pointer. List and icon views remember their scroll position per tab and location during the session. List views also restore their expanded folders before restoring that position. Back and Forward validate the destination before changing the current folder or history. If a destination is missing, unreadable, or no longer a directory, the current location, listing, and history are retained and an error is shown. Hiding and showing the right pane preserves its established location.
+
+Drag files onto a tab to move them into its folder; hold Option to copy. Hover over a tab briefly during a drag to switch to it, then drop onto a folder or the pane background. **Open Selected Item** (⌘↓), the Open context-menu action and double-click open all selected files; one selected folder opens in the current pane.
 
 The sidebar has one **manually ordered Favorites list**. Add folders, rename their labels, remove them, or reorder them by drag or the row menu. Existing pins migrate into the list; unavailable locations are retained. Defaults initialize the list once, and an explicitly empty list stays empty. Damaged or unsupported saved data is not silently overwritten.
 
@@ -49,6 +51,8 @@ Folder sizes are calculated in bounded background work, with inspector selection
 
 Incomplete scans display **≥** to mark a lower bound, not an exact size. Cancellation is cooperative: a blocked filesystem call can still occupy a worker, so leaving a folder does not guarantee immediate interruption of its scan.
 
+Recently measured folder sizes are reused when rows scroll out of view and back. File changes invalidate them immediately; otherwise revisiting a row rechecks cached results after 30 seconds while keeping the last value visible.
+
 Folders macOS guards with a privacy prompt are not sized automatically, so browsing your home folder does not open a row of permission prompts. Desktop, Documents, Downloads, ~/Library and /Volumes show **Calculate**; click it, or **Calculate Size** in the inspector. Opening Desktop, Documents or Downloads in a pane counts as asking. Photos, Music and TV libraries are recognised by their extension wherever they are, so Pictures, Movies and Music themselves are sized normally. Burrow remembers each folder you allowed, and macOS asks about each kind of folder only once. A folder that contains protected ones, such as your home folder, is shown as a minimum (**≥**); the inspector lists what was not counted and **Include Them** adds those folders. Cloud storage folders are always left out of a parent's size.
 
 On first launch Burrow offers to set up **Full Disk Access** (also under **Help › Full Disk Access…**). With it every folder is sized automatically and no prompts appear; Burrow notices the change when you return from System Settings.
@@ -62,6 +66,8 @@ Each command runs in a fresh, noninteractive `zsh`. A simple standalone `cd`, in
 Views work like Finder's per-folder views. Settings → Browsing holds the default view (List, Icons or Columns). Choosing another view in the toolbar or with ⌘1–⌘3 applies to the current folder only and is remembered across launches; opening another folder from a list or icon view shows it in its own view or the default. Columns and the disk map keep their view while you browse inside them, and the disk map is never remembered for a folder. Settings lists every folder with its own view. Restored tabs keep the view they were saved with.
 
 Sorting works like Explorer's per-folder views. Settings holds one default (field, direction, folders on top). Changing the sort in a column header or the Sort menu applies to the current folder only and is remembered across launches; other folders keep the default. The Sort menu can reset the folder or make its sort the new default, and Settings lists every folder with its own sort. Sorting the results of a whole-index search does not change the folder behind them. Subfolders do not inherit a parent's sort.
+
+The compact list uses file-type icons rather than rich image/PDF thumbnails to keep scrolling inexpensive. Icon view retains rich thumbnails.
 
 ## Search syntax
 
@@ -84,6 +90,8 @@ Additional syntax includes `regex:`, `tag:`, `^prefix`, and `suffix$`. The Filte
 - **Invalid values:** malformed filter values, such as `size:huge`, `sym:maybe`, or `ext:pdf,`, show a diagnostic and return no results. Unknown keys and empty values, such as `unknown:value` and `ext:`, remain ordinary search terms rather than active filters.
 - **Sizes:** `kb`, `mb`, and `gb` are decimal (1 MB = 1,000,000 bytes), matching the size column, Finder and the `burrow` CLI; `kib`, `mib`, and `gib` are binary. Use `=` for an exact byte count; a bare value means “at least.” Decimal quantities are scaled without floating-point rounding, then fractional bytes are discarded. Out-of-range values are rejected.
 - **Filename matching:** name terms are lowercased and normalized to Unicode NFC, so composed and decomposed spellings match without changing the original filenames or paths. This normalization does not apply to regex, content, or path predicates. Fuzzy typo tolerance and subsequence matching still operate on normalized UTF-8 bytes, not full Unicode character edit distance.
+
+While building the index, the status bar shows the number of files scanned and a Cancel button. Cancel keeps the previous search snapshot. A newer rebuild cancels the older crawl before starting its replacement. Changes inside excluded development folders do not queue recursive refreshes.
 
 **The index is not the entire disk.** Even with the “Indeks plików” (file index) scope, it covers configured roots, subject to exclusions, permissions, and search limits. On first use, default roots include existing Desktop, Documents, Downloads, `dev`, `Projects`, and `Developer` folders in your home directory, plus `/Applications`. Review the indexing settings before relying on its coverage. After saving, your configured roots, excluded directory names, heavy-development-folder exclusion setting, and persistent-cache setting are retained across launches. An explicitly empty root list stays empty; saved offline locations are retained rather than replaced with defaults.
 

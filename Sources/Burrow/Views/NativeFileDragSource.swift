@@ -32,6 +32,10 @@ struct NativeFileDragSource: NSViewRepresentable {
             view.window?.makeFirstResponder(view)
         }
         view.lastFocusRequest = pane.focusFilePaneTrigger
+        view.navigateHistory = { button in
+            activate()
+            if button == 3 { pane.goBack() } else { pane.goForward() }
+        }
         view.itemsForDrag = { path in
             activate()
             guard let item = pane.displayedItems.first(where: { $0.path == path }) else { return [] }
@@ -42,6 +46,7 @@ struct NativeFileDragSource: NSViewRepresentable {
 }
 
 final class FileDragSourceView: NSView, NSDraggingSource {
+    var navigateHistory: ((Int) -> Void)?
     var frameStore: ItemFrameStore?
     var itemsForDrag: ((String) -> [FileItem])?
     var focusOnAttach = false
@@ -63,10 +68,15 @@ final class FileDragSourceView: NSView, NSDraggingSource {
                   window.attachedSheet == nil else { return }
             window.makeFirstResponder(self)
         }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .otherMouseDown]) { [weak self] event in
             guard let self, event.window === self.window else { return event }
             let point = self.convert(event.locationInWindow, from: nil)
             switch event.type {
+            case .otherMouseDown:
+                guard self.bounds.contains(point), [3, 4].contains(event.buttonNumber),
+                      self.window?.attachedSheet == nil else { return event }
+                self.navigateHistory?(event.buttonNumber)
+                return nil
             case .leftMouseDown:
                 // The edge strips belong to the pane divider's grab area; rows start inside them.
                 self.downPath = self.bounds.insetBy(dx: 5, dy: 0).contains(point)
